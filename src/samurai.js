@@ -4,19 +4,20 @@ import { terrainHeight } from './terrain.js';
 import { MOVE } from './config.js';
 
 // ---------------------------------------------------------------------------
-// Shading: soft cloth diffuse, GGX for lacquer and metal, and a strong rim of
-// sunlight around the silhouette when the samurai stands against the sun.
+// Shading: soft cloth with woven bump detail, GGX for lacquer and steel, a rim
+// of sunlight around the silhouette, and the kasa's shadow falling on the face.
 // ---------------------------------------------------------------------------
 
 const vert = /* glsl */ `
+uniform float uPatMode;
 varying vec3 vWorld;
 varying vec3 vNormal;
-varying vec3 vLocal;
+varying vec3 vPat;
 void main() {
   vec4 w = modelMatrix * vec4(position, 1.0);
   vWorld = w.xyz;
   vNormal = normalize(mat3(modelMatrix) * normal);
-  vLocal = position;
+  vPat = uPatMode > 0.5 ? vec3(uv, 0.0) : position;
   gl_Position = projectionMatrix * viewMatrix * w;
 }
 `;
@@ -31,41 +32,87 @@ uniform float uMetal;
 uniform float uRim;
 uniform int uPattern;
 uniform float uTrans;
+uniform float uBump;
+uniform float uPatMode;
 uniform float uGroundY;
+uniform vec4 uHat;
 varying vec3 vWorld;
 varying vec3 vNormal;
-varying vec3 vLocal;
+varying vec3 vPat;
 
+// What polished steel sees: bright hazy sky above, the sunlit golden field below.
 vec3 envColor(vec3 r) {
-  vec3 sky = hazeColor(r);
-  vec3 up = mix(sky, vec3(0.06, 0.06, 0.12), smoothstep(0.05, 0.7, r.y));
-  return mix(uAmbGround * 1.6, up, smoothstep(-0.25, 0.05, r.y));
+  vec3 sky = mix(hazeColor(r), vec3(0.6, 0.78, 1.15), smoothstep(0.1, 0.8, r.y));
+  vec3 field = mix(vec3(1.05, 0.72, 0.36), uFogSunColor * 0.5, pow(sat(dot(r, uSunDir)), 3.0));
+  return mix(field, sky, smoothstep(-0.12, 0.04, r.y));
+}
+
+// Bump mapping from a procedural height (surface-gradient form, no tangents needed).
+vec3 bumpNormal(vec3 N, float h) {
+  vec3 dpdx = dFdx(vWorld);
+  vec3 dpdy = dFdy(vWorld);
+  float dhdx = dFdx(h);
+  float dhdy = dFdy(h);
+  vec3 r1 = cross(dpdy, N);
+  vec3 r2 = cross(N, dpdx);
+  float det = dot(dpdx, r1);
+  vec3 grad = sign(det) * (dhdx * r1 + dhdy * r2);
+  return normalize(abs(det) * N - grad);
+}
+
+// Soft folds and a coarse weave. For the cape the pattern follows its cloth grid.
+float fabricHeight(vec3 p) {
+  if (uPatMode > 0.5) {
+    float folds = vnoise(vec2(p.x * 16.0, p.y * 3.0)) * 0.7 + vnoise(vec2(p.x * 41.0, p.y * 9.0)) * 0.3;
+    float weave = vnoise(p.xy * vec2(140.0, 120.0));
+    return folds * 0.012 + weave * 0.0012;
+  }
+  float folds = vnoise(vec2((p.x + p.z) * 20.0, p.y * 5.0)) * 0.7 + vnoise(vec2((p.x - p.z) * 47.0, p.y * 11.0)) * 0.3;
+  float weave = vnoise(vec2((p.x + p.z) * 260.0, p.y * 240.0));
+  return folds * 0.004 + weave * 0.0006;
+}
+
+// The kasa's brim shades whatever sits beneath it from the sun.
+float hatShadow(vec3 p) {
+  float dy = uHat.y - p.y;
+  if (dy <= 0.0 || uHat.w <= 0.0) return 1.0;
+  vec3 q = p + uSunDir * (dy / max(uSunDir.y, 0.05));
+  return smoothstep(uHat.w * 0.8, uHat.w * 1.02, length(q.xz - uHat.xz));
+}
+
+// ...and hides most of the sky from the face and neck beneath it.
+float hatOcclusion(vec3 p) {
+  float dy = uHat.y - p.y;
+  if (dy <= 0.0 || uHat.w <= 0.0) return 1.0;
+  float inside = 1.0 - smoothstep(uHat.w * 0.55, uHat.w * 1.1, length(p.xz - uHat.xz));
+  return 1.0 - 0.7 * inside * (1.0 - smoothstep(0.2, 0.55, dy));
 }
 
 void main() {
   vec3 N = normalize(vNormal);
   if (!gl_FrontFacing) N = -N;
+  if (uBump > 0.0) N = bumpNormal(N, fabricHeight(vPat) * uBump);
   vec3 V = normalize(cameraPosition - vWorld);
   vec3 L = uSunDir;
   vec3 alb = uColor;
 
   if (uPattern == 1) {
     // Woven straw: radial reeds and concentric binding rings.
-    float a = atan(vLocal.z, vLocal.x);
-    float rr = length(vLocal.xz);
-    float reeds = 0.5 + 0.5 * sin(a * 120.0 + rr * 8.0);
+    float a = atan(vPat.z, vPat.x);
+    float rr = length(vPat.xz);
+    float reeds = 0.5 + 0.5 * sin(a * 150.0 + rr * 8.0);
     float rings = smoothstep(0.75, 1.0, sin(rr * 95.0));
-    alb *= 0.8 + 0.18 * reeds - 0.22 * rings;
+    alb *= 0.8 + 0.2 * reeds - 0.2 * rings;
   } else if (uPattern == 2) {
     // Hakama pinstripes.
-    float a = atan(vLocal.z, vLocal.x);
+    float a = atan(vPat.z, vPat.x);
     alb *= 0.88 + 0.12 * step(0.62, fract(a * 22.0 / TAU));
   } else if (uPattern == 3) {
     // Tsuka-ito: diamond wrap over pale rayskin.
-    float a = atan(vLocal.y, vLocal.x) / TAU;
-    float z = vLocal.z * 34.0;
+    float a = atan(vPat.y, vPat.x) / TAU;
+    float z = vPat.z * 34.0;
     float d = abs(fract(z + a * 2.0) - 0.5) + abs(fract(z - a * 2.0) - 0.5);
-    alb = mix(alb, vec3(0.62, 0.58, 0.5), smoothstep(0.62, 0.5, d) * 0.85);
+    alb = mix(alb, vec3(0.62, 0.58, 0.5), (1.0 - smoothstep(0.5, 0.62, d)) * 0.85);
   }
 
   float NdL = dot(N, L);
@@ -86,15 +133,16 @@ void main() {
   float spec = D * F * G / (4.0 * NdV + 1e-3);
   vec3 specCol = mix(vec3(1.0), alb, uMetal);
 
-  // The low sun behind the samurai paints a molten edge around the silhouette.
+  // Against the sun a molten edge of light wraps the silhouette.
   float fres = pow(1.0 - NdV, 3.2);
   float back = pow(sat(dot(-V, L)), 1.6);
-  float rim = fres * (0.12 + 2.6 * back) * sat(NdL + 0.6) * uRim;
+  float rim = fres * (0.15 + 2.4 * back) * sat(NdL + 0.6) * uRim;
 
-  // Grass swallows the light around the legs.
-  float grassOcc = smoothstep(0.08, 0.95, vWorld.y - uGroundY);
-  vec3 sun = uSunColor * grassOcc;
-  vec3 amb = mix(uAmbGround, uAmbSky, 0.5 + 0.5 * N.y) * mix(0.45, 1.0, grassOcc);
+  // Tall grass swallows the light around the legs; the brim shades the face.
+  float grassOcc = smoothstep(0.1, 1.1, vWorld.y - uGroundY);
+  float sunVis = grassOcc * hatShadow(vWorld);
+  vec3 sun = uSunColor * sunVis;
+  vec3 amb = mix(uAmbGround, uAmbSky, 0.5 + 0.5 * N.y) * mix(0.5, 1.0, grassOcc) * hatOcclusion(vWorld);
 
   vec3 R = reflect(-V, N);
   vec3 env = envColor(R) * mix(F0, 1.0, pow(1.0 - NdV, 5.0)) * (1.0 - uRough) * (1.0 - uRough);
@@ -102,10 +150,10 @@ void main() {
   vec3 col = alb * (1.0 - uMetal) * (diff * sun + amb);
   col += specCol * spec * sun;
   col += specCol * env * mix(0.25, 1.0, uMetal);
-  col += uSunColor * rim * grassOcc * mix(vec3(1.0), alb * 1.5 + 0.25, 0.35);
-  // Thin cloth and straw glow when the sun shines through them.
+  col += uSunColor * rim * sunVis * mix(vec3(1.0), alb * 1.5 + 0.25, 0.35);
+  // Thin cloth and straw glow where the sun shines through them.
   float thru = pow(sat(dot(-V, L)), 2.5) * (0.35 + 0.65 * sat(-NdL + 0.3));
-  col += alb * uSunColor * thru * uTrans * grassOcc;
+  col += alb * uSunColor * thru * uTrans * sunVis;
   col = applyFog(col, vWorld);
   gl_FragColor = vec4(col, 1.0);
 }
@@ -114,6 +162,16 @@ void main() {
 // ---------------------------------------------------------------------------
 // Geometry helpers
 // ---------------------------------------------------------------------------
+
+const clamp = (x, a, b) => Math.min(Math.max(x, a), b);
+const lerp = (a, b, t) => a + (b - a) * t;
+const smoothstep = (a, b, x) => {
+  const t = clamp((x - a) / (b - a), 0, 1);
+  return t * t * (3 - 2 * t);
+};
+// Frame-rate independent exponential smoothing.
+const damp = (a, b, rate, dt) => a + (b - a) * (1 - Math.exp(-rate * dt));
+const wrapAngle = (a) => Math.atan2(Math.sin(a), Math.cos(a));
 
 // Tube running downward from y = 0 to y = -h, optionally pleated and elliptical.
 function tube(r0, r1, h, { pleats = 0, depth = 0, segs = 36, rows = 6, sx = 1, sz = 1, flare = 1 } = {}) {
@@ -145,7 +203,7 @@ function tube(r0, r1, h, { pleats = 0, depth = 0, segs = 36, rows = 6, sx = 1, s
   return g;
 }
 
-// Box with rounded edges and analytic normals (a soft, padded look for cloth).
+// Box with rounded edges and analytic normals.
 function roundedBox(w, h, d, r, segs = 4) {
   const g = new THREE.BoxGeometry(w, h, d, segs * 2, segs * 2, segs * 2);
   const p = g.attributes.position;
@@ -169,14 +227,14 @@ function roundedBox(w, h, d, r, segs = 4) {
 
 // Kimono sleeve: narrow where it meets the shoulder, deep and soft where it hangs.
 function drapedSleeve(side) {
-  const g = roundedBox(0.07, 0.42, 0.26, 0.03);
+  const g = roundedBox(0.07, 0.4, 0.25, 0.03);
   const p = g.attributes.position;
   for (let i = 0; i < p.count; i++) {
     const y = p.getY(i);
-    const t = clamp((0.21 - y) / 0.42, 0, 1);
+    const t = clamp((0.2 - y) / 0.4, 0, 1);
     p.setX(i, p.getX(i) * (0.75 + 0.25 * t) + 0.012 * side);
     p.setZ(i, p.getZ(i) * (0.5 + 0.5 * Math.pow(t, 0.7)) - 0.035 * t);
-    p.setY(i, y - 0.18);
+    p.setY(i, y - 0.17);
   }
   g.computeVertexNormals();
   return g;
@@ -188,140 +246,265 @@ function lathe(points, segs, sx = 1, sz = 1) {
   return g;
 }
 
-// A slightly curved scabbard or hilt along -Z (from the guard backwards).
+// A gently curved scabbard running along -Z from its mouth.
 function bentBar(length, w, h, bend, segs = 12) {
   const g = new THREE.BoxGeometry(w, h, length, 1, 1, segs);
   g.translate(0, 0, -length / 2);
   const p = g.attributes.position;
   for (let i = 0; i < p.count; i++) {
-    const z = p.getZ(i);
-    const t = -z / length;
+    const t = -p.getZ(i) / length;
     p.setY(i, p.getY(i) + bend * t * t);
   }
   g.computeVertexNormals();
   return g;
 }
 
+// Katana blade along +Z, spine up (+Y), edge down: a faceted diamond section so
+// the ridge line and the flat catch the sun separately, sweeping into the kissaki.
+function bladeGeometry(len) {
+  const segs = 30;
+  const sections = [];
+  for (let i = 0; i <= segs; i++) {
+    const t = i / segs;
+    const z = t * len;
+    const sori = 0.022 * t * t;
+    const kt = Math.max(0, (t - 0.9) / 0.1);
+    const tipShape = Math.sqrt(Math.max(0, 1 - kt * kt));
+    const w = 0.031 * (1 - 0.28 * t) * (kt > 0 ? tipShape : 1);
+    const th = 0.0072 * (1 - 0.4 * t) * (kt > 0 ? tipShape : 1);
+    const y0 = sori;
+    sections.push([
+      [0, y0, z],
+      [th / 2, y0 - w * 0.28, z],
+      [0, y0 - w, z],
+      [-th / 2, y0 - w * 0.28, z],
+    ]);
+  }
+  const pos = [];
+  const quad = (a, b, c, d) => pos.push(...a, ...b, ...c, ...b, ...d, ...c);
+  for (let i = 0; i < segs; i++) {
+    const s0 = sections[i];
+    const s1 = sections[i + 1];
+    for (let k = 0; k < 4; k++) {
+      const k1 = (k + 1) % 4;
+      quad(s0[k], s0[k1], s1[k], s1[k1]);
+    }
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  g.computeVertexNormals();
+  return g;
+}
+
 // ---------------------------------------------------------------------------
-// Cloth: two sash tails simulated with Verlet integration.
+// Cloth: a travelling cape, simulated with Verlet integration.
 // ---------------------------------------------------------------------------
 
 const _v = new THREE.Vector3();
 const _w = new THREE.Vector3();
+const _a = new THREE.Vector3();
 
-class Ribbon {
-  constructor(material, n, length, width) {
+class Cloth {
+  // rest(c, r) gives each particle's rest position in the anchor frame (the chest).
+  constructor(material, cols, rows, rest) {
+    this.cols = cols;
+    this.rows = rows;
+    const n = cols * rows;
     this.n = n;
-    this.seg = length / (n - 1);
-    this.width = width;
-    this.time = 0;
-    this.phase = Math.random() * 6.28;
-    this.flapDir = new THREE.Vector3(0, 0, 1);
-    this.p = Array.from({ length: n }, () => new THREE.Vector3());
-    this.q = Array.from({ length: n }, () => new THREE.Vector3());
-    this.acc = 0;
+    this.rest = [];
+    for (let r = 0; r < rows; r++) for (let c = 0; c < cols; c++) this.rest.push(rest(c, r));
+    this.p = new Float32Array(n * 3);
+    this.q = new Float32Array(n * 3);
+    this.anchorPrev = new Float32Array(cols * 3);
+    this.anchorNext = new Float32Array(cols * 3);
+    this.cons = [];
+    const id = (c, r) => r * cols + c;
+    const link = (i, j, k) => this.cons.push([i, j, this.rest[i].distanceTo(this.rest[j]), k]);
+    for (let r = 0; r < rows; r++) {
+      for (let c = 0; c < cols; c++) {
+        if (c + 1 < cols) link(id(c, r), id(c + 1, r), 1);
+        if (r + 1 < rows) link(id(c, r), id(c, r + 1), 1);
+        if (c + 1 < cols && r + 1 < rows) {
+          link(id(c, r), id(c + 1, r + 1), 0.7);
+          link(id(c + 1, r), id(c, r + 1), 0.7);
+        }
+        if (c + 2 < cols) link(id(c, r), id(c + 2, r), 0.25);
+        if (r + 2 < rows) link(id(c, r), id(c, r + 2), 0.25);
+      }
+    }
     const g = new THREE.BufferGeometry();
-    this.posArr = new Float32Array(n * 2 * 3);
-    this.nrmArr = new Float32Array(n * 2 * 3);
-    g.setAttribute('position', new THREE.BufferAttribute(this.posArr, 3).setUsage(THREE.DynamicDrawUsage));
-    g.setAttribute('normal', new THREE.BufferAttribute(this.nrmArr, 3).setUsage(THREE.DynamicDrawUsage));
+    this.posAttr = new THREE.BufferAttribute(new Float32Array(n * 3), 3).setUsage(THREE.DynamicDrawUsage);
+    g.setAttribute('position', this.posAttr);
+    g.setAttribute('normal', new THREE.BufferAttribute(new Float32Array(n * 3), 3).setUsage(THREE.DynamicDrawUsage));
+    const uv = [];
+    for (let r = 0; r < rows; r++) for (let c = 0; c < cols; c++) uv.push(c / (cols - 1), 1 - r / (rows - 1));
+    g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
     const idx = [];
-    for (let i = 0; i < n - 1; i++) {
-      const a = i * 2;
-      idx.push(a, a + 1, a + 2, a + 1, a + 3, a + 2);
+    for (let r = 0; r < rows - 1; r++) {
+      for (let c = 0; c < cols - 1; c++) {
+        const a = id(c, r);
+        const b = id(c + 1, r);
+        const d = id(c, r + 1);
+        const e = id(c + 1, r + 1);
+        idx.push(a, d, b, b, d, e);
+      }
     }
     g.setIndex(idx);
     this.mesh = new THREE.Mesh(g, material);
     this.mesh.frustumCulled = false;
     this.mesh.layers.enable(1);
+    this.acc = 0;
+    this.time = 0;
+    this.ready = false;
   }
 
-  reset(anchor, back) {
+  reset(matrix) {
     for (let i = 0; i < this.n; i++) {
-      this.p[i].copy(anchor).addScaledVector(back, 0.02 * i);
-      this.p[i].y -= this.seg * i;
-      this.q[i].copy(this.p[i]);
+      _v.copy(this.rest[i]).applyMatrix4(matrix);
+      this.p[i * 3] = this.q[i * 3] = _v.x;
+      this.p[i * 3 + 1] = this.q[i * 3 + 1] = _v.y;
+      this.p[i * 3 + 2] = this.q[i * 3 + 2] = _v.z;
     }
+    for (let c = 0; c < this.cols; c++) {
+      for (let k = 0; k < 3; k++) this.anchorPrev[c * 3 + k] = this.p[c * 3 + k];
+    }
+    this.ready = true;
   }
 
-  // collide(p) pushes a point out of the body.
-  update(dt, anchor, wind, collide, back) {
+  // matrix: this frame's anchor frame. colliders: { spheres: [[Vector3, r]], capsules: [[a, b, r]] }.
+  update(dt, matrix, wind, colliders, back) {
+    if (!this.ready) this.reset(matrix);
+    for (let c = 0; c < this.cols; c++) {
+      _v.copy(this.rest[c]).applyMatrix4(matrix);
+      this.anchorNext[c * 3] = _v.x;
+      this.anchorNext[c * 3 + 1] = _v.y;
+      this.anchorNext[c * 3 + 2] = _v.z;
+    }
     const h = 1 / 120;
-    this.flapDir.copy(back);
     this.acc = Math.min(this.acc + dt, 0.1);
-    while (this.acc >= h) {
+    const steps = Math.floor(this.acc / h);
+    const P = this.p;
+    const Q = this.q;
+    for (let s = 0; s < steps; s++) {
       this.acc -= h;
       this.time += h;
-      for (let i = 1; i < this.n; i++) {
-        const p = this.p[i];
-        const q = this.q[i];
-        const vx = (p.x - q.x) * 0.995;
-        const vy = (p.y - q.y) * 0.995;
-        const vz = (p.z - q.z) * 0.995;
-        wind.velocityAt(p.x, p.y, p.z, _w);
-        // Drag toward the moving air: the tail streams downwind and flutters in gusts.
-        const drag = 3.0 + i * 0.2;
-        // Flutter: a wave running down the tail, like a pennant in the wind.
-        const ws = Math.hypot(_w.x, _w.z);
-        const flap = Math.sin(this.time * (8 + ws * 1.8) - i * 0.9 + this.phase) * ws * (0.5 + 0.2 * i);
-        const ax = drag * (_w.x - vx / h) + this.flapDir.x * flap;
-        const ay = -9.8 + drag * (_w.y - vy / h) + flap * 0.35;
-        const az = drag * (_w.z - vz / h) + this.flapDir.z * flap;
-        q.copy(p);
-        p.x += vx + ax * h * h;
-        p.y += vy + ay * h * h;
-        p.z += vz + az * h * h;
-      }
-      this.p[0].copy(anchor);
-      this.q[0].copy(anchor);
-      for (let it = 0; it < 4; it++) {
-        for (let i = 0; i < this.n - 1; i++) {
-          const a = this.p[i];
-          const b = this.p[i + 1];
-          _v.subVectors(b, a);
-          const len = _v.length() || 1e-6;
-          const diff = (len - this.seg) / len;
-          if (i === 0) {
-            b.addScaledVector(_v, -diff);
-          } else {
-            a.addScaledVector(_v, diff * 0.5);
-            b.addScaledVector(_v, -diff * 0.5);
-          }
+      const f = (s + 1) / steps;
+      // Pinned collar follows the shoulders, interpolated across sub-steps.
+      let mx = 0;
+      let my = 0;
+      let mz = 0;
+      for (let c = 0; c < this.cols; c++) {
+        mx -= P[c * 3];
+        my -= P[c * 3 + 1];
+        mz -= P[c * 3 + 2];
+        for (let k = 0; k < 3; k++) {
+          const v = lerp(this.anchorPrev[c * 3 + k], this.anchorNext[c * 3 + k], f);
+          P[c * 3 + k] = v;
+          Q[c * 3 + k] = v;
         }
-        for (let i = 1; i < this.n; i++) collide(this.p[i]);
+        mx += P[c * 3];
+        my += P[c * 3 + 1];
+        mz += P[c * 3 + 2];
+      }
+      // Inertia scale: most of the body's own motion carries the cloth along rigidly,
+      // so only wind and the remainder swing it (a leap no longer flings it skyward).
+      const inertia = 0.7 / this.cols;
+      for (let i = this.cols; i < this.n; i++) {
+        const o = i * 3;
+        P[o] += mx * inertia;
+        P[o + 1] += my * inertia;
+        P[o + 2] += mz * inertia;
+        Q[o] += mx * inertia;
+        Q[o + 1] += my * inertia;
+        Q[o + 2] += mz * inertia;
+      }
+      for (let i = this.cols; i < this.n; i++) {
+        const o = i * 3;
+        const vx = (P[o] - Q[o]) * 0.992;
+        const vy = (P[o + 1] - Q[o + 1]) * 0.992;
+        const vz = (P[o + 2] - Q[o + 2]) * 0.992;
+        wind.velocityAt(P[o], P[o + 1], P[o + 2], _w);
+        const row = Math.floor(i / this.cols);
+        const ws = Math.hypot(_w.x, _w.z);
+        // The hem ripples like a flag; the higher rows mostly drag along.
+        const flap = Math.sin(this.time * (7 + ws * 1.5) - row * 0.8 + (i % this.cols) * 0.4) * ws * 0.12 * row;
+        const drag = 1.5;
+        const ax = drag * (_w.x - vx / h) + back.x * flap;
+        const ay = -9.8 + drag * 0.35 * (_w.y - vy / h) + flap * 0.3;
+        const az = drag * (_w.z - vz / h) + back.z * flap;
+        Q[o] = P[o];
+        Q[o + 1] = P[o + 1];
+        Q[o + 2] = P[o + 2];
+        P[o] += vx + ax * h * h;
+        P[o + 1] += vy + ay * h * h;
+        P[o + 2] += vz + az * h * h;
+      }
+      for (let it = 0; it < 5; it++) {
+        for (const [i, j, len, k] of this.cons) {
+          const oi = i * 3;
+          const oj = j * 3;
+          const dx = P[oj] - P[oi];
+          const dy = P[oj + 1] - P[oi + 1];
+          const dz = P[oj + 2] - P[oi + 2];
+          const d = Math.hypot(dx, dy, dz) || 1e-6;
+          const diff = ((d - len) / d) * k;
+          const pinI = i < this.cols;
+          const pinJ = j < this.cols;
+          const wi = pinI ? 0 : pinJ ? 1 : 0.5;
+          const wj = pinJ ? 0 : pinI ? 1 : 0.5;
+          P[oi] += dx * diff * wi;
+          P[oi + 1] += dy * diff * wi;
+          P[oi + 2] += dz * diff * wi;
+          P[oj] -= dx * diff * wj;
+          P[oj + 1] -= dy * diff * wj;
+          P[oj + 2] -= dz * diff * wj;
+        }
+        // The row just under the collar rides on the shoulders; collide the rest,
+        // and never let the cloth climb above the collar and over the head.
+        let collarY = Infinity;
+        for (let c = 0; c < this.cols; c++) collarY = Math.min(collarY, P[c * 3 + 1]);
+        for (let i = this.cols; i < this.n; i++) {
+          if (i >= this.cols * 2) this.collide(i, colliders);
+          const cap = collarY + 0.14 - 0.01 * Math.floor(i / this.cols);
+          if (P[i * 3 + 1] > cap) P[i * 3 + 1] = cap;
+        }
       }
     }
+    for (let k = 0; k < this.cols * 3; k++) this.anchorPrev[k] = this.anchorNext[k];
+    this.posAttr.array.set(P);
+    this.posAttr.needsUpdate = true;
+    this.mesh.geometry.computeVertexNormals();
+    this.mesh.geometry.computeBoundingSphere();
   }
 
-  updateGeometry(side) {
-    const n = this.n;
-    for (let i = 0; i < n; i++) {
-      const prev = this.p[Math.max(0, i - 1)];
-      const next = this.p[Math.min(n - 1, i + 1)];
-      _v.subVectors(next, prev).normalize();
-      // Keep the ribbon flat across the samurai's back, perpendicular to its length.
-      _w.copy(side).addScaledVector(_v, -side.dot(_v)).normalize();
-      const taper = 1 - 0.25 * (i / (n - 1));
-      const hw = this.width * 0.5 * taper;
-      const p = this.p[i];
-      const o = i * 6;
-      this.posArr[o] = p.x - _w.x * hw;
-      this.posArr[o + 1] = p.y - _w.y * hw;
-      this.posArr[o + 2] = p.z - _w.z * hw;
-      this.posArr[o + 3] = p.x + _w.x * hw;
-      this.posArr[o + 4] = p.y + _w.y * hw;
-      this.posArr[o + 5] = p.z + _w.z * hw;
-      const nx = _w.y * _v.z - _w.z * _v.y;
-      const ny = _w.z * _v.x - _w.x * _v.z;
-      const nz = _w.x * _v.y - _w.y * _v.x;
-      this.nrmArr[o] = this.nrmArr[o + 3] = nx;
-      this.nrmArr[o + 1] = this.nrmArr[o + 4] = ny;
-      this.nrmArr[o + 2] = this.nrmArr[o + 5] = nz;
+  collide(i, colliders) {
+    const o = i * 3;
+    _v.set(this.p[o], this.p[o + 1], this.p[o + 2]);
+    let moved = false;
+    for (const [c, r] of colliders.spheres) {
+      _w.subVectors(_v, c);
+      const d = _w.length();
+      if (d < r && d > 1e-6) {
+        _v.copy(c).addScaledVector(_w, r / d);
+        moved = true;
+      }
     }
-    const g = this.mesh.geometry;
-    g.attributes.position.needsUpdate = true;
-    g.attributes.normal.needsUpdate = true;
-    g.computeBoundingSphere();
+    for (const [a, b, r] of colliders.capsules) {
+      _w.subVectors(b, a);
+      const t = clamp(_a.subVectors(_v, a).dot(_w) / Math.max(_w.lengthSq(), 1e-8), 0, 1);
+      _a.copy(a).addScaledVector(_w, t);
+      _w.subVectors(_v, _a);
+      const d = _w.length();
+      if (d < r && d > 1e-6) {
+        _v.copy(_a).addScaledVector(_w, r / d);
+        moved = true;
+      }
+    }
+    if (moved) {
+      this.p[o] = _v.x;
+      this.p[o + 1] = _v.y;
+      this.p[o + 2] = _v.z;
+    }
   }
 }
 
@@ -336,16 +519,8 @@ const HIP_Y = 0.93;
 const HIP_X = 0.1;
 const HIP_DROP = 0.02;
 const REACH = L1 + L2 - 0.004;
-
-const clamp = (x, a, b) => Math.min(Math.max(x, a), b);
-const lerp = (a, b, t) => a + (b - a) * t;
-const smoothstep = (a, b, x) => {
-  const t = clamp((x - a) / (b - a), 0, 1);
-  return t * t * (3 - 2 * t);
-};
-// Frame-rate independent exponential smoothing.
-const damp = (a, b, rate, dt) => a + (b - a) * (1 - Math.exp(-rate * dt));
-const wrapAngle = (a) => Math.atan2(Math.sin(a), Math.cos(a));
+const UPPER_ARM = 0.28;
+const FOREARM_TO_GRIP = 0.3;
 
 // Where the ankle sits when the foot touches the ground at contact point cz,
 // rolled onto the heel (pitch > 0, toes up) or onto the ball (pitch < 0).
@@ -374,11 +549,33 @@ function solveLeg(dz, dy, out) {
   return out;
 }
 
+const _euler = new THREE.Euler();
+const _q = new THREE.Quaternion();
+const _q2 = new THREE.Quaternion();
+const _q3 = new THREE.Quaternion();
+const _m = new THREE.Matrix4();
+const _mb = new THREE.Matrix4();
+const _t = new THREE.Vector3();
+const _d = new THREE.Vector3();
+const _perp = new THREE.Vector3();
+const _u = new THREE.Vector3();
+const _e = new THREE.Vector3();
+const _f = new THREE.Vector3();
+const _x = new THREE.Vector3();
+const _y = new THREE.Vector3();
+const _z = new THREE.Vector3();
+const _down = new THREE.Vector3(0, -1, 0);
+const _up = new THREE.Vector3(0, 1, 0);
+const _back = new THREE.Vector3();
+const _grip = new THREE.Vector3();
+const _swordDir = new THREE.Vector3();
+
 export class Samurai {
   constructor(shared, wind) {
     this.shared = shared;
     this.wind = wind;
     this.groundY = { value: 0 };
+    this.hatUniform = { value: new THREE.Vector4(0, -1000, 0, 0.36) };
     this.mats = this.makeMaterials();
     this.build();
 
@@ -399,12 +596,18 @@ export class Samurai {
     this.yawRate = 0;
     this.hatTilt = 0;
     this.holdW = 1;
-    this.holdBend = 1;
+    this.swordW = 1;
+    this.bend = [1, 1];
     this.time = 0;
     this.legState = [{}, {}];
     this.ankle = [{ z: 0, y: 0, pitch: 0 }, { z: 0, y: 0, pitch: 0 }];
-    this.ribbonsReady = false;
+    this.swordSwing = 0;
+    this.swordSwingV = 0;
     this.v0 = Math.sqrt(2 * MOVE.gravity * MOVE.jumpHeight);
+    this.colliders = {
+      spheres: Array.from({ length: 8 }, () => [new THREE.Vector3(), 0.1]),
+      capsules: Array.from({ length: 2 }, () => [new THREE.Vector3(), new THREE.Vector3(), 0.085]),
+    };
   }
 
   makeMaterials() {
@@ -417,29 +620,32 @@ export class Samurai {
         uRim: { value: o.rim ?? 1 },
         uPattern: { value: o.pattern ?? 0 },
         uTrans: { value: o.trans ?? 0 },
+        uBump: { value: o.bump ?? 0 },
+        uPatMode: { value: o.patMode ?? 0 },
         uGroundY: this.groundY,
+        uHat: this.hatUniform,
       },
       vertexShader: vert,
       fragmentShader: frag,
       side: o.side ?? THREE.FrontSide,
     });
     return {
-      kimono: make('#27324a', { rough: 0.9, trans: 0.12 }),
-      sleeve: make('#27324a', { rough: 0.9, trans: 0.2 }),
-      under: make('#3a4660', { rough: 0.9, side: THREE.DoubleSide }),
-      collar: make('#d8d0c0', { rough: 0.8 }),
-      hakama: make('#3a3434', { rough: 0.92, pattern: 2, side: THREE.DoubleSide }),
-      obi: make('#7c2323', { rough: 0.75 }),
-      sash: make('#701b1b', { rough: 0.8, side: THREE.DoubleSide, rim: 0.08, trans: 1.6 }),
-      skin: make('#c49474', { rough: 0.6, rim: 0.8 }),
+      cape: make('#4a4644', { rough: 0.95, trans: 0.35, bump: 1, patMode: 1, side: THREE.DoubleSide, rim: 1.1 }),
+      kimono: make('#524840', { rough: 0.9, trans: 0.1, bump: 1 }),
+      sleeve: make('#524840', { rough: 0.9, trans: 0.2, bump: 1 }),
+      under: make('#4a4038', { rough: 0.9, bump: 1, side: THREE.DoubleSide }),
+      collar: make('#cfc6b4', { rough: 0.8 }),
+      hakama: make('#45403d', { rough: 0.92, pattern: 2, bump: 1, side: THREE.DoubleSide }),
+      obi: make('#3b2819', { rough: 0.8, bump: 1 }),
+      skin: make('#b88866', { rough: 0.6, rim: 0.8 }),
       hair: make('#141212', { rough: 0.5 }),
-      mask: make('#1c2233', { rough: 0.9 }),
-      hat: make('#b89660', { rough: 0.85, pattern: 1, rim: 1.2, trans: 0.3, side: THREE.DoubleSide }),
-      lacquer: make('#110f10', { rough: 0.22, rim: 0.6 }),
-      wrap: make('#1d1917', { rough: 0.7, pattern: 3 }),
-      metal: make('#a07c3c', { rough: 0.3, metal: 1, rim: 0.4 }),
-      tabi: make('#d2cbbb', { rough: 0.85 }),
-      straw: make('#a2854f', { rough: 0.9 }),
+      hat: make('#b8955a', { rough: 0.85, pattern: 1, rim: 1.2, trans: 0.3, side: THREE.DoubleSide }),
+      lacquer: make('#0f0e0f', { rough: 0.25, rim: 0.6 }),
+      wrap: make('#1a1716', { rough: 0.7, pattern: 3 }),
+      metal: make('#8a6a34', { rough: 0.35, metal: 1, rim: 0.4 }),
+      steel: make('#c9cdd3', { rough: 0.13, metal: 1, rim: 0.3 }),
+      tabi: make('#cdc6b6', { rough: 0.85 }),
+      straw: make('#9e814c', { rough: 0.9 }),
       eye: make('#0c0a0a', { rough: 0.2 }),
     };
   }
@@ -472,13 +678,13 @@ export class Samurai {
 
     this.legs = [this.buildLeg(1), this.buildLeg(-1)];
 
-    // Torso in a kimono and haori.
+    // Torso in a kimono.
     this.spine = new THREE.Group();
     this.spine.position.y = 0.06;
     this.pelvis.add(this.spine);
     this.add(this.spine, lathe([
       [0.001, -0.03], [0.148, -0.03], [0.152, 0.05], [0.158, 0.15], [0.17, 0.26], [0.176, 0.34],
-      [0.172, 0.4], [0.155, 0.45], [0.12, 0.49], [0.06, 0.515], [0.001, 0.52],
+      [0.172, 0.4], [0.16, 0.44], [0.13, 0.475], [0.09, 0.5], [0.05, 0.515], [0.001, 0.52],
     ], 32, 1.22, 0.74), M.kimono);
     // Crossed collar: the pale under-kimono shows at the neck.
     const collar = new THREE.TorusGeometry(0.066, 0.017, 8, 28);
@@ -508,25 +714,28 @@ export class Samurai {
     hairGeo.scale(0.92, 1.06, 1.02);
     this.add(this.head, hairGeo, M.hair, 0, 0.1, -0.006).rotation.x = -0.55;
     this.add(this.head, new THREE.CylinderGeometry(0.018, 0.024, 0.05, 8), M.hair, 0, 0.205, -0.03);
-    // Cloth mask over the lower face, and eyes in the shadow of the brim.
-    const maskGeo = new THREE.SphereGeometry(0.104, 24, 10, Math.PI / 2 - 1.15, 2.3, 1.62, 0.95);
-    maskGeo.scale(0.92, 1.05, 1.03);
-    this.add(this.head, maskGeo, M.mask, 0, 0.1, 0);
+    // A plain, weathered face, mostly in the shade of the brim.
+    const nose = new THREE.ConeGeometry(0.014, 0.04, 8);
+    nose.rotateX(Math.PI / 2 + 0.35);
+    this.add(this.head, nose, M.skin, 0, 0.095, 0.1);
     const eyeGeo = new THREE.SphereGeometry(0.011, 8, 6);
     eyeGeo.scale(1.3, 0.7, 0.6);
     this.add(this.head, eyeGeo, M.eye, 0.033, 0.112, 0.088);
     this.add(this.head, eyeGeo, M.eye, -0.033, 0.112, 0.088);
+    const brow = new THREE.BoxGeometry(0.035, 0.008, 0.012);
+    this.add(this.head, brow, M.hair, 0.034, 0.13, 0.09).rotation.z = -0.12;
+    this.add(this.head, brow, M.hair, -0.034, 0.13, 0.09).rotation.z = 0.12;
 
-    // Kasa: a shallow woven straw hat.
+    // Kasa: a wide conical straw hat with a small peak.
     this.hat = new THREE.Group();
     this.hat.position.set(0, 0.133, 0);
     this.head.add(this.hat);
     this.add(this.hat, lathe([
-      [0.0, 0.135], [0.03, 0.132], [0.08, 0.112], [0.15, 0.078], [0.22, 0.046], [0.29, 0.016],
-      [0.335, -0.002], [0.347, -0.011], [0.343, -0.018], [0.33, -0.013], [0.26, 0.012],
-      [0.17, 0.05], [0.09, 0.085], [0.03, 0.1], [0.0, 0.102],
-    ], 56), M.hat);
-    this.add(this.hat, new THREE.CylinderGeometry(0.02, 0.028, 0.03, 10), M.metal, 0, 0.145, 0);
+      [0.0, 0.16], [0.02, 0.152], [0.07, 0.125], [0.15, 0.085], [0.23, 0.047], [0.31, 0.012],
+      [0.365, -0.008], [0.378, -0.016], [0.372, -0.022], [0.355, -0.017], [0.27, 0.015],
+      [0.18, 0.052], [0.09, 0.09], [0.03, 0.115], [0.0, 0.118],
+    ], 64), M.hat);
+    this.add(this.hat, new THREE.CylinderGeometry(0.014, 0.022, 0.028, 10), M.straw, 0, 0.168, 0);
     // Chin cords.
     const cord = new THREE.CylinderGeometry(0.0035, 0.0035, 0.2, 5);
     cord.translate(0, -0.1, 0);
@@ -535,14 +744,24 @@ export class Samurai {
 
     this.arms = [this.buildArm(1), this.buildArm(-1)];
 
-    // Sash tails from the knot, streaming in the wind.
-    this.ribbons = [
-      new Ribbon(M.sash, 10, 0.64, 0.042),
-      new Ribbon(M.sash, 9, 0.52, 0.038),
-    ];
-    this.ribbonGroup = new THREE.Group();
-    for (const r of this.ribbons) this.ribbonGroup.add(r.mesh);
-    this.knotAnchors = [new THREE.Vector3(0.026, 0.09, -0.16), new THREE.Vector3(-0.022, 0.085, -0.16)];
+    // The drawn katana, carried in the right hand.
+    this.sword = this.buildDrawnSword();
+    this.body.add(this.sword);
+
+    // Travelling cape over the shoulders, simulated as cloth.
+    const cols = 13;
+    const rows = 11;
+    const hem = [0.02, -0.03, 0.01, 0.04, -0.02, 0.03, 0, -0.04, 0.02, 0.03, -0.01, -0.03, 0.02];
+    this.cape = new Cloth(M.cape, cols, rows, (c, r) => {
+      const u = (c / (cols - 1)) * 2 - 1;
+      const v = r / (rows - 1);
+      const theta = u * 1.95;
+      // Drapes out over the shoulders and arms, flaring toward the hem.
+      const rx = 0.215 + 0.14 * Math.sqrt(v);
+      const rz = 0.15 + 0.08 * v;
+      const len = 0.62 + (r === rows - 1 ? hem[c] : 0);
+      return new THREE.Vector3(Math.sin(theta) * rx, 0.2 - 0.05 * u * u - v * len, -Math.cos(theta) * rz);
+    });
   }
 
   buildLeg(side) {
@@ -581,14 +800,12 @@ export class Samurai {
     const shoulder = new THREE.Group();
     shoulder.position.set(0.2 * side, 0.15, -0.01);
     this.chest.add(shoulder);
-    // Kimono sleeve: a deep, soft pocket hanging from the upper arm. It has its own
-    // pivot so it can swing a beat behind the arm.
+    // The sleeve has its own pivot so it can hang with gravity and trail the arm.
     const sleevePivot = new THREE.Group();
     shoulder.add(sleevePivot);
-    const sleeve = drapedSleeve(side);
-    this.add(sleevePivot, sleeve, M.sleeve);
+    this.add(sleevePivot, drapedSleeve(side), M.sleeve);
     const elbow = new THREE.Group();
-    elbow.position.y = -0.28;
+    elbow.position.y = -UPPER_ARM;
     shoulder.add(elbow);
     // Cuff of the under-kimono around the forearm.
     this.add(elbow, tube(0.047, 0.052, 0.15, { segs: 14, rows: 2 }), M.under, 0, 0.02, 0);
@@ -605,68 +822,59 @@ export class Samurai {
     return { shoulder, elbow, wrist, sleevePivot, side };
   }
 
-  // Two-bone IK that lays the left hand on the katana's hilt. Works in chest space.
-  solveHold(arm, qOut) {
-    this.spine.updateMatrix();
-    this.chest.updateMatrix();
-    this.katana.updateMatrix();
-    _m.multiplyMatrices(this.spine.matrix, this.chest.matrix).invert();
-    const T = _t.set(0, 0.012, 0.075).applyMatrix4(this.katana.matrix).applyMatrix4(_m);
-    const S = arm.shoulder.position;
-    const a = 0.28;
-    const b = 0.3;
-    _d.subVectors(T, S);
-    const dist = clamp(_d.length(), 0.05, a + b - 0.002);
-    _d.normalize();
-    const A = Math.acos(clamp((a * a + dist * dist - b * b) / (2 * a * dist), -1, 1));
-    _perp.set(0.8 * arm.side, -0.25, -0.55);
-    _perp.addScaledVector(_d, -_perp.dot(_d)).normalize();
-    _u.copy(_d).multiplyScalar(Math.cos(A)).addScaledVector(_perp, Math.sin(A));
-    _e.copy(S).addScaledVector(_u, a);
-    _f.subVectors(T, _e).normalize();
-    _y.copy(_u).negate();
-    _z.copy(_f).addScaledVector(_u, -_f.dot(_u));
-    if (_z.lengthSq() < 1e-8) _z.set(0, 0, 1);
-    _z.normalize();
-    _x.crossVectors(_y, _z);
-    _mb.makeBasis(_x, _y, _z);
-    qOut.setFromRotationMatrix(_mb);
-    this.holdBend = Math.acos(clamp(_u.dot(_f), -1, 1));
-  }
-
+  // Empty scabbard and the sheathed short sword, thrust through the obi on the left hip.
   buildSwords() {
     const M = this.mats;
-    const sword = (len, hilt, bend) => {
+    const sheathed = (len, hilt, bend) => {
       const g = new THREE.Group();
       this.add(g, bentBar(len, 0.032, 0.022, bend), M.lacquer);
-      const tip = new THREE.BoxGeometry(0.034, 0.024, 0.03);
-      this.add(g, tip, M.metal, 0, bend, -len - 0.01);
-      const tsuba = new THREE.CylinderGeometry(0.038, 0.038, 0.007, 20);
-      tsuba.rotateX(Math.PI / 2);
-      this.add(g, tsuba, M.metal, 0, 0, 0.004);
-      const tsuka = new THREE.CylinderGeometry(0.0165, 0.0155, hilt, 14);
-      tsuka.rotateX(Math.PI / 2);
-      tsuka.translate(0, 0, hilt / 2 + 0.008);
-      this.add(g, tsuka, M.wrap);
-      const cap = new THREE.CylinderGeometry(0.0175, 0.017, 0.018, 12);
-      cap.rotateX(Math.PI / 2);
-      this.add(g, cap, M.metal, 0, -0.003, hilt + 0.012);
+      this.add(g, new THREE.BoxGeometry(0.034, 0.024, 0.03), M.metal, 0, bend, -len - 0.01);
+      if (hilt > 0) {
+        const tsuba = new THREE.CylinderGeometry(0.034, 0.034, 0.007, 18);
+        tsuba.rotateX(Math.PI / 2);
+        this.add(g, tsuba, M.metal, 0, 0, 0.004);
+        const tsuka = new THREE.CylinderGeometry(0.0155, 0.0145, hilt, 12);
+        tsuka.rotateX(Math.PI / 2);
+        tsuka.translate(0, 0, hilt / 2 + 0.008);
+        this.add(g, tsuka, M.wrap);
+      }
       return g;
     };
-    // Daisho thrust through the obi on the left hip, hilts forward.
-    this.katana = sword(0.74, 0.25, -0.035);
-    this.katana.position.set(0.14, 0.11, 0.12);
-    this.katana.rotation.set(-0.5, -0.35, 0.25);
-    this.pelvis.add(this.katana);
-    this.wakizashi = sword(0.5, 0.18, -0.022);
+    this.saya = sheathed(0.74, 0, -0.035);
+    this.saya.position.set(0.14, 0.11, 0.12);
+    this.saya.rotation.set(-0.5, -0.35, 0.25);
+    this.pelvis.add(this.saya);
+    this.wakizashi = sheathed(0.5, 0.18, -0.022);
     this.wakizashi.position.set(0.1, 0.12, 0.14);
     this.wakizashi.rotation.set(-0.4, -0.45, 0.3);
     this.pelvis.add(this.wakizashi);
   }
 
+  // Katana with its origin at the grip; the blade runs along +Z.
+  buildDrawnSword() {
+    const M = this.mats;
+    const g = new THREE.Group();
+    const blade = bladeGeometry(0.72);
+    blade.translate(0, 0.012, 0.09);
+    this.add(g, blade, M.steel);
+    const habaki = new THREE.BoxGeometry(0.012, 0.036, 0.028);
+    this.add(g, habaki, M.metal, 0, -0.004, 0.075);
+    const tsuba = new THREE.CylinderGeometry(0.038, 0.038, 0.007, 20);
+    tsuba.rotateX(Math.PI / 2);
+    this.add(g, tsuba, M.metal, 0, 0, 0.058);
+    const tsuka = new THREE.CylinderGeometry(0.0165, 0.0155, 0.25, 14);
+    tsuka.rotateX(Math.PI / 2);
+    tsuka.translate(0, 0, -0.07);
+    this.add(g, tsuka, M.wrap);
+    const cap = new THREE.CylinderGeometry(0.0175, 0.017, 0.018, 12);
+    cap.rotateX(Math.PI / 2);
+    this.add(g, cap, M.metal, 0, 0, -0.2);
+    return g;
+  }
+
   addTo(scene) {
     scene.add(this.root);
-    scene.add(this.ribbonGroup);
+    scene.add(this.cape.mesh);
   }
 
   // Gait: distance covered per full cycle (two steps) grows with speed.
@@ -697,6 +905,29 @@ export class Samurai {
     return out;
   }
 
+  // Two-bone arm IK toward a point in chest space; writes the shoulder rotation.
+  solveArm(arm, T, pole, qOut) {
+    const S = arm.shoulder.position;
+    const a = UPPER_ARM;
+    const b = FOREARM_TO_GRIP;
+    _d.subVectors(T, S);
+    const dist = clamp(_d.length(), 0.05, a + b - 0.002);
+    _d.normalize();
+    const A = Math.acos(clamp((a * a + dist * dist - b * b) / (2 * a * dist), -1, 1));
+    _perp.copy(pole).addScaledVector(_d, -pole.dot(_d)).normalize();
+    _u.copy(_d).multiplyScalar(Math.cos(A)).addScaledVector(_perp, Math.sin(A));
+    _e.copy(S).addScaledVector(_u, a);
+    _f.subVectors(T, _e).normalize();
+    _y.copy(_u).negate();
+    _z.copy(_f).addScaledVector(_u, -_f.dot(_u));
+    if (_z.lengthSq() < 1e-8) _z.set(0, 0, 1);
+    _z.normalize();
+    _x.crossVectors(_y, _z);
+    _mb.makeBasis(_x, _y, _z);
+    qOut.setFromRotationMatrix(_mb);
+    return Math.acos(clamp(_u.dot(_f), -1, 1));
+  }
+
   // state: { pos, yaw, vel, grounded, jumped, landed, landSpeed }
   update(dt, state) {
     this.time += dt;
@@ -720,9 +951,9 @@ export class Samurai {
     this.prevYaw = state.yaw;
     this.yawRate = damp(this.yawRate, yr, 10, dt);
     const fwdSpeed = vel.x * fx + vel.z * fz;
-    const a = (fwdSpeed - this.prevFwdSpeed) / Math.max(dt, 1e-4);
+    const accel = (fwdSpeed - this.prevFwdSpeed) / Math.max(dt, 1e-4);
     this.prevFwdSpeed = fwdSpeed;
-    this.accel = damp(this.accel, clamp(a, -20, 20), 7, dt);
+    this.accel = damp(this.accel, clamp(accel, -20, 20), 7, dt);
 
     if (state.jumped) {
       this.airT = 0;
@@ -736,9 +967,8 @@ export class Samurai {
       this.phase = runW > 0.5 ? 0.02 : 0.05;
     }
     // Landing squash: a damped spring on the hips.
-    const sub = 4;
-    for (let i = 0; i < sub; i++) {
-      const h = dt / sub;
+    for (let i = 0; i < 4; i++) {
+      const h = dt / 4;
       const k = 150;
       const c = 2 * Math.sqrt(k) * 0.55;
       this.squashV += (-k * this.squash - c * this.squashV) * h;
@@ -753,7 +983,7 @@ export class Samurai {
     // Ground gait. Duty = share of the cycle each foot spends on the ground.
     const duty = lerp(0.6, 0.32, runW);
     const stride = this.strideLength(Math.max(speed, 0.2));
-    const half = (duty * stride) / 2 * moveW;
+    const half = ((duty * stride) / 2) * moveW;
     const lift = lerp(0.09, 0.26, runW) * moveW;
     const tgt = this.ankle;
     const idleZ = [0.035, -0.03];
@@ -792,8 +1022,7 @@ export class Samurai {
       const sx = HIP_X * (i === 0 ? 1 : -1);
       const wx = state.pos.x + fz * sx + fx * tgt[i].z;
       const wz = state.pos.z - fx * sx + fz * tgt[i].z;
-      const off = (terrainHeight(wx, wz) - groundHere) * (1 - airW);
-      ankleWorld.push(tgt[i].y + off);
+      ankleWorld.push(tgt[i].y + (terrainHeight(wx, wz) - groundHere) * (1 - airW));
     }
     // Lower the hips if a long stride would over-stretch a leg.
     for (let i = 0; i < 2; i++) {
@@ -811,10 +1040,8 @@ export class Samurai {
     // Legs.
     for (let i = 0; i < 2; i++) {
       const leg = this.legs[i];
-      const dzG = tgt[i].z;
-      const dyG = hipY - ankleWorld[i];
-      const dz = lerp(dzG, airZ[i], airW);
-      const dy = lerp(dyG, airDy[i], airW);
+      const dz = lerp(tgt[i].z, airZ[i], airW);
+      const dy = lerp(hipY - ankleWorld[i], airDy[i], airW);
       const pitch = lerp(tgt[i].pitch, airPitch, airW);
       const s = solveLeg(dz, dy, this.legState[i]);
       leg.hip.rotation.set(-s.hip, 0, 0.035 * leg.side);
@@ -837,14 +1064,52 @@ export class Samurai {
     // The hat lags a touch behind the head's bounce.
     const hatTarget = clamp(-this.squashV * 0.05 + bob * 0.6, -0.12, 0.12);
     this.hatTilt = damp(this.hatTilt, hatTarget, 12, dt);
-    this.hat.rotation.set(0.07 + this.hatTilt, 0, 0);
+    this.hat.rotation.set(0.05 + this.hatTilt, 0, 0);
 
-    // Arms swing against the legs; the left hand rests on the katana while walking.
+    // Place the whole figure so the arms, sword and cape can work in world space.
+    this.root.position.copy(state.pos);
+    this.root.rotation.set(0, state.yaw, 0);
+    this.groundY.value = groundHere;
+    this.root.updateMatrixWorld(true);
+
+    this.poseArms(dt, state, { phase, rise, lead, fwdSpeed, vy });
+    this.root.updateMatrixWorld(true);
+    this.placeSword(dt, phase, rise);
+
+    // The brim's disc for the face shadow.
+    _t.set(0, -0.01, 0).applyMatrix4(this.hat.matrixWorld);
+    this.hatUniform.value.set(_t.x, _t.y, _t.z, 0.37);
+
+    this.updateCape(dt, state);
+  }
+
+  poseArms(dt, state, g) {
+    const { phase, rise, lead, fwdSpeed, vy } = g;
+    const TAU = Math.PI * 2;
+    const runW = this.runW;
+    const airW = this.airW;
+    const moveW = this.moveW;
     const landing = smoothstep(0.02, 0.12, -this.squash);
-    this.holdW = damp(this.holdW, (1 - runW) * (1 - airW) * (1 - landing), 6, dt);
+    // Left hand steadies the empty scabbard; the right carries the blade low at its side.
+    this.holdW = damp(this.holdW, (1 - airW) * (1 - landing * 0.6), 6, dt);
+    this.swordW = damp(this.swordW, (1 - airW) * (1 - runW * 0.7), 6, dt);
     const swingAmp = lerp(0.3, 0.85, runW) * moveW;
     const elbowBase = lerp(0.2, 1.35, runW);
     const up = rise > 0 ? 1 - smoothstep(0.3, 1.0, this.airT * 3.5) : 0;
+    const fall = smoothstep(0.0, 0.8, -rise);
+
+    // Chest-space targets for the two hand holds.
+    this.spine.updateMatrix();
+    this.chest.updateMatrix();
+    this.saya.updateMatrix();
+    _m.multiplyMatrices(this.spine.matrix, this.chest.matrix).invert();
+    const sayaGrip = _t.set(0, 0.012, -0.06).applyMatrix4(this.saya.matrix).applyMatrix4(_m).clone();
+    // Right hand: low at the side, swinging gently with the stride.
+    const swing = Math.sin(TAU * (phase - 0.25)) * moveW;
+    _grip.set(-0.27, 0.87 + 0.012 * Math.sin(2 * TAU * phase) * moveW, 0.1 + swing * 0.07);
+    _m.multiplyMatrices(this.pelvis.matrix, this.spine.matrix).multiply(this.chest.matrix).invert();
+    const swordGrip = _grip.clone().applyMatrix4(_m);
+
     for (let i = 0; i < 2; i++) {
       const arm = this.arms[i];
       const sgn = arm.side;
@@ -854,7 +1119,6 @@ export class Samurai {
       let ex = -(elbowBase + Math.max(0, -sw) * 0.5);
       // Airborne: arms sweep up at take-off, open wide through the apex and
       // come forward again to meet the ground.
-      const fall = smoothstep(0.0, 0.8, -rise);
       const airSx = lerp(lerp(0.3, -0.85, up), -0.45, fall) + (i === 0 ? 0.12 : -0.08) * lead;
       const airSz = lerp(0.95, 0.55, fall) * sgn;
       const airEx = -lerp(lerp(0.35, 0.9, up), 0.6, fall);
@@ -867,13 +1131,16 @@ export class Samurai {
       _euler.set(sx, 0, sz);
       arm.shoulder.quaternion.setFromEuler(_euler);
       let bend = -ex;
-      if (i === 0 && this.holdW > 0.001) {
-        this.solveHold(arm, _q);
-        arm.shoulder.quaternion.slerp(_q, this.holdW);
-        bend = lerp(bend, this.holdBend, this.holdW);
+      const w = i === 0 ? this.holdW : this.swordW;
+      if (w > 0.001) {
+        const pole = i === 0 ? _x.set(0.8, -0.25, -0.55) : _x.set(-0.85, -0.3, -0.45);
+        const target = i === 0 ? sayaGrip : swordGrip;
+        const b = this.solveArm(arm, target, pole.clone(), _q);
+        arm.shoulder.quaternion.slerp(_q, w);
+        bend = lerp(bend, b, w);
       }
       arm.elbow.rotation.set(-bend, 0, 0);
-      arm.wrist.rotation.set(i === 0 ? -0.25 * this.holdW : 0.1, 0, 0);
+      arm.wrist.rotation.set(i === 0 ? -0.25 * this.holdW : 0.15, 0, 0);
 
       // Sleeve: hangs with gravity whatever the arm does, blown back by the air
       // rushing past (running, falling) and trailing a beat behind the arm.
@@ -884,68 +1151,58 @@ export class Samurai {
       _q3.identity().slerp(_q, 0.8);
       arm.sleevePivot.quaternion.slerp(_q3, 1 - Math.exp(-11 * dt));
     }
-
-    // Place the whole figure.
-    this.root.position.copy(state.pos);
-    this.root.rotation.set(0, state.yaw, 0);
-    this.groundY.value = groundHere;
-    this.root.updateMatrixWorld(true);
-
-    this.updateRibbons(dt, state);
   }
 
-  updateRibbons(dt, state) {
-    const side = _side.set(Math.cos(state.yaw), 0, -Math.sin(state.yaw));
-    const back = _back.set(-Math.sin(state.yaw), 0, -Math.cos(state.yaw));
-    const center = _center.setFromMatrixPosition(this.pelvis.matrixWorld);
-    const yaw = state.yaw;
-    const collide = (p) => {
-      // Elliptical cone around the hakama: the tails fall over it instead of through it.
-      const dx = p.x - center.x;
-      const dz = p.z - center.z;
-      const lx = dx * Math.cos(yaw) - dz * Math.sin(yaw);
-      const lz = dx * Math.sin(yaw) + dz * Math.cos(yaw);
-      const drop = center.y + 0.15 - p.y;
-      if (drop < 0 || drop > 0.95) return;
-      const rx = 0.2 + drop * 0.16;
-      const rz = 0.17 + drop * 0.12;
-      const e = (lx / rx) ** 2 + (lz / rz) ** 2;
-      if (e < 1) {
-        const k = 1 / Math.sqrt(e) - 1;
-        const nlx = lx * (1 + k);
-        const nlz = lz * (1 + k);
-        p.x = center.x + nlx * Math.cos(yaw) + nlz * Math.sin(yaw);
-        p.z = center.z - nlx * Math.sin(yaw) + nlz * Math.cos(yaw);
-      }
-    };
-    for (let i = 0; i < this.ribbons.length; i++) {
-      const anchor = _anchor.copy(this.knotAnchors[i]).applyMatrix4(this.pelvis.matrixWorld);
-      const r = this.ribbons[i];
-      if (!this.ribbonsReady) r.reset(anchor, back);
-      r.update(dt, anchor, this.wind, collide, back);
-      r.updateGeometry(side);
+  // The katana rides in the right hand: blade low and forward while walking,
+  // trailing behind in a run or a leap, swinging a beat behind the arm.
+  placeSword(dt, phase, rise) {
+    const arm = this.arms[1];
+    _t.set(0, -0.06, 0.012).applyMatrix4(arm.wrist.matrixWorld);
+    this.body.worldToLocal(_t);
+    this.sword.position.copy(_t);
+    const walkDir = _x.set(-0.3, -0.76, 0.58).normalize();
+    const runDir = _y.set(-0.35, -0.55, -0.76).normalize();
+    const airDir = _z.set(-0.45, lerp(-0.2, -0.75, smoothstep(0, 0.8, -rise)), -0.7).normalize();
+    _swordDir.copy(walkDir).lerp(runDir, this.runW * 0.85).lerp(airDir, this.airW).normalize();
+    // A pendulum lag on the blade's swing.
+    const target = Math.sin(Math.PI * 2 * (phase - 0.25)) * 0.13 * this.moveW * (1 - this.airW);
+    for (let i = 0; i < 3; i++) {
+      const h = dt / 3;
+      this.swordSwingV += ((target - this.swordSwing) * 120 - this.swordSwingV * 12) * h;
+      this.swordSwing += this.swordSwingV * h;
     }
-    this.ribbonsReady = true;
+    _swordDir.applyAxisAngle(_e.set(1, 0, 0), -this.swordSwing).normalize();
+    // Spine of the blade faces up and back; the edge leads.
+    _y.copy(_up).addScaledVector(_swordDir, -_up.dot(_swordDir)).normalize();
+    _x.crossVectors(_y, _swordDir);
+    _mb.makeBasis(_x, _y, _swordDir);
+    this.sword.quaternion.setFromRotationMatrix(_mb);
+    this.sword.updateMatrixWorld(true);
+  }
+
+  updateCape(dt, state) {
+    const C = this.colliders;
+    const chest = this.chest.matrixWorld;
+    const setS = (k, x, y, z, r, m) => {
+      C.spheres[k][0].set(x, y, z).applyMatrix4(m);
+      C.spheres[k][1] = r;
+    };
+    setS(0, 0.08, 0.04, -0.01, 0.15, chest);
+    setS(1, -0.08, 0.04, -0.01, 0.15, chest);
+    setS(2, 0.07, -0.2, -0.01, 0.145, chest);
+    setS(3, -0.07, -0.2, -0.01, 0.145, chest);
+    setS(4, 0, -0.05, -0.02, 0.24, this.pelvis.matrixWorld);
+    C.spheres[5][0].setFromMatrixPosition(this.arms[0].shoulder.matrixWorld);
+    C.spheres[5][1] = 0.09;
+    C.spheres[6][0].setFromMatrixPosition(this.arms[1].shoulder.matrixWorld);
+    C.spheres[6][1] = 0.09;
+    setS(7, 0, 0.1, 0, 0.16, this.head.matrixWorld);
+    for (let i = 0; i < 2; i++) {
+      C.capsules[i][0].setFromMatrixPosition(this.arms[i].shoulder.matrixWorld);
+      C.capsules[i][1].setFromMatrixPosition(this.arms[i].elbow.matrixWorld);
+      C.capsules[i][2] = 0.1;
+    }
+    _back.set(-Math.sin(state.yaw), 0, -Math.cos(state.yaw));
+    this.cape.update(dt, chest, this.wind, C, _back);
   }
 }
-
-const _euler = new THREE.Euler();
-const _q = new THREE.Quaternion();
-const _q2 = new THREE.Quaternion();
-const _q3 = new THREE.Quaternion();
-const _down = new THREE.Vector3(0, -1, 0);
-const _m = new THREE.Matrix4();
-const _mb = new THREE.Matrix4();
-const _t = new THREE.Vector3();
-const _d = new THREE.Vector3();
-const _perp = new THREE.Vector3();
-const _u = new THREE.Vector3();
-const _e = new THREE.Vector3();
-const _f = new THREE.Vector3();
-const _x = new THREE.Vector3();
-const _y = new THREE.Vector3();
-const _z = new THREE.Vector3();
-const _side = new THREE.Vector3();
-const _back = new THREE.Vector3();
-const _center = new THREE.Vector3();
-const _anchor = new THREE.Vector3();

@@ -1,5 +1,8 @@
-// Shared GLSL chunks. Terrain and wind noise have exact JavaScript twins in noise.js and
-// terrain.js so the player, the cloth and the grass all agree on the same world.
+// Shared GLSL chunks. Terrain and wind noise have exact JavaScript twins in noise.js,
+// terrain.js and wind.js so the player, the cloth and the grass all agree on one world.
+import { TERRAIN } from './config.js';
+
+const f = (x) => (Number.isInteger(x) ? x.toFixed(1) : String(x));
 
 export const common = /* glsl */ `
 #ifndef PI
@@ -29,7 +32,7 @@ float vnoise(vec2 p) {
   return mix(mix(a, b, u.x), mix(c, d, u.x), u.y);
 }
 
-// Integer-lattice value noise, bit-exact with inoise() in noise.js.
+// Integer-lattice value noise, bit-exact with noise.js.
 uint pcgHash(uint v) {
   uint state = v * 747796405u + 2891336453u;
   uint word = ((state >> ((state >> 28u) + 4u)) ^ state) * 277803737u;
@@ -50,6 +53,18 @@ float inoise(vec2 p) {
   float d = latticeHash(i + ivec2(1, 1));
   return mix(mix(a, b, u.x), mix(c, d, u.x), u.y);
 }
+// Same lattice, quintic fade: smooth enough in slope for rolling hills.
+float inoise5(vec2 p) {
+  vec2 fl = floor(p);
+  ivec2 i = ivec2(fl) + ivec2(65536);
+  vec2 f = p - fl;
+  vec2 u = f * f * f * (f * (f * 6.0 - 15.0) + 10.0);
+  float a = latticeHash(i);
+  float b = latticeHash(i + ivec2(1, 0));
+  float c = latticeHash(i + ivec2(0, 1));
+  float d = latticeHash(i + ivec2(1, 1));
+  return mix(mix(a, b, u.x), mix(c, d, u.x), u.y);
+}
 `;
 
 export const sharedUniforms = /* glsl */ `
@@ -61,38 +76,44 @@ uniform vec3 uAmbGround;
 uniform vec3 uFogColor;
 uniform vec3 uFogSunColor;
 uniform float uFogDensity;
+uniform float uFogFalloff;
 uniform vec2 uWindDir;
 uniform float uWindStrength;
 uniform vec2 uWindScroll;
 `;
 
-// Keep in sync with terrain.js.
+// Keep in sync with terrainHeight() in terrain.js.
 export const terrain = /* glsl */ `
 float terrainHeight(vec2 p) {
-  return sin(p.x * 0.031 + 1.7) * cos(p.y * 0.027 - 0.4) * 2.2
-       + sin(p.x * 0.067 - p.y * 0.052 + 2.3) * 0.7
-       + cos(p.x * 0.121 + p.y * 0.143 - 1.1) * 0.25;
+  vec2 q = (p + vec2(${f(TERRAIN.offset[0])}, ${f(TERRAIN.offset[1])})) * (1.0 / 240.0);
+  float h = (inoise5(q) - 0.5) * 26.0;
+  q = mat2(0.8, 0.6, -0.6, 0.8) * q * 2.3 + vec2(3.1, 1.7);
+  h += (inoise5(q) - 0.5) * 9.0;
+  q = mat2(0.8, 0.6, -0.6, 0.8) * q * 2.4 + vec2(-1.3, 5.2);
+  h += (inoise5(q) - 0.5) * 2.6;
+  q = mat2(0.8, 0.6, -0.6, 0.8) * q * 2.5 + vec2(7.7, -2.4);
+  h += (inoise5(q) - 0.5) * 0.8;
+  vec2 d = p - vec2(${f(TERRAIN.hero[0])}, ${f(TERRAIN.hero[1])});
+  h += ${f(TERRAIN.heroHeight)} * exp(-dot(d, d) * ${f(1 / (2 * TERRAIN.heroRadius * TERRAIN.heroRadius))});
+  return h;
 }
 
 vec3 terrainNormal(vec2 p) {
-  float a = p.x * 0.031 + 1.7, b = p.y * 0.027 - 0.4;
-  float c = p.x * 0.067 - p.y * 0.052 + 2.3;
-  float e = p.x * 0.121 + p.y * 0.143 - 1.1;
-  float dx = 0.031 * cos(a) * cos(b) * 2.2 + 0.067 * cos(c) * 0.7 - 0.121 * sin(e) * 0.25;
-  float dz = -0.027 * sin(a) * sin(b) * 2.2 - 0.052 * cos(c) * 0.7 - 0.143 * sin(e) * 0.25;
-  return normalize(vec3(-dx, 1.0, -dz));
+  float e = 0.6;
+  float hx = terrainHeight(p + vec2(e, 0.0)) - terrainHeight(p - vec2(e, 0.0));
+  float hz = terrainHeight(p + vec2(0.0, e)) - terrainHeight(p - vec2(0.0, e));
+  return normalize(vec3(-hx, 2.0 * e, -hz));
 }
 
-// Long, soft shadows the low sun casts across the rolling ground (1 = sunlit).
+// Soft shadows the hills cast across each other (1 = sunlit).
 float terrainSunVis(vec3 p) {
   vec2 d = normalize(uSunDir.xz);
   float tanSun = uSunDir.y / length(uSunDir.xz);
   float m = -1.0;
-  m = max(m, (terrainHeight(p.xz + d * 4.0) - p.y) * 0.25);
-  m = max(m, (terrainHeight(p.xz + d * 11.0) - p.y) / 11.0);
-  m = max(m, (terrainHeight(p.xz + d * 25.0) - p.y) / 25.0);
-  m = max(m, (terrainHeight(p.xz + d * 52.0) - p.y) / 52.0);
-  return 1.0 - smoothstep(tanSun - 0.03, tanSun + 0.012, m);
+  m = max(m, (terrainHeight(p.xz + d * 7.0) - p.y) / 7.0);
+  m = max(m, (terrainHeight(p.xz + d * 22.0) - p.y) / 22.0);
+  m = max(m, (terrainHeight(p.xz + d * 60.0) - p.y) / 60.0);
+  return 1.0 - smoothstep(tanSun - 0.04, tanSun + 0.01, m);
 }
 `;
 
@@ -108,20 +129,29 @@ float windGust(vec2 p) {
 `;
 
 export const atmosphere = /* glsl */ `
-// Colour of the air in direction v: violet-rose away from the sun, molten gold toward it.
+// Colour of the air in direction v: cool blue-grey haze away from the sun,
+// molten gold toward it.
 vec3 hazeColor(vec3 v) {
   float s = dot(v, uSunDir);
-  vec3 c = mix(uFogColor, uFogSunColor, pow(s * 0.5 + 0.5, 5.0));
-  c += uFogSunColor * 0.7 * pow(sat(s), 28.0);
+  vec3 c = mix(uFogColor, uFogSunColor, pow(s * 0.5 + 0.5, 6.0));
+  c += uFogSunColor * 0.45 * pow(sat(s), 24.0);
   return c;
 }
 
-vec3 applyFog(vec3 col, vec3 wp) {
+// Exponential height fog: valleys fill with haze, crests stand clearer.
+float fogAmount(vec3 wp) {
   vec3 d = wp - cameraPosition;
   float dist = length(d);
-  vec3 v = d / max(dist, 1e-4);
-  float fog = 1.0 - exp(-dist * uFogDensity);
-  return mix(col, hazeColor(v), fog);
+  float k = uFogFalloff;
+  float a = uFogDensity * exp(-k * cameraPosition.y);
+  float ky = k * d.y;
+  float t = abs(ky) > 1e-4 ? (1.0 - exp(-ky)) / ky : 1.0;
+  return 1.0 - exp(-a * dist * max(t, 0.0));
+}
+
+vec3 applyFog(vec3 col, vec3 wp) {
+  vec3 v = normalize(wp - cameraPosition);
+  return mix(col, hazeColor(v), fogAmount(wp));
 }
 `;
 

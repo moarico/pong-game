@@ -1,11 +1,13 @@
 # Samurai at Dusk
 
-A samurai walking through a field of wind-blown, light-brown susuki grass at sunset. This is a demo of sunlight, grass and movement, nothing else yet.
+A ronin in a straw kasa walks through a golden pampas field on rolling hills, katana drawn, under a hazy golden-hour sun. This is a demo of sunlight, grass and movement, nothing else yet.
 
-- **Sun:** a low sun with HDR bloom, light shafts that break around the samurai and through gaps in the clouds, lens flare, and eye adaptation. Looking into the sun turns the samurai into a silhouette with a burning rim.
-- **Glimmer:** blade edges catch the light and twinkle as they flutter. Dust and seed fluff drift on the wind and ignite when they pass in front of the sun. Seed plumes blaze gold when backlit.
-- **Grass:** up to about 200,000 instanced blades plus susuki plumes, all animated on the GPU. Gusts roll across the field as visible waves. The grass parts around the samurai, springs back behind him, and ripples outward when he lands.
-- **Movement:** a fixed 120 Hz simulation with render interpolation, eased acceleration and turning, coyote time and jump buffering, and a variable jump height. Legs use two-bone IK with heel-to-toe foot roll. The hips bob, sway and twist with the stride. Landings squash on a spring. The sleeves and sash swing with the wind and the motion.
+- **Sun:** a bright, hazy golden-hour sky with a big soft sun over the hill crest. There is HDR bloom, light shafts that break around the samurai and through the clouds, lens flare, and eye adaptation. Height fog fills the valleys, and layered ranges fade into the haze.
+- **Glimmer:** the polished blade flashes as it catches the sun. Blade edges twinkle as they flutter, dust and seed fluff ignite when they drift in front of the sun, and backlit plumes glow gold.
+- **Grass:** light golden-brown pampas leaves and feathery seed plumes, about 200,000 instances on high settings, all animated on the GPU. Gusts roll across the hills as visible waves. The grass parts around the samurai, springs back behind him, and ripples outward when he lands. Distant grass thins out gradually, so no detail-level rings show.
+- **Samurai:** a simulated cloth cape that streams in the wind. He carries a drawn katana in his right hand, and his left hand steadies the empty scabbard (both hands use arm IK). The sleeves hang with gravity, the clothes have woven fabric shading, and the brim of the hat shades his face.
+- **Camera:** over the shoulder, with depth of field focused on the samurai, so the near grass melts into soft bokeh.
+- **Movement:** a fixed 120 Hz simulation with render interpolation, eased acceleration and turning, coyote time and jump buffering, and a variable jump height. Legs use two-bone IK with heel-to-toe foot roll. The hips bob, sway and twist with the stride, and landings squash on a spring.
 
 ## Run it
 
@@ -44,13 +46,13 @@ src/config.js     sun direction, light colours, movement tuning, quality presets
 src/glsl.js       shared shader code: noise, terrain, wind, atmosphere, character shadow
 src/sky.js        sunset sky, clouds and sun disc
 src/grass.js      grass blades and susuki plumes
-src/terrain.js    ground and distant hills (JavaScript twin of the terrain function)
+src/terrain.js    rolling hills, far-field ground, mountain ranges (JavaScript twin of the terrain function)
 src/wind.js       wind field shared by the grass, dust and cloth
 src/particles.js  drifting dust and seed fluff, landing puffs
-src/samurai.js    samurai model, procedural animation, sash cloth
+src/samurai.js    samurai model, procedural animation, cape cloth, drawn katana
 src/player.js     movement physics
 src/camera.js     third-person camera
 src/trail.js      where the grass is being pushed down
 src/shadow.js     the samurai's long sunset shadow
-src/post.js       light shafts, bloom, exposure, lens flare, tone mapping
+src/post.js       depth of field, light shafts, bloom, exposure, lens flare, tone mapping
 ```

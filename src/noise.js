@@ -26,6 +26,24 @@ export function inoise(x, y) {
   return (a + (b - a) * ux) + ((c + (d - c) * ux) - (a + (b - a) * ux)) * uy;
 }
 
+// Quintic-fade twin of inoise5() in glsl.js (terrain).
+export function inoise5(x, y) {
+  const fx = Math.floor(x);
+  const fy = Math.floor(y);
+  const ix = fx + 65536;
+  const iy = fy + 65536;
+  const tx = x - fx;
+  const ty = y - fy;
+  const ux = tx * tx * tx * (tx * (tx * 6 - 15) + 10);
+  const uy = ty * ty * ty * (ty * (ty * 6 - 15) + 10);
+  const a = latticeHash(ix, iy);
+  const b = latticeHash(ix + 1, iy);
+  const c = latticeHash(ix, iy + 1);
+  const d = latticeHash(ix + 1, iy + 1);
+  const ab = a + (b - a) * ux;
+  return ab + ((c + (d - c) * ux) - ab) * uy;
+}
+
 // Smooth 1D noise in [0, 1] for slow global variation (wind strength and the like).
 export function noise1(t, seed = 0) {
   return inoise(t, seed * 17.13 + 0.5);

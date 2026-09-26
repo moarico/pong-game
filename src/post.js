@@ -114,6 +114,68 @@ void main() {
 }
 `;
 
+// Depth of field, prep: half-resolution colour plus signed circle of confusion
+// (negative in front of the focus plane, positive behind it; in half-res pixels).
+const dofPrep = /* glsl */ `
+uniform sampler2D tScene;
+uniform sampler2D tDepth;
+uniform vec2 uClip;
+uniform vec3 uDof;
+uniform float uMaxBlur;
+varying vec2 vUv;
+float viewZ(float d) {
+  float z = d * 2.0 - 1.0;
+  return 2.0 * uClip.x * uClip.y / (uClip.y + uClip.x - z * (uClip.y - uClip.x));
+}
+void main() {
+  vec3 c = texture(tScene, vUv).rgb;
+  float z = viewZ(texture(tDepth, vUv).r);
+  float f = uDof.x;
+  float coc = z > f ? (1.0 - f / z) * uDof.y : -min((f / z - 1.0) * uDof.z, uMaxBlur);
+  gl_FragColor = vec4(min(c, vec3(60.0)), coc);
+}
+`;
+
+// Depth of field, gather: each tap counts where its own blur disc reaches this pixel.
+// Foreground blur spills over whatever is behind it; background blur never bleeds
+// onto sharper things in front.
+const dofGather = /* glsl */ `
+${lumaFn}
+#define TAU 6.283185307179586
+#define TAPS 32
+uniform sampler2D tSrc;
+uniform vec2 uTexel;
+uniform float uMaxBlur;
+varying vec2 vUv;
+void main() {
+  vec4 c0 = texture(tSrc, vUv);
+  float nearR = 0.0;
+  for (int i = 0; i < 8; i++) {
+    float a = float(i) * 0.7854;
+    nearR = max(nearR, -texture(tSrc, vUv + vec2(cos(a), sin(a)) * uMaxBlur * 0.55 * uTexel).a);
+  }
+  float R = max(abs(c0.a), nearR * 0.75);
+  if (R < 0.5) {
+    gl_FragColor = vec4(c0.rgb, R);
+    return;
+  }
+  vec3 acc = c0.rgb;
+  float wsum = 1.0;
+  float rot = ign(gl_FragCoord.xy) * TAU;
+  for (int i = 0; i < TAPS; i++) {
+    float fi = float(i) + 0.5;
+    float r = sqrt(fi / float(TAPS)) * R;
+    float a = fi * 2.39996 + rot;
+    vec4 s = texture(tSrc, vUv + vec2(cos(a), sin(a)) * r * uTexel);
+    float reach = s.a > c0.a + 0.5 ? min(abs(s.a), abs(c0.a)) : abs(s.a);
+    float w = smoothstep(r - 1.0, r + 0.5, reach);
+    acc += s.rgb * w;
+    wsum += w;
+  }
+  gl_FragColor = vec4(acc / wsum, R);
+}
+`;
+
 // Eye adaptation plus how much of the sun disc is currently unobstructed.
 const exposureFrag = /* glsl */ `
 ${lumaFn}
@@ -166,6 +228,8 @@ uniform sampler2D tScene;
 uniform sampler2D tBloom;
 uniform sampler2D tRays;
 uniform sampler2D tExposure;
+uniform sampler2D tDof;
+uniform float uDofOn;
 uniform vec2 uSunUV;
 uniform float uSunOn;
 uniform float uAspect;
@@ -228,6 +292,10 @@ void main() {
   col.r = texture(tScene, uv - dc * ca).r;
   col.g = texture(tScene, uv).g;
   col.b = texture(tScene, uv + dc * ca).b;
+  if (uDofOn > 0.5) {
+    vec4 dof = texture(tDof, uv);
+    col = mix(col, dof.rgb, smoothstep(0.35, 1.2, dof.a));
+  }
 
   vec3 bloom = texture(tBloom, uv).rgb * uBloomNorm;
   vec3 rays = texture(tRays, uv).rgb * uRays;
@@ -245,10 +313,11 @@ void main() {
 
   col = acesFit(col * ex.r);
 
-  // Grade: violet in the shadows, gold in the highlights.
+  // Grade: warm amber shadows lifted by haze, creamy highlights.
   float l = lum(col);
-  col *= mix(vec3(0.9, 0.9, 1.1), vec3(1.05, 1.0, 0.9), smoothstep(0.02, 0.55, l));
-  col = max(mix(vec3(l), col, 1.07), 0.0);
+  col = col + vec3(0.016, 0.011, 0.006) * (1.0 - smoothstep(0.0, 0.3, l));
+  col *= mix(vec3(1.05, 0.98, 0.9), vec3(1.02, 1.0, 0.97), smoothstep(0.05, 0.7, l));
+  col = max(mix(vec3(l), col, 1.2), 0.0);
   vec3 o = toSRGB(col);
 
   vec2 q = dc * vec2(uAspect, 1.0);
@@ -289,16 +358,21 @@ export class Post {
         blendSrc: THREE.OneFactor,
         blendDst: THREE.OneFactor,
       }),
+      dofPrep: mat(dofPrep, {
+        tScene: { value: null }, tDepth: { value: null }, uClip: { value: new THREE.Vector2(0.1, 1000) },
+        uDof: { value: new THREE.Vector3(4, 2, 7) }, uMaxBlur: { value: 12 },
+      }),
+      dofGather: mat(dofGather, { tSrc: { value: null }, uTexel: { value: new THREE.Vector2() }, uMaxBlur: { value: 12 } }),
       exposure: mat(exposureFrag, {
         tLum: { value: null }, tPrev: { value: null }, tScene: { value: null },
         uSunUV: { value: new THREE.Vector2() }, uSunRadius: { value: 0.02 }, uAspect: { value: 1 },
-        uDt: { value: 0 }, uInit: { value: 1 }, uKey: { value: 0.17 }, uRange: { value: new THREE.Vector2(0.035, 1.6) },
+        uDt: { value: 0 }, uInit: { value: 1 }, uKey: { value: 0.3 }, uRange: { value: new THREE.Vector2(0.06, 2.0) },
       }),
       composite: mat(compositeFrag, {
         tScene: { value: null }, tBloom: { value: null }, tRays: { value: null }, tExposure: { value: null },
         uSunUV: { value: new THREE.Vector2() }, uSunOn: { value: 0 }, uAspect: { value: 1 }, uTime: { value: 0 },
-        uBloom: { value: 0.05 }, uBloomNorm: { value: 1 }, uRays: { value: 0.32 }, uFlare: { value: 9 },
-        uSunTint: { value: new THREE.Color().setRGB(1.0, 0.72, 0.42) }, uRes: { value: new THREE.Vector2() }, uDebug: { value: 0 },
+        uBloom: { value: 0.07 }, uBloomNorm: { value: 1 }, uRays: { value: 0.32 }, uFlare: { value: 9 },
+        uSunTint: { value: new THREE.Color().setRGB(1.0, 0.72, 0.42) }, uRes: { value: new THREE.Vector2() }, uDebug: { value: 0 }, tDof: { value: null }, uDofOn: { value: 0 },
       }),
     };
     this.sunNdc = new THREE.Vector3();
@@ -307,6 +381,8 @@ export class Post {
     this.init = true;
     this.time = 0;
     this.targets = null;
+    this.focus = 4;
+    this.dof = 1;
   }
 
   rt(w, h, opts = {}) {
@@ -325,11 +401,16 @@ export class Post {
     if (this.targets) {
       for (const t of this.all) t.dispose();
     }
-    const scene = this.rt(w, h, { depthBuffer: true, samples: msaa });
+    const depthTexture = new THREE.DepthTexture(w, h);
+    depthTexture.minFilter = THREE.NearestFilter;
+    depthTexture.magFilter = THREE.NearestFilter;
+    const scene = this.rt(w, h, { depthBuffer: true, samples: msaa, depthTexture });
     const hw = Math.max(1, w >> 1);
     const hh = Math.max(1, h >> 1);
     const raysA = this.rt(hw, hh);
     const raysB = this.rt(hw, hh);
+    const dofA = this.rt(hw, hh);
+    const dofB = this.rt(hw, hh);
     const bloom = [];
     let bw = w;
     let bh = h;
@@ -343,8 +424,10 @@ export class Post {
       this.exposure = [this.rt(1, 1, { minFilter: THREE.NearestFilter, magFilter: THREE.NearestFilter }),
         this.rt(1, 1, { minFilter: THREE.NearestFilter, magFilter: THREE.NearestFilter })];
     }
-    this.targets = { scene, raysA, raysB, bloom };
-    this.all = [scene, raysA, raysB, ...bloom];
+    this.targets = { scene, raysA, raysB, bloom, dofA, dofB };
+    this.all = [scene, raysA, raysB, dofA, dofB, ...bloom];
+    // Blur sizes are authored for a 540-pixel-tall half-resolution buffer.
+    this.dofScale = hh / 540;
     this.w = w;
     this.h = h;
     this.m.blur.uniforms.uRes.value.set(hw, hh);
@@ -369,6 +452,24 @@ export class Post {
     r.setClearColor(0x000000, 1);
     r.clear(true, true, false);
     r.render(scene, camera);
+
+    // Depth of field focused on the samurai: soft foreground grass, gently hazy distance.
+    const dofOn = this.dof > 0;
+    if (dofOn) {
+      const k = this.dofScale;
+      const p = m.dofPrep.uniforms;
+      p.tScene.value = T.scene.texture;
+      p.tDepth.value = T.scene.depthTexture;
+      p.uClip.value.set(camera.near, camera.far);
+      p.uDof.value.set(this.focus, 2.0 * k * this.dof, 7.0 * k * this.dof);
+      p.uMaxBlur.value = 12 * k;
+      this.pass(m.dofPrep, T.dofA);
+      const g = m.dofGather.uniforms;
+      g.tSrc.value = T.dofA.texture;
+      g.uTexel.value.set(1 / T.dofA.width, 1 / T.dofA.height);
+      g.uMaxBlur.value = 12 * k;
+      this.pass(m.dofGather, T.dofB);
+    }
 
     // Where is the sun on screen, and is it in front of us at all?
     camera.getWorldDirection(this.fwd);
@@ -437,6 +538,8 @@ export class Post {
     c.tBloom.value = T.bloom[0].texture;
     c.tRays.value = T.raysA.texture;
     c.tExposure.value = next.texture;
+    c.tDof.value = T.dofB.texture;
+    c.uDofOn.value = dofOn ? 1 : 0;
     c.uSunUV.value.set(sx, sy);
     c.uSunOn.value = sunOn;
     c.uAspect.value = aspect;

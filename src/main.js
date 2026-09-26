@@ -63,6 +63,7 @@ const shared = {
   uFogColor: { value: LIGHT.fog.clone() },
   uFogSunColor: { value: LIGHT.fogSun.clone() },
   uFogDensity: { value: LIGHT.fogDensity },
+  uFogFalloff: { value: LIGHT.fogFalloff },
   uWindDir: { value: new THREE.Vector2(1, 0) },
   uWindStrength: { value: 0.5 },
   uWindScroll: { value: new THREE.Vector2() },
@@ -80,7 +81,7 @@ let qName = initialQuality();
 let quality = QUALITY[qName];
 
 const scene = new THREE.Scene();
-const camera = new THREE.PerspectiveCamera(50, 1, 0.1, 3000);
+const camera = new THREE.PerspectiveCamera(50, 1, 0.1, 8000);
 camera.layers.enable(1);
 
 const wind = new Wind(shared);
@@ -97,7 +98,7 @@ samurai.addTo(scene);
 // Start facing the setting sun, with the camera nudged so it sits just beside the hat.
 const player = new Player(0, 0, Math.atan2(SUN_DIR.x, SUN_DIR.z));
 const input = new Input(canvas);
-const rig = new CameraRig(camera, 0.09, -0.02);
+const rig = new CameraRig(camera, 0.0, -0.06);
 const trail = new Trail(shared);
 const shadow = new CharacterShadow(shared, quality.shadowSize);
 const post = new Post(renderer);
@@ -222,6 +223,10 @@ function tick(dt, live) {
 
   center.copy(pos).y += 0.95;
   shadow.render(renderer, scene, center, SUN_DIR);
+  // Keep the samurai's chest in focus.
+  center.y += 0.35;
+  post.focus = camera.position.distanceTo(center);
+  post.dof = quality.dof;
   post.render(scene, camera, dt, SUN_DIR);
 
   if (live) watchPerformance(dt);

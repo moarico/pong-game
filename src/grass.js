@@ -3,6 +3,9 @@ import { common, sharedUniforms, terrain, wind, atmosphere, shadow } from './gls
 import { TRAIL_N } from './config.js';
 import { mulberry32 } from './noise.js';
 
+// Where along the stalk the feathery seed head begins.
+const PLUME_START = 0.75;
+
 // ---------------------------------------------------------------------------
 // Blades
 // ---------------------------------------------------------------------------
@@ -64,8 +67,12 @@ void main() {
   vec2 root = aOffset + uTile * floor((uCamXZ - aOffset) / uTile + 0.5);
   vec2 rel = root - uCamXZ;
   float dist = length(rel);
+  // Distance fade by thinning: each blade drops out at its own point, so the canopy
+  // keeps its height and no ring shows where one detail level hands over to the next.
   float fade = 1.0 - smoothstep(uFadeStart, uFadeEnd, dist);
-  if (fade <= 0.0 || (dist > 4.0 && dot(rel, uCamFwdXZ) < uCullCos * dist)) {
+  float rank = fract(aRand.x * 7.31 + aRand.z * 3.17);
+  float keep = smoothstep(rank * 0.92, rank * 0.92 + 0.08, fade);
+  if (keep <= 0.0 || (dist > 4.0 && dot(rel, uCamFwdXZ) < uCullCos * dist)) {
     gl_Position = vec4(0.0, 0.0, 2.0, 1.0);
     return;
   }
@@ -77,11 +84,12 @@ void main() {
   float patchN = inoise(root * 0.045 + 7.0);
   float patchN2 = inoise(root * 0.21 - 3.0);
 
-  float H = uHeight * mix(0.55, 1.12, r1) * mix(0.7, 1.2, patchN) * smoothstep(0.0, 1.0, fade);
+  float H = uHeight * mix(0.55, 1.12, r1) * mix(0.7, 1.2, patchN) * mix(0.6, 1.0, keep);
   // Never let a blade fill the lens when the camera dips into the grass.
   float camAbove = cameraPosition.y - groundY;
   H *= mix(smoothstep(0.35, 1.5, dist), 1.0, smoothstep(H + 0.1, H + 0.6, camAbove));
-  float W = uWidth * mix(0.65, 1.35, r2) * (1.0 + dist * uLodWidth);
+  // Survivors broaden a little so the field stays just as full while it thins.
+  float W = uWidth * mix(0.65, 1.35, r2) * (1.0 + dist * uLodWidth) * keep * sqrt(0.92 / max(fade, 0.2));
 
   // Random facing, turning toward the camera with distance so far blades never go edge-on.
   float ang = r0 * TAU;
@@ -104,9 +112,10 @@ void main() {
   vec2 push = uInteract > 0.5 ? interaction(root) : vec2(0.0);
 
   float leanAng = fract(r3 * 3.7 + r0 * 1.3) * TAU;
-  vec2 lean = vec2(cos(leanAng), sin(leanAng)) * mix(0.06, 0.36, fract(r1 * 13.7));
-  vec2 tilt = lean * 0.55 + push * 1.1;
-  vec2 curve = lean * 0.75 + windVec + push * 0.3;
+  // Pampas leaves spring up and arch outward under their own length.
+  vec2 lean = vec2(cos(leanAng), sin(leanAng)) * mix(0.1, 0.55, fract(r1 * 13.7));
+  vec2 tilt = lean * 0.45 + push * 1.1;
+  vec2 curve = lean * 1.1 + windVec + push * 0.3;
   vec2 total = tilt + curve;
   float tl = length(total);
   vec2 B = tl > 1e-4 ? total / tl : vec2(1.0, 0.0);
@@ -153,13 +162,13 @@ void main() {
   vGust = gust;
   vSeed = floor(r0 * 4096.0) + r3;
   // Dense stems shade each other's bases; rises in the ground shade whole hollows.
-  vSunVis = terrainSunVis(pos) * mix(0.06, 1.0, smoothstep(0.2, 0.95, t));
+  vSunVis = mix(0.12, 1.0, smoothstep(0.1, 0.9, t));
 
-  // Light brown straw, with pale bleached patches and the odd darker, older stem.
-  vec3 cLight = vec3(0.5, 0.37, 0.22);
-  vec3 cPale = vec3(0.64, 0.53, 0.37);
-  vec3 cDeep = vec3(0.27, 0.17, 0.09);
-  vec3 cOlive = vec3(0.38, 0.33, 0.18);
+  // Light golden-brown straw, with pale bleached patches and the odd darker stem.
+  vec3 cLight = vec3(0.6, 0.36, 0.14);
+  vec3 cPale = vec3(0.72, 0.5, 0.26);
+  vec3 cDeep = vec3(0.34, 0.18, 0.07);
+  vec3 cOlive = vec3(0.5, 0.36, 0.14);
   vec3 alb = mix(cLight, cPale, r1 * 0.75 * patchN2);
   alb = mix(alb, cDeep, r3 * r3 * r3 * 0.85);
   alb = mix(alb, cOlive, smoothstep(0.58, 0.92, patchN) * 0.4 * r2);
@@ -192,17 +201,17 @@ void main() {
   vec3 L = uSunDir;
   float t = vT;
 
-  vec3 alb = vAlbedo * mix(0.6, 1.08, smoothstep(0.0, 0.9, t));
-  alb = mix(alb, vec3(0.8, 0.7, 0.5), smoothstep(0.8, 1.0, t) * 0.4);
+  vec3 alb = vAlbedo * mix(0.55, 1.08, smoothstep(0.0, 0.9, t));
+  alb = mix(alb, vec3(0.86, 0.7, 0.46), smoothstep(0.75, 1.0, t) * 0.45);
   // A passing gust flips blades to their paler, shinier side: the wind becomes visible.
-  alb *= 1.0 + vGust * 0.2;
+  alb *= 1.0 + vGust * 0.32;
 
   float sunVis = vSunVis * charShadow(vShadow);
   float NdL = dot(N, L);
   float diff = sat(NdL * 0.55 + 0.45);
   // Looking toward the sun, light pours through the thin dry blades.
   float fwd = sat(dot(-V, L));
-  float trans = (pow(fwd, 6.0) * 0.85 + pow(fwd, 2.0) * 0.14) * (0.08 + 0.92 * t * t * t);
+  float trans = (pow(fwd, 5.0) * 1.3 + pow(fwd, 1.8) * 0.28) * (0.12 + 0.88 * t * t);
   float fres = pow(1.0 - abs(dot(Nf, V)), 3.0);
   float rim = fres * fwd * fwd * (0.3 + 0.9 * t) * 1.5;
   vec3 Hv = normalize(L + V);
@@ -217,7 +226,7 @@ void main() {
   vec3 sun = uSunColor * sunVis;
   vec3 col = alb * sun * (diff + trans * vec3(1.05, 0.82, 0.55));
   col += sun * (rim * vec3(1.0, 0.86, 0.66) + spec + glint);
-  col += alb * mix(uAmbGround, uAmbSky, 0.5 + 0.5 * N.y) * mix(0.18, 1.0, t);
+  col += alb * mix(uAmbGround, uAmbSky, 0.5 + 0.5 * N.y) * mix(0.3, 1.0, t);
   col = applyFog(col, vWorld);
   gl_FragColor = vec4(col, 1.0);
 }
@@ -233,7 +242,7 @@ ${sharedUniforms}
 ${terrain}
 ${wind}
 #define TRAIL_N ${TRAIL_N}
-#define PLUME_START 0.7
+#define PLUME_START ${PLUME_START.toFixed(2)}
 attribute vec2 aOffset;
 attribute vec4 aRand;
 uniform float uTile;
@@ -291,16 +300,18 @@ void main() {
   float r1 = aRand.y;
   float r2 = aRand.z;
   float r3 = aRand.w;
+  float rank = fract(r0 * 5.13 + r3 * 2.71);
+  float keep = smoothstep(rank * 0.9, rank * 0.9 + 0.1, fade);
   // Susuki grows in clumps.
   float clump = inoise(root * 0.085 + 13.0) * 0.7 + inoise(root * 0.3 - 5.0) * 0.3;
-  float present = smoothstep(0.45, 0.6, clump + (r1 - 0.5) * 0.22);
-  if (fade <= 0.0 || present <= 0.01 || (dist > 4.0 && dot(rel, uCamFwdXZ) < uCullCos * dist)) {
+  float present = smoothstep(0.18, 0.42, clump + (r1 - 0.5) * 0.3);
+  if (keep <= 0.0 || present <= 0.01 || (dist > 4.0 && dot(rel, uCamFwdXZ) < uCullCos * dist)) {
     gl_Position = vec4(0.0, 0.0, 2.0, 1.0);
     return;
   }
   float groundY = terrainHeight(root);
   float patchN = inoise(root * 0.045 + 7.0);
-  float H = uHeight * mix(0.8, 1.22, r1) * mix(0.85, 1.1, patchN) * present * smoothstep(0.0, 1.0, fade);
+  float H = uHeight * mix(0.8, 1.22, r1) * mix(0.85, 1.1, patchN) * present * mix(0.7, 1.0, keep);
   float camAbove = cameraPosition.y - groundY;
   H *= mix(smoothstep(0.35, 1.6, dist), 1.0, smoothstep(H * 0.8, H + 0.4, camAbove));
 
@@ -325,7 +336,7 @@ void main() {
   vec2 B = tl > 1e-4 ? total / tl : vec2(1.0, 0.0);
   a0_ = dot(tilt, B);
   c1_ = dot(curve, B);
-  droop_ = 0.35 + 0.5 * r2 + windAmt * 0.45;
+  droop_ = 0.45 + 0.6 * r2 + windAmt * 0.5;
   float tipA = a0_ + c1_;
   if (abs(tipA) > 1.35) {
     float k = 1.35 / abs(tipA);
@@ -352,8 +363,8 @@ void main() {
   S = sl > 1e-3 ? S / sl : normalize(cross(T, vec3(0.0, 0.0, 1.0)) + 1e-4);
 
   float s = sat((t - PLUME_START) / (1.0 - PLUME_START));
-  float wPlume = uWidth * mix(0.8, 1.2, r2) * pow(sin(PI * min(s * 1.12, 1.0)), 0.55) * (1.0 - s * 0.3);
-  float w = mix(0.0065, wPlume, smoothstep(0.0, 0.06, s)) * (1.0 + dist * uLodWidth);
+  float wPlume = uWidth * mix(0.75, 1.25, r2) * pow(sin(PI * pow(s, 0.75)), 0.7) * (1.0 - s * 0.25);
+  float w = mix(0.0065, wPlume, smoothstep(0.0, 0.06, s)) * (1.0 + dist * uLodWidth) * keep;
   vec3 pos = spine + S * (side * 0.5 * w);
 
   vWorld = pos;
@@ -361,7 +372,7 @@ void main() {
   vS = s;
   vSide = side;
   vSeed = floor(r0 * 4096.0) + r3;
-  vSunVis = terrainSunVis(pos) * mix(0.25, 1.0, smoothstep(0.1, 0.7, t));
+  vSunVis = mix(0.3, 1.0, smoothstep(0.1, 0.7, t));
   vShadow = (uShadowMatrix * vec4(pos, 1.0)).xyz;
   gl_Position = projectionMatrix * viewMatrix * vec4(pos, 1.0);
 }
@@ -386,15 +397,16 @@ void main() {
   float u = vSide;
   float isPlume = step(1e-4, s);
   float alpha = 1.0;
-  vec3 alb = vec3(0.4, 0.3, 0.17);
+  vec3 alb = vec3(0.52, 0.34, 0.16);
   if (isPlume > 0.5) {
-    // Silky seed head: soft edges and fibres combed along its length.
-    float env = 1.0 - smoothstep(0.3, 1.0, abs(u));
-    float fib = pow(abs(sin(u * 15.0 + s * 4.0 + vSeed)), 2.0) * (0.6 + 0.4 * sin(u * 7.0 - s * 13.0 + vSeed * 1.7));
-    float grain = hash12(floor(vec2(u * 26.0, s * 34.0)) + vSeed);
-    alpha = env * mix(0.3, 1.0, fib) * mix(0.7, 1.0, grain);
-    alpha *= smoothstep(0.0, 0.08, s) * (1.0 - smoothstep(0.86, 1.0, s) * 0.8);
-    alb = mix(vec3(0.52, 0.42, 0.29), vec3(0.66, 0.56, 0.42), s);
+    // Silky seed head: a soft tuft of fine, irregular hairs running up its length.
+    float env = 1.0 - smoothstep(0.15, 1.0, abs(u));
+    float fib = vnoise(vec2(u * 11.0 + vSeed * 3.1, s * 2.5 + vSeed)) * 0.65
+              + vnoise(vec2(u * 27.0 - vSeed, s * 5.0)) * 0.35;
+    float grain = hash12(floor(vec2(u * 40.0, s * 64.0)) + vSeed);
+    alpha = env * (0.3 + 0.7 * smoothstep(0.25, 0.75, fib)) * (0.75 + 0.25 * grain);
+    alpha *= smoothstep(0.0, 0.15, s) * (1.0 - smoothstep(0.75, 1.0, s) * 0.9);
+    alb = mix(vec3(0.58, 0.42, 0.22), vec3(0.78, 0.63, 0.42), smoothstep(0.0, 0.7, s));
   }
   if (uA2C < 0.5 && alpha < 0.5) discard;
   if (alpha < 0.06) discard;
@@ -404,14 +416,15 @@ void main() {
   vec3 L = uSunDir;
   float fwd = sat(dot(-V, L));
   // Fine fibres scatter light forward: backlit plumes blaze gold.
-  float trans = (pow(fwd, 3.0) * 2.6 + pow(fwd, 14.0) * 4.5) * mix(0.3, 1.0, isPlume);
-  float diff = mix(sat(dot(N, L) * 0.55 + 0.45), sat(dot(N, L) * 0.4 + 0.42), isPlume);
+  float trans = (pow(fwd, 3.0) * 2.2 + pow(fwd, 12.0) * 3.5) * mix(0.3, 1.0, isPlume);
+  // Fluffy fibres scatter light every way: a soft, wrapped diffuse.
+  float diff = mix(sat(dot(N, L) * 0.55 + 0.45), sat(dot(N, L) * 0.3 + 0.5), isPlume);
   float sunVis = vSunVis * charShadow(vShadow);
   vec3 sun = uSunColor * sunVis;
   vec3 col = alb * sun * (diff + trans * vec3(1.1, 0.78, 0.45));
   vec3 Hv = normalize(L + V);
   col += sun * alb * pow(sat(abs(dot(N, Hv))), 18.0) * 0.4 * isPlume;
-  col += alb * mix(uAmbGround, uAmbSky, 0.6);
+  col += alb * mix(uAmbGround, uAmbSky, 0.6) * mix(0.7, 1.1, isPlume);
   col = applyFog(col, vWorld);
   gl_FragColor = vec4(col, uA2C > 0.5 ? alpha : 1.0);
 }
@@ -440,8 +453,8 @@ function bladeGeometry(segments) {
 
 function plumeGeometry(stemSegs, plumeSegs) {
   const ts = [];
-  for (let i = 0; i < stemSegs; i++) ts.push((i / stemSegs) * 0.7);
-  for (let i = 0; i <= plumeSegs; i++) ts.push(0.7 + (i / plumeSegs) * 0.3);
+  for (let i = 0; i < stemSegs; i++) ts.push((i / stemSegs) * PLUME_START);
+  for (let i = 0; i <= plumeSegs; i++) ts.push(PLUME_START + (i / plumeSegs) * (1 - PLUME_START));
   const pos = [];
   const idx = [];
   for (let strip = 0; strip < 2; strip++) {
@@ -490,14 +503,16 @@ function scatter(count, tile, seed) {
 }
 
 const BLADE_LAYERS = [
-  { tile: 34, count: 72000, segments: 6, fadeStart: 12, fadeEnd: 16.5, width: 0.028, height: 0.95, lodWidth: 0.025, interact: 1, order: 2 },
-  { tile: 92, count: 64000, segments: 4, fadeStart: 33, fadeEnd: 44, width: 0.05, height: 0.95, lodWidth: 0.02, interact: 1, order: 4 },
-  { tile: 320, count: 64000, segments: 2, fadeStart: 105, fadeEnd: 152, width: 0.12, height: 0.95, lodWidth: 0.012, interact: 0, order: 5 },
+  { tile: 34, count: 56000, segments: 6, fadeStart: 8.5, fadeEnd: 16.5, width: 0.026, height: 1.05, lodWidth: 0.025, interact: 1, order: 2 },
+  { tile: 92, count: 48000, segments: 4, fadeStart: 27, fadeEnd: 44, width: 0.05, height: 1.05, lodWidth: 0.02, interact: 1, order: 4 },
+  { tile: 320, count: 48000, segments: 2, fadeStart: 95, fadeEnd: 152, width: 0.12, height: 1.05, lodWidth: 0.012, interact: 0, order: 5 },
 ];
 
+// Seed plumes are what the eye reads as a pampas field, so they get their own dense layers.
 const PLUME_LAYERS = [
-  { tile: 60, count: 9000, stem: 4, plume: 8, fadeStart: 21, fadeEnd: 29, width: 0.07, height: 1.5, lodWidth: 0.02, interact: 1, order: 3 },
-  { tile: 170, count: 7000, stem: 2, plume: 4, fadeStart: 60, fadeEnd: 80, width: 0.13, height: 1.5, lodWidth: 0.012, interact: 0, order: 5 },
+  { tile: 40, count: 15000, stem: 3, plume: 8, fadeStart: 12, fadeEnd: 19.5, width: 0.07, height: 1.38, lodWidth: 0.02, interact: 1, order: 3 },
+  { tile: 104, count: 20000, stem: 2, plume: 5, fadeStart: 30, fadeEnd: 50, width: 0.1, height: 1.38, lodWidth: 0.015, interact: 1, order: 4 },
+  { tile: 280, count: 18000, stem: 1, plume: 3, fadeStart: 85, fadeEnd: 135, width: 0.16, height: 1.38, lodWidth: 0.01, interact: 0, order: 5 },
 ];
 
 export class Grass {
