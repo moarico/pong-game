@@ -100,6 +100,7 @@ const sky = new Sky(shared);
 const ground = new Ground(shared);
 const hills = new Hills(shared);
 const sea = new Sea(shared);
+if (hdr) sea.bake(renderer);
 const grass = new Grass(shared);
 const motes = new Motes(shared);
 const puffs = new Puffs(shared);
@@ -615,6 +616,7 @@ window.samurai = {
   set debugCam(v) {
     debugCam = v;
   },
+  groundAt: (x, z) => terrainHeight(x, z),
   // Advance the game by n fixed steps (for deterministic captures and tests);
   // draw = false runs the game without rendering.
   step(n = 1, dt = 1 / 30, draw = true) {

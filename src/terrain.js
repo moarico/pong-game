@@ -214,18 +214,40 @@ void main() {
   vec3 rock = vec3(0.16, 0.13, 0.1);
   scrub = mix(scrub, rock, sat((1.0 - smoothstep(1.5, 9.0, vWorld.y)) * 0.8 + smoothstep(0.5, 0.75, 1.0 - N.y) * 0.6));
   alb = mix(alb, scrub, wild);
-  plumes *= 1.0 - wild;
+
+  // The shore: a strip of sand darkened where the surf wets it, rock where the land
+  // drops steeply into the water, and under the shallows a seabed of sand and weed
+  // fading into the dark.
+  float y = vWorld.y + (scrubN - 0.5) * 1.6;
+  float steep = smoothstep(0.62, 0.85, 1.0 - N.y);
+  float beach = 1.0 - smoothstep(2.5, 7.0, y);
+  float wet = 1.0 - smoothstep(-0.1, 1.4, y + (vnoise(p * 0.7 + uTime * 0.2) - 0.5) * 0.35);
+  vec3 sand = mix(vec3(0.36, 0.29, 0.2), vec3(0.3, 0.24, 0.17), n);
+  sand = mix(sand, sand * 0.52, wet);
+  vec3 shoreCol = mix(sand, rock * mix(0.8, 1.1, n), steep);
+  float under = smoothstep(0.0, -1.5, vWorld.y);
+  shoreCol = mix(shoreCol, mix(vec3(0.2, 0.18, 0.12), vec3(0.06, 0.09, 0.07), smoothstep(-0.5, -5.0, vWorld.y + (patchN - 0.5) * 3.0)), under);
+  alb = mix(alb, shoreCol, beach);
+  float solid = max(wild, beach);
+  plumes *= 1.0 - solid;
 
   float sunVis = vSunVis * charShadow(vShadow);
   float fwd = sat(dot(-V, L));
   float NdL = dot(N, L);
   float diff = mix(sat(NdL * 2.0 + 0.1) * 0.4, sat(NdL * 0.6 + 0.55), far);
-  diff = mix(diff, sat(NdL * 1.1 + 0.05), wild);
-  float trans = (pow(fwd, 4.0) * 1.1 + pow(fwd, 1.6) * 0.25) * far * (1.0 - wild);
+  diff = mix(diff, sat(NdL * 1.1 + 0.05), solid);
+  float trans = (pow(fwd, 4.0) * 1.1 + pow(fwd, 1.6) * 0.25) * far * (1.0 - solid);
   vec3 sun = uSunColor * sunVis;
+  // Light reaching the seabed dims with depth.
+  sun *= exp(min(vWorld.y, 0.0) * 0.35);
   vec3 col = alb * sun * (diff + trans * vec3(1.1, 0.85, 0.55));
   col += vec3(0.9, 0.75, 0.55) * plumes * sun * (0.08 + trans * 0.9);
-  col += alb * mix(uAmbGround, uAmbSky, 0.65) * mix(0.35, 1.0, far);
+  col += alb * mix(uAmbGround, uAmbSky, 0.65) * mix(0.35, 1.0, far) * mix(1.0, 0.5, under);
+  // Wet sand holds a sheen of the sky and a smear of the sun.
+  float gloss = wet * beach * (1.0 - steep) * (1.0 - under);
+  float fres = pow(1.0 - sat(dot(N, V)), 4.0);
+  vec3 Hs = normalize(L + V);
+  col += gloss * (uAmbSky * 0.6 * fres + uSunColor * sunVis * 0.5 * pow(sat(dot(N, Hs)), 90.0));
   col = applyFog(col, vWorld);
   gl_FragColor = vec4(col, 1.0);
 }

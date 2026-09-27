@@ -83,8 +83,14 @@ void main() {
   float groundY = terrainHeight(root);
   float patchN = inoise(root * 0.045 + 7.0);
   float patchN2 = inoise(root * 0.21 - 3.0);
+  // Nothing grows on the beach.
+  float dry = smoothstep(3.0, 6.5, groundY + (patchN - 0.5) * 2.0);
+  if (dry <= 0.0) {
+    gl_Position = vec4(0.0, 0.0, 2.0, 1.0);
+    return;
+  }
 
-  float H = uHeight * mix(0.55, 1.12, r1) * mix(0.7, 1.2, patchN) * mix(0.6, 1.0, keep);
+  float H = uHeight * mix(0.55, 1.12, r1) * mix(0.7, 1.2, patchN) * mix(0.6, 1.0, keep) * dry;
   // Never let a blade fill the lens when the camera dips into the grass.
   float camAbove = cameraPosition.y - groundY;
   H *= mix(smoothstep(0.35, 1.5, dist), 1.0, smoothstep(H + 0.1, H + 0.6, camAbove));
@@ -311,7 +317,12 @@ void main() {
   }
   float groundY = terrainHeight(root);
   float patchN = inoise(root * 0.045 + 7.0);
-  float H = uHeight * mix(0.8, 1.22, r1) * mix(0.85, 1.1, patchN) * present * mix(0.7, 1.0, keep);
+  float dry = smoothstep(3.0, 6.5, groundY + (patchN - 0.5) * 2.0);
+  if (dry <= 0.0) {
+    gl_Position = vec4(0.0, 0.0, 2.0, 1.0);
+    return;
+  }
+  float H = uHeight * mix(0.8, 1.22, r1) * mix(0.85, 1.1, patchN) * present * mix(0.7, 1.0, keep) * dry;
   float camAbove = cameraPosition.y - groundY;
   H *= mix(smoothstep(0.35, 1.6, dist), 1.0, smoothstep(H * 0.8, H + 0.4, camAbove));
 
