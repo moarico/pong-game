@@ -253,6 +253,8 @@ let introSkip = false;
 let victoryT = -1;
 let victoryPrompt = false;
 const introLook = new THREE.Vector3();
+// The boss's last moments get their own camera, beside the samurai, looking up at it.
+const deathCam = { w: 0, pos: new THREE.Vector3(), look: new THREE.Vector3(), quat: new THREE.Quaternion(), m: new THREE.Matrix4() };
 const fadeEl = document.getElementById('fade');
 const doneKey = 'samurai-vanquished';
 function loadDone() {
@@ -692,6 +694,29 @@ function tick(realDt, live, draw = true) {
       camera.updateProjectionMatrix();
     }
   }
+
+  // Death camera: blend toward a framing of the dying boss, then back.
+  if (arena && state === 'play') {
+    const boss = arena.boss;
+    const want = boss.state === 'dying' && boss.deathT < (arena.deathCam ?? 5.5) ? 1 : 0;
+    deathCam.w += (want - deathCam.w) * Math.min(1, realDt * (want ? 2.5 : 1.2));
+    if (deathCam.w > 0.001) {
+      const P = player.pos;
+      const B = boss.focus;
+      const dx = B.x - P.x;
+      const dz = B.z - P.z;
+      const d = Math.hypot(dx, dz) || 1;
+      const t = boss.deathT || 0;
+      const side = 2.5 + t * 0.25;
+      deathCam.pos.set(P.x - (dx / d) * 4 - (dz / d) * side, P.y + 2.2 + t * 0.15, P.z - (dz / d) * 4 + (dx / d) * side);
+      deathCam.look.copy(B);
+      deathCam.m.lookAt(deathCam.pos, deathCam.look, camera.up);
+      deathCam.quat.setFromRotationMatrix(deathCam.m);
+      const e = deathCam.w * deathCam.w * (3 - 2 * deathCam.w);
+      camera.position.lerp(deathCam.pos, e);
+      camera.quaternion.slerp(deathCam.quat, e);
+    }
+  } else deathCam.w = 0;
 
   if (debugCam) {
     camera.position.copy(debugCam.pos);

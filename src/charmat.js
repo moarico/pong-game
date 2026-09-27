@@ -50,6 +50,10 @@ void main() {
   #include <skinnormal_vertex>
   #include <begin_vertex>
   #include <skinning_vertex>
+  #ifdef USE_INSTANCING
+  transformed = (instanceMatrix * vec4(transformed, 1.0)).xyz;
+  objectNormal = mat3(instanceMatrix) * objectNormal;
+  #endif
   vec4 w = modelMatrix * vec4(transformed, 1.0);
   vWorld = w.xyz;
   vNormal = normalize(mat3(modelMatrix) * objectNormal);
