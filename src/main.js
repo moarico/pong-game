@@ -638,8 +638,11 @@ function tick(realDt, live, draw = true) {
     const boss = arena.boss;
     rig.focus = boss.alive || boss.state === 'dying' ? boss.focus : null;
     rig.focusW = 1;
-    rig.extraDist = arena.camDist ?? 1.2;
-    rig.pitchBias = arena.pitchBias ?? -0.08;
+    // Tall foes close by: the camera stands back and looks up to keep them in frame.
+    const bd = Math.hypot(boss.focus.x - player.pos.x, boss.focus.z - player.pos.z);
+    const near = THREE.MathUtils.smoothstep(10, 3, bd);
+    rig.extraDist = (arena.camDist ?? 1.2) + (arena.camClose ?? 0) * near;
+    rig.pitchBias = (arena.pitchBias ?? -0.08) - (arena.tiltClose ?? 0) * near;
   }
   if (state === 'intro') {
     introT += realDt;

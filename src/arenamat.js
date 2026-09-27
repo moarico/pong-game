@@ -217,10 +217,10 @@ void main() {
     float e = min(min(f.x, 1.0 - f.x), min(f.y, 1.0 - f.y));
     vec2 rv = fract(g * 6.0) - 0.5;
     float rivet = (1.0 - smoothstep(0.14, 0.24, length(rv))) * step(e, 0.08);
-    float rust = smoothstep(0.5, 0.85, vnoise(vec2(vUv.x * 6.0, vUv.y * 0.9)) * 0.7 + vnoise(vUv * 13.0) * 0.3);
+    float rust = smoothstep(0.58, 0.9, vnoise(vec2(vUv.x * 6.0, vUv.y * 0.9)) * 0.7 + vnoise(vUv * 13.0) * 0.3);
     float seam = 1.0 - smoothstep(0.0, 0.02, e);
     alb *= 0.8 + 0.3 * vnoise(vUv * 30.0);
-    alb = mix(alb, vec3(0.28, 0.11, 0.04), rust * 0.75);
+    alb = mix(alb, vec3(0.16, 0.07, 0.035), rust * 0.6);
     alb *= 1.0 - seam * 0.5;
     rough = mix(rough, 0.95, rust);
     metal = mix(metal, 0.1, rust);
@@ -323,6 +323,7 @@ void main() {
     h += (1.0 - wear) * 0.001;
   } else if (pat == 15) {
     emit = alb * param;
+    alphaOut = 1.0 - smoothstep(1.0, 4.0, dot(emit, vec3(0.33)));
   }
   if (bumpK > 0.0 && h != 0.0) N = bumpNormal(N, h * bumpK);
 
@@ -508,6 +509,45 @@ export class ArenaBuilder extends MeshBuilder {
     mesh.frustumCulled = false;
     return mesh;
   }
+}
+
+// A toothed gear outline (in XY), with a bore and optional spoke cut-outs.
+export function gearShape(r, teeth, { tooth = 0.12, bore = 0.18, spokes = 0, rim = 0.22 } = {}) {
+  const shape = new THREE.Shape();
+  const ro = r;
+  const ri = r * (1 - tooth);
+  const n = teeth * 4;
+  for (let i = 0; i <= n; i++) {
+    const a = (i / n) * Math.PI * 2;
+    const k = i % 4;
+    const rr = k === 1 || k === 2 ? ro : ri;
+    const x = Math.cos(a) * rr;
+    const y = Math.sin(a) * rr;
+    if (i === 0) shape.moveTo(x, y);
+    else shape.lineTo(x, y);
+  }
+  const hole = new THREE.Path();
+  hole.absarc(0, 0, r * bore, 0, Math.PI * 2, true);
+  shape.holes.push(hole);
+  // Spoked gears: windows between the hub and the rim.
+  if (spokes > 0) {
+    const inner = r * bore * 1.8;
+    const outer = ri * (1 - rim);
+    for (let s = 0; s < spokes; s++) {
+      const a0 = (s / spokes) * Math.PI * 2 + 0.18;
+      const a1 = ((s + 1) / spokes) * Math.PI * 2 - 0.18;
+      const w = new THREE.Path();
+      w.moveTo(Math.cos(a0) * inner, Math.sin(a0) * inner);
+      for (let i = 0; i <= 8; i++) {
+        const a = a0 + ((a1 - a0) * i) / 8;
+        w.lineTo(Math.cos(a) * outer, Math.sin(a) * outer);
+      }
+      w.lineTo(Math.cos(a1) * inner, Math.sin(a1) * inner);
+      w.closePath();
+      shape.holes.push(w);
+    }
+  }
+  return shape;
 }
 
 // A pointed (gothic) arch outline: springing at y0, span w, rise to the apex.

@@ -102,7 +102,7 @@ export class CameraRig {
     const baseFov = this.aspect >= 1 ? 44 : Math.min(74, THREE.MathUtils.radToDeg(2 * Math.atan(Math.tan(THREE.MathUtils.degToRad(22)) / this.aspect)) * 0.8);
     this.fov = damp(this.fov, baseFov + run * 4 + this.combat * 2, 2.5, dt);
 
-    const pitch = this.pitch + this.combat * 0.07 + this.pitchBias * this.focusAmt;
+    const pitch = this.pitch + this.combat * 0.07;
     const cp = Math.cos(pitch);
     const sp = Math.sin(pitch);
     this.look.set(-Math.sin(this.yaw) * cp, -sp, -Math.cos(this.yaw) * cp);
@@ -116,6 +116,8 @@ export class CameraRig {
     const minY = groundHeight(cam.position.x, cam.position.z) + 0.45;
     if (cam.position.y < minY) cam.position.y = minY;
     cam.lookAt(this.aim);
+    // Tall foes: tilt the view up without dropping the camera to the floor.
+    if (this.pitchBias && this.focusAmt > 0.01) cam.rotateX(-this.pitchBias * this.focusAmt);
     // Shake: smooth noise, scaled by trauma squared, decaying in real time.
     this.trauma = Math.max(0, this.trauma - dt * 1.8);
     if (this.trauma > 0.001) {

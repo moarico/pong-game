@@ -1039,17 +1039,6 @@ export class Maw extends Boss {
     };
   }
 
-  // Filter attacks with an ok() test (e.g. the bite needs him near the edge).
-  chooseAttack() {
-    const saved = this.attacks;
-    const ok = {};
-    for (const [k, v] of Object.entries(saved)) if (!v.ok || v.ok()) ok[k] = v;
-    this.attacks = ok;
-    const name = super.chooseAttack();
-    this.attacks = saved;
-    return name;
-  }
-
   // A glob of lure-lit bile: a perfect parry sends it back.
   spit(k) {
     const P = this.g.player.pos;

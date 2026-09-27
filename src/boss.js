@@ -230,7 +230,8 @@ export class Boss {
     for (const [name, def] of Object.entries(this.attacks)) {
       if (def.phase && def.phase > this.phase) continue;
       if (def.range && (d < def.range[0] || d > def.range[1])) continue;
-      let w = def.weight ?? 1;
+      if (def.ok && !def.ok.call(this)) continue;
+      let w = typeof def.weight === 'function' ? def.weight.call(this) : def.weight ?? 1;
       if (this.history[0] === name) w *= this.history[1] === name ? 0 : 0.35;
       if (w <= 0) continue;
       list.push([name, w]);
