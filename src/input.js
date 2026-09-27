@@ -17,6 +17,18 @@ const MOVE_KEYS = {
   KeyD: [1, 0], ArrowRight: [1, 0],
 };
 
+// The first connected controller, if the browser lets us see it.
+export function firstPad() {
+  let pads;
+  try {
+    pads = navigator.getGamepads ? navigator.getGamepads() : [];
+  } catch {
+    return null;
+  }
+  for (const p of pads || []) if (p && p.connected) return p;
+  return null;
+}
+
 // Phones and tablets: a coarse pointer, or touch with no mouse at all.
 export function isTouchDevice() {
   const coarse = matchMedia('(pointer: coarse)').matches || matchMedia('(any-pointer: coarse)').matches && !matchMedia('(pointer: fine)').matches;
@@ -40,6 +52,10 @@ export class Input {
     this.parryPressed = false;
     this.usedAttack = false;
     this.lockFailed = false;
+    this.enabled = true; // off while a menu is open
+    this.pausePressed = false;
+    this.padConnected = false;
+    this.onPadChange = null;
     this.lookX = 0;
     this.lookY = 0;
     this.lastInputTime = 0;
@@ -60,6 +76,7 @@ export class Input {
         if (!e.repeat) this.pressJump();
         e.preventDefault();
       }
+      if ((e.code === 'Escape' || e.code === 'KeyP') && this.enabled && !e.repeat) this.pausePressed = true;
       const act = ACTION_KEYS[e.code];
       if (act && !e.repeat && !e.ctrlKey && !e.metaKey && !e.altKey) {
         this.press(act);
@@ -108,6 +125,8 @@ export class Input {
       }
     });
     document.addEventListener('pointerlockerror', () => { this.lockFailed = true; });
+    addEventListener('gamepadconnected', () => this.checkPad());
+    addEventListener('gamepaddisconnected', () => this.checkPad());
     addEventListener('mouseup', (e) => {
       if (e.button === 2) this.heavyHeld = false;
       const d = this.drag;
@@ -264,8 +283,43 @@ export class Input {
     this.lastInputTime = performance.now();
   }
 
+  // A controller came or went: the on-screen controls step aside for it.
+  checkPad() {
+    const on = !!firstPad();
+    if (on === this.padConnected) return;
+    this.padConnected = on;
+    document.body.classList.toggle('pad', on);
+    this.onPadChange?.(on);
+  }
+
+  // After a menu closes, treat buttons still held as already seen (A that picked
+  // Play shouldn't also jump).
+  syncPad() {
+    const p = firstPad();
+    this.padPrev = {};
+    this.padJump = false;
+    this.padPause = false;
+    if (!p) return;
+    for (const i of [1, 2, 3, 4, 5, 6]) this.padPrev[i] = !!p.buttons[i]?.pressed;
+    this.padJump = !!p.buttons[0]?.pressed;
+    this.padPause = !!(p.buttons[9]?.pressed || p.buttons[8]?.pressed);
+  }
+
   // Called once per rendered frame.
   update() {
+    this.checkPad();
+    if (!this.enabled) {
+      this.moveX = 0;
+      this.moveY = 0;
+      this.run = false;
+      this.jumpPressed = this.jumpHeld = false;
+      this.attackPressed = this.heavyPressed = this.heavyHeld = false;
+      this.spinPressed = this.dodgePressed = this.parryPressed = false;
+      this.pausePressed = false;
+      this.lookX = 0;
+      this.lookY = 0;
+      return;
+    }
     let x = 0;
     let y = 0;
     for (const code of this.keys) {
@@ -305,17 +359,19 @@ export class Input {
   }
 
   pollGamepad(apply) {
-    const pads = navigator.getGamepads ? navigator.getGamepads() : [];
-    for (const p of pads) {
-      if (!p || !p.connected) continue;
+    const p = firstPad();
+    if (p) {
       const dz = (v) => (Math.abs(v) < 0.14 ? 0 : (v - Math.sign(v) * 0.14) / 0.86);
       const gx = dz(p.axes[0] || 0);
       const gy = -dz(p.axes[1] || 0);
       const run = !!(p.buttons[7]?.pressed || p.buttons[10]?.pressed);
-      // X cuts, Y is the heavy blow, B dodges, RB spins, LB parries.
+      // X cuts, Y is the heavy blow, B dodges, RB spins, LB or LT parries, Menu pauses.
       const btn = (i) => !!p.buttons[i]?.pressed;
       const prev = this.padPrev || (this.padPrev = {});
-      for (const [i, act] of [[2, 'attack'], [3, 'heavy'], [1, 'dodge'], [5, 'spin'], [4, 'parry']]) {
+      const menu = btn(9) || btn(8);
+      if (menu && !this.padPause) this.pausePressed = true;
+      this.padPause = menu;
+      for (const [i, act] of [[2, 'attack'], [3, 'heavy'], [1, 'dodge'], [5, 'spin'], [4, 'parry'], [6, 'parry']]) {
         const on = btn(i);
         if (on && !prev[i]) this.press(act);
         if (!on && prev[i] && act === 'heavy') this.heavyHeld = false;
@@ -336,11 +392,14 @@ export class Input {
       if (!a && this.padJump) this.jumpHeld = false;
       this.padJump = a;
       if (gx || gy || rx || ry || a) this.poke();
-      break;
     }
   }
 
   consumeLook() {
+    if (!this.enabled) {
+      this.lookX = 0;
+      this.lookY = 0;
+    }
     const l = [this.lookX, this.lookY];
     this.lookX = 0;
     this.lookY = 0;

@@ -275,8 +275,239 @@
     background: var(--ground);
     z-index: 6;
   }
+
+  /* ---------------- Title and pause menu ---------------- */
+  #menu {
+    position: fixed;
+    inset: 0;
+    z-index: 7;
+    display: flex;
+    align-items: center;
+    padding-inline: max(28px, env(safe-area-inset-left, 0px));
+    color: var(--ink);
+    font-family: var(--font);
+    transition: opacity 0.9s ease;
+  }
+  #menu.fading { opacity: 0; pointer-events: none; }
+  #menu::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(90deg, rgba(9, 6, 5, 0.82) 0%, rgba(9, 6, 5, 0.5) 34%, rgba(9, 6, 5, 0) 62%);
+    pointer-events: none;
+    transition: background 0.5s ease;
+  }
+  #menu.paused::before { background: rgba(9, 6, 5, 0.58); }
+  #menu.sub::before { background: rgba(9, 6, 5, 0.8); }
+  .menu-main, .menu-controls { position: relative; }
+  .menu-main {
+    display: grid;
+    gap: 26px;
+    max-width: 420px;
+  }
+  .brand { display: flex; gap: 20px; align-items: flex-start; }
+  .kanji {
+    writing-mode: vertical-rl;
+    font: 500 15px/1 var(--font);
+    letter-spacing: 0.5em;
+    color: var(--ember);
+    padding-top: 4px;
+    text-shadow: 0 0 18px rgba(255, 180, 94, 0.35);
+  }
+  .brand h1 { margin: 0; display: grid; gap: 12px; }
+  .brand h1 span:first-child {
+    font: 500 clamp(34px, 5.4vw, 60px)/0.9 var(--font);
+    letter-spacing: 0.26em;
+    text-transform: uppercase;
+  }
+  .brand h1 span:last-child {
+    font: 500 clamp(12px, 1.3vw, 15px)/1 var(--font);
+    letter-spacing: 0.72em;
+    text-transform: uppercase;
+    color: var(--ember);
+  }
+  .tagline { margin: 0; font: 400 13px/1.6 var(--font); letter-spacing: 0.06em; color: var(--ink-soft); max-width: 30ch; }
+  .menu-list { display: grid; gap: 4px; justify-items: start; }
+  .mi {
+    position: relative;
+    appearance: none;
+    border: 0;
+    background: none;
+    color: var(--ink-soft);
+    font: 500 14px/1 var(--font);
+    letter-spacing: 0.34em;
+    text-transform: uppercase;
+    padding: 12px 0 12px 26px;
+    cursor: pointer;
+    transition: color 0.2s ease;
+  }
+  .mi::before {
+    content: "";
+    position: absolute;
+    left: 4px;
+    top: 50%;
+    width: 7px;
+    height: 7px;
+    margin-top: -4px;
+    background: var(--ember);
+    transform: rotate(45deg) scale(0);
+    transition: transform 0.2s ease;
+  }
+  .mi::after {
+    content: "";
+    position: absolute;
+    left: 26px;
+    bottom: 5px;
+    height: 1px;
+    width: calc(100% - 26px);
+    background: linear-gradient(90deg, var(--ember), rgba(255, 180, 94, 0));
+    transform: scaleX(0);
+    transform-origin: left;
+    transition: transform 0.3s ease;
+  }
+  .mi.primary { font-size: 20px; letter-spacing: 0.4em; color: var(--ink); }
+  .mi:hover, .mi.focus, .mi:focus-visible { color: var(--ink); outline: none; }
+  .mi:hover::before, .mi.focus::before, .mi:focus-visible::before { transform: rotate(45deg) scale(1); }
+  .mi:hover::after, .mi.focus::after, .mi:focus-visible::after { transform: scaleX(1); }
+  .pad-chip {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px 14px;
+    font: 400 11px/1 var(--font);
+    letter-spacing: 0.14em;
+    color: var(--ink-soft);
+  }
+  .pad-chip svg { width: 22px; height: 15px; fill: none; stroke: var(--ember); stroke-width: 1.4; }
+  .gb {
+    display: inline-grid;
+    place-items: center;
+    width: 17px;
+    height: 17px;
+    margin-right: 5px;
+    border-radius: 50%;
+    font: 600 9px/1 var(--font);
+    font-style: normal;
+    color: #111;
+    vertical-align: -4px;
+  }
+  .gb.a { background: #5cb85c; }
+  .gb.b { background: #d9534f; }
+  .gb.x { background: #4a86d6; }
+  .gb.y { background: #e8b83a; }
+
+  /* Controls screen */
+  .menu-controls {
+    width: min(940px, 100%);
+    margin: auto;
+    display: grid;
+    gap: 18px;
+    align-content: center;
+    max-height: calc(100% - 24px);
+    overflow: auto;
+    padding: 22px clamp(16px, 3vw, 34px);
+    background: rgba(12, 8, 6, 0.86);
+    border: 1px solid rgba(244, 231, 207, 0.12);
+    border-radius: 14px;
+    box-shadow: 0 30px 80px rgba(0, 0, 0, 0.45);
+    -webkit-backdrop-filter: blur(6px);
+    backdrop-filter: blur(6px);
+  }
+  .menu-controls header { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 12px 28px; }
+  .menu-controls h2 { margin: 0; font: 500 13px/1 var(--font); letter-spacing: 0.55em; text-transform: uppercase; }
+  .tabs { display: flex; gap: 6px; flex-wrap: wrap; }
+  .tab {
+    appearance: none;
+    border: 1px solid var(--ink-faint);
+    background: rgba(20, 12, 10, 0.3);
+    color: var(--ink-soft);
+    border-radius: 999px;
+    padding: 8px 14px;
+    font: 500 11px/1 var(--font);
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    cursor: pointer;
+  }
+  .tab[aria-selected="true"] { color: #1a120c; background: var(--ink); border-color: var(--ink); }
+  .tab.focus, .tab:focus-visible { outline: 2px solid var(--ember); outline-offset: 2px; }
+  .panel { min-height: 0; }
+  .pad-map { width: 100%; height: auto; display: block; max-height: 58vh; overflow: visible; }
+  .pad-map .shell { fill: rgba(244, 231, 207, 0.08); stroke: rgba(244, 231, 207, 0.55); stroke-width: 2; }
+  .pad-map .part { fill: rgba(244, 231, 207, 0.1); stroke: rgba(244, 231, 207, 0.6); stroke-width: 1.6; }
+  .pad-map .stick { fill: rgba(10, 7, 6, 0.6); stroke: rgba(244, 231, 207, 0.7); stroke-width: 1.6; }
+  .pad-map .glyph { font: 600 12px var(--font); fill: #111; text-anchor: middle; dominant-baseline: central; }
+  .pad-map .tag { font: 500 11px var(--font); fill: rgba(244, 231, 207, 0.75); text-anchor: middle; dominant-baseline: central; letter-spacing: 0.08em; }
+  .pad-map .lead { stroke: var(--ember); stroke-width: 1; fill: none; opacity: 0.75; }
+  .pad-map .dot { fill: var(--ember); }
+  .pad-map .lbl { font: 500 17px var(--font); fill: var(--ink); letter-spacing: 0.06em; }
+  .pad-map .sub { font: 400 13px var(--font); fill: rgba(244, 231, 207, 0.65); letter-spacing: 0.04em; }
+  .legend {
+    display: none;
+    grid-template-columns: auto 1fr;
+    gap: 10px 16px;
+    margin: 0;
+    font: 400 13px/1.3 var(--font);
+  }
+  .legend dt { color: var(--ember); letter-spacing: 0.1em; font-weight: 500; white-space: nowrap; }
+  .legend dd { margin: 0; color: var(--ink); }
+  .keys { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 12px 40px; margin: 0; }
+  .keys div { display: flex; justify-content: space-between; gap: 16px; padding-bottom: 10px; border-bottom: 1px solid rgba(244, 231, 207, 0.12); font: 400 13px/1.3 var(--font); }
+  .keys dt { color: var(--ink); }
+  .keys dd { margin: 0; color: var(--ink-soft); text-align: right; }
+  .keys kbd { font: 500 11px/1 var(--font); color: var(--ink); padding: 3px 7px 4px; border: 1px solid var(--ink-faint); border-radius: 4px; background: var(--glass); }
+  .mi.back { justify-self: start; }
+  @media (max-width: 620px), (max-height: 420px) and (max-width: 620px) {
+    .pad-map .callouts { display: none; }
+    .legend { display: grid; }
+  }
+  /* Portrait phones: the shot above, the menu below. */
+  @media (orientation: portrait) and (max-width: 700px) {
+    #menu { align-items: flex-end; padding-bottom: calc(40px + env(safe-area-inset-bottom, 0px)); }
+    #menu::before { background: linear-gradient(0deg, rgba(9, 6, 5, 0.88) 0%, rgba(9, 6, 5, 0.55) 38%, rgba(9, 6, 5, 0) 64%); }
+    .menu-main { gap: 20px; }
+  }
+  @media (max-height: 460px) and (orientation: landscape) {
+    .menu-main { gap: 14px; }
+    .mi { padding-block: 8px; }
+    .tagline { display: none; }
+  }
+  body.menu-open #hud-life, body.menu-open #hint, body.menu-open #banner, body.menu-open #moment,
+  body.menu-open .touch-only, body.menu-open #hud-foes { display: none !important; }
+
+  /* Pause button for touch screens (it stays when a controller takes over). */
+  #pause {
+    position: fixed;
+    top: calc(14px + env(safe-area-inset-top, 0px));
+    right: calc(16px + env(safe-area-inset-right, 0px));
+    width: 42px;
+    height: 42px;
+    border-radius: 50%;
+    border: 1px solid rgba(244, 231, 207, 0.45);
+    background: rgba(20, 12, 10, 0.32);
+    z-index: 4;
+    padding: 0;
+    touch-action: none;
+  }
+  #pause::before, #pause::after {
+    content: "";
+    position: absolute;
+    top: 13px;
+    width: 4px;
+    height: 14px;
+    border-radius: 1px;
+    background: var(--ink);
+  }
+  #pause::before { left: 14px; }
+  #pause::after { right: 14px; }
+  /* A controller is connected: the on-screen controls step aside. */
+  body.pad .touch-only { display: none !important; }
+  body.touch.pad #pause { display: block !important; }
+  body.menu-open #pause, body.menu-open.touch.pad #pause { display: none !important; }
+  .pad-only { display: none; }
+  body.pad .pad-only { display: inline; }
+  body.pad #hint .desk-only, body.pad #hint .touch-only { display: none !important; }
   @media (prefers-reduced-motion: reduce) {
-    #veil, #hint, #banner, #moment, #fallen, .bar b { transition: none; }
+    #veil, #hint, #banner, #moment, #fallen, .bar b, #menu, .mi, .mi::before, .mi::after { transition: none; }
   }
 </style>
 <script type="importmap">
@@ -297,6 +528,13 @@
   <span class="desk-only"><kbd>F</kbd>parry</span>
   <span class="desk-only"><kbd>Mouse</kbd>look</span>
   <span class="touch-only">Left thumb moves · right thumb looks · Cut, Heavy, Dodge, Parry, Spin</span>
+  <span class="pad-only"><i class="gb x">X</i>cut</span>
+  <span class="pad-only"><i class="gb y">Y</i>heavy, hold to charge</span>
+  <span class="pad-only"><i class="gb b">B</i>dodge</span>
+  <span class="pad-only"><i class="gb a">A</i>jump</span>
+  <span class="pad-only"><kbd>LB</kbd>parry</span>
+  <span class="pad-only"><kbd>RB</kbd>spin</span>
+  <span class="pad-only"><kbd>RT</kbd>run</span>
 </div>
 <div id="stick" class="touch-only"><i></i></div>
 <button id="btn-attack" class="pad touch-only" type="button" aria-label="Cut">CUT</button>
@@ -310,6 +548,139 @@
 <div id="banner"><h2></h2><p></p></div>
 <div id="moment"></div>
 <div id="fallen"><h2>You have fallen</h2><p></p></div>
+<div id="menu" hidden>
+  <section class="menu-main" id="menu-main" aria-label="Main menu">
+    <div class="brand">
+      <span class="kanji" aria-hidden="true">黄昏の侍</span>
+      <h1><span>Samurai</span><span>at Dusk</span></h1>
+    </div>
+    <p class="tagline">Bandits walk the pampas at sunset. Hold the field.</p>
+    <nav class="menu-list">
+      <button id="m-play" class="mi primary" type="button">Play</button>
+      <button id="m-controls" class="mi" type="button">Controls</button>
+      <button id="m-sound" class="mi" type="button">Sound: on</button>
+      <button id="m-quit" class="mi" type="button" hidden>Quit to title</button>
+    </nav>
+    <div class="pad-chip" id="pad-chip" hidden>
+      <svg viewBox="0 0 22 15" aria-hidden="true"><path d="M6 1.5h10c3 0 4.6 2.3 5 6.2.3 3.3-.6 5.8-2.6 5.8-1.6 0-2.4-1.6-3.6-3.2H7.2C6 11.9 5.2 13.5 3.6 13.5 1.6 13.5.7 11 1 7.7 1.4 3.8 3 1.5 6 1.5Z"/><path d="M5.5 5.5v3M4 7h3"/><circle cx="15.5" cy="6" r=".6"/><circle cx="17.3" cy="7.8" r=".6"/></svg>
+      <span>Controller connected</span>
+      <span><i class="gb a">A</i>select</span>
+      <span><i class="gb b">B</i>back</span>
+    </div>
+  </section>
+  <section class="menu-controls" id="menu-controls" aria-label="Controls" hidden>
+    <header>
+      <h2>Controls</h2>
+      <div class="tabs" role="tablist">
+        <button class="tab" role="tab" id="t-pad" aria-selected="true" type="button">Controller</button>
+        <button class="tab" role="tab" id="t-keys" aria-selected="false" type="button">Keyboard</button>
+        <button class="tab" role="tab" id="t-touch" aria-selected="false" type="button">Touch</button>
+      </div>
+    </header>
+    <div class="panel" id="p-pad">
+      <svg class="pad-map" viewBox="-30 0 860 420" role="img" aria-labelledby="padmap-title">
+        <title id="padmap-title">Controller layout</title>
+        <!-- Triggers and bumpers -->
+        <path class="part" d="M246 96 C248 78 262 70 282 70 C300 70 310 78 312 96 Z" />
+        <path class="part" d="M554 96 C552 78 538 70 518 70 C500 70 490 78 488 96 Z" />
+        <path class="part" d="M232 118 C240 102 262 96 312 96 L318 110 C278 110 254 116 240 124 Z" />
+        <path class="part" d="M568 118 C560 102 538 96 488 96 L482 110 C522 110 546 116 560 124 Z" />
+        <text class="tag" x="279" y="84">LT</text>
+        <text class="tag" x="521" y="84">RT</text>
+        <text class="tag" x="272" y="108">LB</text>
+        <text class="tag" x="528" y="108">RB</text>
+        <!-- Body -->
+        <path class="shell" d="M300 116 C350 106 450 106 500 116 C560 124 598 150 614 205 C632 262 650 318 628 346 C606 372 566 362 548 330 C530 300 505 284 470 284 L330 284 C295 284 270 300 252 330 C234 362 194 372 172 346 C150 318 168 262 186 205 C202 150 240 124 300 116 Z" />
+        <!-- Sticks, d-pad, view and menu -->
+        <circle class="part" cx="300" cy="182" r="32" /><circle class="stick" cx="300" cy="182" r="21" />
+        <circle class="part" cx="452" cy="240" r="32" /><circle class="stick" cx="452" cy="240" r="21" />
+        <path class="part" d="M341 218 h18 v13 h13 v18 h-13 v13 h-18 v-13 h-13 v-18 h13 Z" />
+        <rect class="part" x="362" y="152" width="20" height="13" rx="6" />
+        <rect class="part" x="418" y="152" width="20" height="13" rx="6" />
+        <circle class="part" cx="400" cy="128" r="11" />
+        <!-- Face buttons -->
+        <circle cx="510" cy="155" r="14" fill="#e8b83a" /><text class="glyph" x="510" y="155">Y</text>
+        <circle cx="483" cy="182" r="14" fill="#4a86d6" /><text class="glyph" x="483" y="182">X</text>
+        <circle cx="537" cy="182" r="14" fill="#d9534f" /><text class="glyph" x="537" y="182">B</text>
+        <circle cx="510" cy="209" r="14" fill="#5cb85c" /><text class="glyph" x="510" y="209">A</text>
+        <g class="callouts">
+          <!-- Left side -->
+          <path class="lead" d="M158 58 H236 L262 82" /><path class="lead" d="M236 58 L250 108" />
+          <circle class="dot" cx="262" cy="82" r="2.5" /><circle class="dot" cx="250" cy="108" r="2.5" />
+          <text class="lbl" x="150" y="58" text-anchor="end" dominant-baseline="central">Parry</text>
+          <text class="sub" x="150" y="80" text-anchor="end" dominant-baseline="central">LB or LT</text>
+          <path class="lead" d="M158 182 H266" /><circle class="dot" cx="266" cy="182" r="2.5" />
+          <text class="lbl" x="150" y="182" text-anchor="end" dominant-baseline="central">Move</text>
+          <text class="sub" x="150" y="204" text-anchor="end" dominant-baseline="central">click the stick to run</text>
+          <path class="lead" d="M158 300 H300 L336 256" /><circle class="dot" cx="336" cy="256" r="2.5" />
+          <text class="lbl" x="150" y="300" text-anchor="end" dominant-baseline="central">Menus</text>
+          <text class="sub" x="150" y="322" text-anchor="end" dominant-baseline="central">d-pad to choose</text>
+          <!-- Top: pause -->
+          <path class="lead" d="M372 150 V110 L392 40 H408 L428 110 V150" />
+          <text class="lbl" x="400" y="26" text-anchor="middle" dominant-baseline="central">Pause</text>
+          <!-- Right side -->
+          <path class="lead" d="M648 58 H562 L538 82" /><circle class="dot" cx="538" cy="82" r="2.5" />
+          <text class="lbl" x="656" y="58" dominant-baseline="central">Run</text>
+          <text class="sub" x="656" y="80" dominant-baseline="central">hold RT</text>
+          <path class="lead" d="M648 112 H556" /><circle class="dot" cx="556" cy="112" r="2.5" />
+          <text class="lbl" x="656" y="112" dominant-baseline="central">Spinning cut</text>
+          <path class="lead" d="M648 148 H524" /><circle class="dot" cx="524" cy="150" r="2.5" />
+          <text class="lbl" x="656" y="148" dominant-baseline="central">Heavy</text>
+          <text class="sub" x="656" y="168" dominant-baseline="central">hold to charge</text>
+          <path class="lead" d="M648 194 H551" /><circle class="dot" cx="551" cy="189" r="2.5" />
+          <text class="lbl" x="656" y="194" dominant-baseline="central">Dodge</text>
+          <path class="lead" d="M648 226 H524 L518 218" /><circle class="dot" cx="518" cy="218" r="2.5" />
+          <text class="lbl" x="656" y="226" dominant-baseline="central">Jump</text>
+          <path class="lead" d="M478 256 L520 262 H648" /><circle class="dot" cx="478" cy="256" r="2.5" />
+          <text class="lbl" x="656" y="262" dominant-baseline="central">Look</text>
+          <path class="lead" d="M483 196 V300 H648" /><circle class="dot" cx="483" cy="196" r="2.5" />
+          <text class="lbl" x="656" y="300" dominant-baseline="central">Cut</text>
+          <text class="sub" x="656" y="322" dominant-baseline="central">four taps: full combo</text>
+        </g>
+      </svg>
+      <dl class="legend">
+        <dt><i class="gb x">X</i>X</dt><dd>Cut (tap four times for the combo)</dd>
+        <dt><i class="gb y">Y</i>Y</dt><dd>Heavy, hold to charge</dd>
+        <dt><i class="gb b">B</i>B</dt><dd>Dodge</dd>
+        <dt><i class="gb a">A</i>A</dt><dd>Jump</dd>
+        <dt>LB · LT</dt><dd>Parry</dd>
+        <dt>RB</dt><dd>Spinning cut</dd>
+        <dt>RT · L3</dt><dd>Run</dd>
+        <dt>Sticks</dt><dd>Move and look</dd>
+        <dt>Menu</dt><dd>Pause</dd>
+      </dl>
+    </div>
+    <div class="panel" id="p-keys" hidden>
+      <dl class="keys">
+        <div><dt>Move</dt><dd><kbd>W A S D</kbd></dd></div>
+        <div><dt>Run</dt><dd><kbd>Shift</kbd></dd></div>
+        <div><dt>Jump</dt><dd><kbd>Space</kbd></dd></div>
+        <div><dt>Cut</dt><dd><kbd>Click</kbd> or <kbd>J</kbd></dd></div>
+        <div><dt>Heavy, hold to charge</dt><dd><kbd>Right click</kbd> or <kbd>K</kbd></dd></div>
+        <div><dt>Spinning cut</dt><dd><kbd>E</kbd></dd></div>
+        <div><dt>Dodge</dt><dd><kbd>Q</kbd></dd></div>
+        <div><dt>Parry</dt><dd><kbd>F</kbd></dd></div>
+        <div><dt>Look</dt><dd>Mouse</dd></div>
+        <div><dt>Pause</dt><dd><kbd>Esc</kbd> or <kbd>P</kbd></dd></div>
+        <div><dt>Sound</dt><dd><kbd>M</kbd></dd></div>
+      </dl>
+    </div>
+    <div class="panel" id="p-touch" hidden>
+      <dl class="keys">
+        <div><dt>Move</dt><dd>Left thumb anywhere on the left</dd></div>
+        <div><dt>Run</dt><dd>Push the stick to its edge</dd></div>
+        <div><dt>Look</dt><dd>Drag with the right thumb</dd></div>
+        <div><dt>Cut</dt><dd>CUT, tap four times for the combo</dd></div>
+        <div><dt>Heavy</dt><dd>HEAVY, hold to charge</dd></div>
+        <div><dt>Dodge, parry, spin, jump</dt><dd>Their buttons</dd></div>
+        <div><dt>Pause</dt><dd>Top right</dd></div>
+      </dl>
+    </div>
+    <button id="m-back" class="mi back" type="button">Back</button>
+  </section>
+</div>
+<button id="pause" class="touch-only" type="button" aria-label="Pause"></button>
+
 <div id="fps" hidden></div>
 <div id="error" hidden></div>
 <script type="module" src="./src/main.js"></script>

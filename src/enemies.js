@@ -580,16 +580,17 @@ export class Director {
     if (this.enemies.some((e) => !e.active)) this.enemies = this.enemies.filter((e) => e.active);
   }
 
-  // Everyone back to the start (after the player falls).
-  reset() {
+  // Everyone back to the start: the same wave again after the player falls, or
+  // from the very beginning (back to the title).
+  reset(full = false) {
     for (const e of this.all) {
       e.releaseToken();
       e.deactivate();
       e.alive = false;
     }
     this.enemies = [];
-    this.wave = Math.max(0, this.wave - 1);
+    this.wave = full ? 0 : Math.max(0, this.wave - 1);
     this.phase = 'calm';
-    this.timer = 4;
+    this.timer = full ? 5 : 4;
   }
 }

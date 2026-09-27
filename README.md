@@ -8,6 +8,8 @@ A ronin in a straw kasa stands in a golden pampas field on rolling hills under a
 - **Movement:** planted feet that never skate, a gait that runs from a stroll to a sprint without a hitch, hips that stay within the legs' reach, and a fixed 120 Hz simulation interpolated for any frame rate.
 - **Sun and grass:** a bright hazy sky with bloom, light shafts, lens flare and eye adaptation. About 200,000 grass blades and plumes wave in rolling gusts, part around every fighter, lie flat where the fallen lie, and ripple outward from heavy blows. Depth of field keeps the fight in focus.
 - **Sound:** blade swishes, steel on steel, the glint before an attack, impacts and wind, all synthesised in the browser. Press `M` to mute.
+- **Title screen:** the game opens on a live shot of the samurai against the setting sun, with Play, a controls screen (a controller diagram, plus keyboard and touch tabs) and a sound switch. Pause at any time to get the same menu back.
+- **Controllers:** connect an Xbox (or any standard) controller, including to a phone, and press a button: the on-screen touch controls step aside, leaving only the pause button. Unplug it and they come back.
 
 ## Run it
 
@@ -31,8 +33,10 @@ Any static host works (GitHub Pages, Netlify, `npx serve`). Opening `index.html`
 | Heavy (hold to charge) | Right click or `K` | `HEAVY` | `Y` |
 | Spinning cut | `E` or `L` | `SPIN` | `RB` |
 | Dodge | `Q` or `U` | `DODGE` | `B` |
-| Parry | `F` or `I` | `PARRY` | `LB` |
-| Look | Mouse (click once to lock the pointer, `Esc` releases it) | Right thumb | Right stick |
+| Parry | `F` or `I` | `PARRY` | `LB` or `LT` |
+| Look | Mouse (the pointer locks when you press Play) | Right thumb | Right stick |
+| Pause | `Esc` or `P` | Pause button, top right | `Menu` or `View` |
+| Menus | Arrow keys, `Enter`, `Esc` | Tap | D-pad or left stick, `A` select, `B` back |
 | Mute | `M` | | |
 
 ### Moves
@@ -49,9 +53,10 @@ Any static host works (GitHub Pages, Netlify, `npx serve`). Opening `index.html`
 
 Add these to the URL hash, for example `index.html#fps,medium`:
 
-- `low`, `medium`, `high` start at a fixed quality level. Otherwise desktops start on high and phones on medium, and the game steps down by itself if the frame rate drops.
+- `low`, `medium`, `high` start at a fixed quality level. Otherwise desktops start on high, tablets on medium and phones on low, and the game steps down by itself if the frame rate drops.
 - `fps` shows the frame rate and the quality level.
 - `lock` keeps the chosen quality level and turns off automatic downgrades.
+- `play` skips the title screen.
 
 ## Layout
 
@@ -76,6 +81,7 @@ src/combat.js      the player's fighting: input, combos, targeting, blade sweeps
 src/enemies.js     enemy minds and bodies, waves, whose turn it is to attack
 src/fx.js          sword trails, sparks, blood, glints
 src/hud.js         health, enemy health bars, banners
+src/menu.js        title and pause menu, controller navigation
 src/audio.js       synthesised sound
 src/player.js      body physics (the player's and the enemies')
 src/camera.js      third-person camera, fight framing, shake

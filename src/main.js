@@ -17,6 +17,7 @@ import { Director } from './enemies.js';
 import { SwordTrail, Sparks, Blood, Glints } from './fx.js';
 import { Hud } from './hud.js';
 import { Sound } from './audio.js';
+import { Menu } from './menu.js';
 
 const canvas = document.getElementById('game');
 const veil = document.getElementById('veil');
@@ -110,7 +111,9 @@ const glints = new Glints();
 scene.add(trailP.mesh, sparks.mesh, blood.points, glints.points);
 
 // Start facing the setting sun, with the camera nudged so it sits just beside the hat.
-const player = new Player(0, 0, Math.atan2(SUN_DIR.x, SUN_DIR.z));
+// On the title screen he stands turned a little from the sun, blade low.
+const TITLE_YAW = Math.atan2(SUN_DIR.x, SUN_DIR.z) + 0.5;
+const player = new Player(0, 0, TITLE_YAW);
 const input = new Input(canvas);
 const rig = new CameraRig(camera, 0.0, -0.06);
 const trail = new Trail(shared);
@@ -210,6 +213,126 @@ function revive() {
 addEventListener('keydown', revive);
 addEventListener('pointerdown', revive);
 
+// ---------------------------------------------------------------------------
+// Game flow: title screen -> play <-> paused.
+// ---------------------------------------------------------------------------
+
+let state = 'title';
+let camBlend = 1; // 0..1 glide from the title shot into the play camera
+let wasLocked = false;
+const UP = new THREE.Vector3(0, 1, 0);
+const sunH = new THREE.Vector2(SUN_DIR.x, SUN_DIR.z).normalize();
+const cine = { pos: new THREE.Vector3(), look: new THREE.Vector3(), quat: new THREE.Quaternion(), m: new THREE.Matrix4(), fov: 34 };
+
+// The title shot: low behind his shoulder, looking into the sun, which hangs
+// just over the brim of his kasa. It drifts slowly, like a held camera.
+function titleShot(t) {
+  const S = player.renderPos;
+  const hx = sunH.x;
+  const hz = sunH.y;
+  const rx = -hz; // camera right, looking toward the sun
+  const rz = hx;
+  const portrait = camera.aspect < 0.9;
+  const sway = Math.sin(t * 0.07) * 0.18;
+  // Just off the line to the sun, so it burns at the edge of his brim.
+  const side = portrait ? 0.34 + sway * 0.6 : 0.46 + sway;
+  const back = portrait ? 3.4 : 3.7;
+  cine.pos.set(S.x - hx * back + rx * side, 0, S.z - hz * back + rz * side);
+  cine.pos.y = Math.max(S.y + 0.82 + Math.sin(t * 0.05) * 0.05, terrainHeight(cine.pos.x, cine.pos.z) + 0.35);
+  const aim = portrait ? 0.05 : -0.62;
+  cine.look.set(S.x + hx * 1.2 + rx * aim, S.y + (portrait ? 1.05 : 1.42), S.z + hz * 1.2 + rz * aim);
+  cine.m.lookAt(cine.pos, cine.look, UP);
+  cine.quat.setFromRotationMatrix(cine.m);
+  cine.fov = portrait ? 58 : 34;
+}
+
+function setCamera(pos, quat, fov) {
+  camera.position.copy(pos);
+  camera.quaternion.copy(quat);
+  if (Math.abs(camera.fov - fov) > 1e-3) {
+    camera.fov = fov;
+    camera.updateProjectionMatrix();
+  }
+}
+
+function lockPointer() {
+  if (isTouchDevice() || input.lockFailed || !canvas.requestPointerLock) return;
+  try {
+    const p = canvas.requestPointerLock();
+    if (p && p.catch) p.catch(() => { input.lockFailed = true; });
+  } catch {
+    input.lockFailed = true;
+  }
+}
+
+function startPlay() {
+  if (state !== 'title') return;
+  state = 'play';
+  menu.close();
+  input.enabled = true;
+  input.syncPad();
+  camBlend = 0;
+  // The play camera starts over his shoulder, looking toward the sun.
+  rig.yaw = Math.atan2(-SUN_DIR.x, -SUN_DIR.z);
+  rig.pitch = -0.06;
+  lockPointer();
+  canvas.focus({ preventScroll: true });
+  setTimeout(showHint, 900);
+}
+
+function pause() {
+  if (state !== 'play') return;
+  state = 'paused';
+  input.enabled = false;
+  menu.open('pause');
+  if (document.pointerLockElement === canvas && document.exitPointerLock) document.exitPointerLock();
+}
+
+function resume() {
+  if (state !== 'paused') return;
+  state = 'play';
+  menu.close();
+  input.enabled = true;
+  input.syncPad();
+  lockPointer();
+  canvas.focus({ preventScroll: true });
+}
+
+function quitToTitle() {
+  director.reset(true);
+  combat.revive();
+  combat.fall = null;
+  hud.setFallen(false);
+  player.yaw = player.prevYaw = player.renderYaw = TITLE_YAW;
+  player.vel.set(0, 0, 0);
+  state = 'title';
+  input.enabled = false;
+  menu.open('title');
+}
+
+const menu = new Menu({
+  onPlay: startPlay,
+  onResume: resume,
+  onQuit: quitToTitle,
+  onSound: () => {
+    sound.start();
+    sound.toggle();
+    return !sound.muted;
+  },
+});
+menu.setSound(!sound.muted);
+input.onPadChange = (on) => menu.setPad(on);
+document.getElementById('pause').addEventListener('click', (e) => {
+  e.preventDefault();
+  pause();
+});
+// Losing the mouse lock (Esc) mid-fight pauses, like most games.
+document.addEventListener('pointerlockchange', () => {
+  const locked = document.pointerLockElement === canvas;
+  if (!locked && wasLocked && state === 'play') pause();
+  wasLocked = locked;
+});
+
 let appliedKey = '';
 function applyQuality() {
   const maxSamples = renderer.capabilities.maxSamples || 0;
@@ -285,15 +408,21 @@ function frame(now) {
 }
 
 function tick(realDt, live) {
-  const dt = world.advance(realDt);
-  shared.uTime.value += dt;
+  input.enabled = state === 'play';
   input.update();
+  if (state === 'play' && input.pausePressed) {
+    input.pausePressed = false;
+    pause();
+  }
+  menu.update(realDt);
+  const dt = state === 'paused' ? 0 : world.advance(realDt);
+  shared.uTime.value += dt;
   const enemies = director.enemies;
 
   // Decide: the player's buttons, the foes' minds.
   combat.think(dt, enemies);
   for (const e of enemies) e.think(dt, combat);
-  director.update(dt);
+  if (state === 'play') director.update(dt);
 
   // Physics at a fixed 120 Hz, interpolated for rendering.
   acc += dt;
@@ -352,7 +481,22 @@ function tick(realDt, live) {
     trailOthers.push(o);
   }
   trail.update(dt, pos, player.grounded, pos.y - groundY, ev.landed, ev.landSpeed, trailOthers);
-  rig.update(realDt, player, input, combat.inCombat);
+  if (state === 'title') {
+    rig.update(realDt, player, input, 0);
+    titleShot(world.time);
+    setCamera(cine.pos, cine.quat, cine.fov);
+  } else if (state === 'play') {
+    rig.update(realDt, player, input, combat.inCombat);
+    if (camBlend < 1) {
+      // Glide from the title shot into the play camera.
+      camBlend = Math.min(1, camBlend + realDt / 1.6);
+      const e = camBlend * camBlend * (3 - 2 * camBlend);
+      camera.position.lerpVectors(cine.pos, camera.position, e);
+      camera.quaternion.slerpQuaternions(cine.quat, camera.quaternion, e);
+      camera.fov = cine.fov + (rig.fov - cine.fov) * e;
+      camera.updateProjectionMatrix();
+    }
+  }
 
   trailP.update(world.time);
   sparks.update(dt);
@@ -420,9 +564,14 @@ async function start() {
     // Older browsers without parallel compile simply compile on first draw.
   }
   last = performance.now();
+  if (opts.has('play')) {
+    state = 'title';
+    startPlay();
+  } else {
+    menu.open('title');
+  }
   requestAnimationFrame(frame);
   requestAnimationFrame(() => veil.classList.add('gone'));
-  setTimeout(showHint, 900);
   canvas.focus({ preventScroll: true });
 }
 
@@ -437,6 +586,13 @@ window.samurai = {
   combat, director, world, hud, sound,
   get quality() { return qName; },
   paused: false,
+  play() {
+    startPlay();
+    camBlend = 1;
+  },
+  get state() {
+    return state;
+  },
   // Advance the game by n fixed steps (for deterministic captures and tests).
   step(n = 1, dt = 1 / 30) {
     for (let i = 0; i < n; i++) tick(dt, false);
