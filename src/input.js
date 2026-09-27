@@ -17,6 +17,12 @@ const MOVE_KEYS = {
   KeyD: [1, 0], ArrowRight: [1, 0],
 };
 
+// Phones and tablets: a coarse pointer, or touch with no mouse at all.
+export function isTouchDevice() {
+  const coarse = matchMedia('(pointer: coarse)').matches || matchMedia('(any-pointer: coarse)').matches && !matchMedia('(pointer: fine)').matches;
+  return coarse || (navigator.maxTouchPoints > 0 && !matchMedia('(pointer: fine)').matches) || ('ontouchstart' in window && !matchMedia('(pointer: fine)').matches);
+}
+
 export class Input {
   constructor(canvas) {
     this.canvas = canvas;
@@ -230,7 +236,7 @@ export class Input {
       });
       el.addEventListener('mouseup', () => { if (act === 'heavy') this.heavyHeld = false; });
     }
-    if (matchMedia('(pointer: coarse)').matches && navigator.maxTouchPoints > 0) {
+    if (isTouchDevice()) {
       document.body.classList.add('touch');
     }
   }

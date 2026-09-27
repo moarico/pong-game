@@ -16,7 +16,8 @@ export class Sound {
     }
     this.listener = { x: 0, z: 0, yaw: 0 };
     const start = () => this.start();
-    for (const ev of ['keydown', 'mousedown', 'touchstart', 'pointerdown']) addEventListener(ev, start, { once: false, passive: true });
+    // iPhones only unlock sound on a finished tap (touchend / click).
+    for (const ev of ['keydown', 'mousedown', 'touchstart', 'touchend', 'pointerdown', 'pointerup', 'click']) addEventListener(ev, start, { once: false, passive: true });
     addEventListener('keydown', (e) => {
       if (e.code === 'KeyM' && !e.repeat) this.toggle();
     });

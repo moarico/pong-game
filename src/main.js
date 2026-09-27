@@ -7,7 +7,7 @@ import { Grass } from './grass.js';
 import { Motes, Puffs } from './particles.js';
 import { Character } from './character.js';
 import { Player } from './player.js';
-import { Input } from './input.js';
+import { Input, isTouchDevice } from './input.js';
 import { CameraRig } from './camera.js';
 import { Post } from './post.js';
 import { CharacterShadow } from './shadow.js';
@@ -37,9 +37,10 @@ for (const part of location.hash.replace(/^#/, '').split(/[&,]/)) if (part) opts
 
 function initialQuality() {
   for (const q of QUALITY_ORDER) if (opts.has(q) || opts.get('q') === q) return q;
-  const coarse = matchMedia('(pointer: coarse)').matches;
   const small = Math.min(screen.width, screen.height) < 820;
-  return coarse || small ? 'medium' : 'high';
+  // Phones start light (the watchdog can still step down); tablets in between.
+  if (isTouchDevice()) return small ? 'low' : 'medium';
+  return small ? 'medium' : 'high';
 }
 
 let renderer;
@@ -187,7 +188,7 @@ const game = {
   onPlayerDeath() {
     hud.setFallen(true, '');
     setTimeout(() => {
-      if (game.combat.dead) hud.setFallen(true, matchMedia('(pointer: coarse)').matches ? 'Tap to rise again' : 'Press any key to rise again');
+      if (game.combat.dead) hud.setFallen(true, isTouchDevice() ? 'Tap to rise again' : 'Press any key to rise again');
     }, 2200);
   },
 };
@@ -265,7 +266,7 @@ function watchPerformance(dt) {
     perf.frames = 0;
     perf.sum = 0;
     const idx = QUALITY_ORDER.indexOf(qName);
-    if (avg > 1 / 38 && idx > 0 && perf.downgrades < 2 && !opts.has('lock')) {
+    if (avg > 1 / 38 && idx > 0 && perf.downgrades < 3 && !opts.has('lock')) {
       qName = QUALITY_ORDER[idx - 1];
       quality = QUALITY[qName];
       perf.downgrades++;

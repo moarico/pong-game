@@ -64,4 +64,6 @@ export const QUALITY = {
   medium: { name: 'medium', pixelRatio: 1.15, msaa: 4, grass: 0.6, plumes: 0.65, motes: 0.7, bloomLevels: 6, shadowSize: 1024, dof: 1 },
   low: { name: 'low', pixelRatio: 0.9, msaa: 0, grass: 0.36, plumes: 0.42, motes: 0.5, bloomLevels: 5, shadowSize: 512, dof: 0 },
 };
-export const QUALITY_ORDER = ['low', 'medium', 'high'];
+// Last resort for weak phones: fewer pixels and less grass.
+QUALITY.lowest = { name: 'lowest', pixelRatio: 0.72, msaa: 0, grass: 0.24, plumes: 0.28, motes: 0.35, bloomLevels: 4, shadowSize: 512, dof: 0 };
+export const QUALITY_ORDER = ['lowest', 'low', 'medium', 'high'];
