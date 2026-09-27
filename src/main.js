@@ -95,7 +95,7 @@ const camera = new THREE.PerspectiveCamera(50, 1, 0.1, 60000);
 camera.layers.enable(1);
 
 const wind = new Wind(shared);
-wind.boost = 0.5; // the game opens on the title, in a stiff breeze
+wind.boost = 0.55; // the game opens on the title, in a stiff breeze
 const sky = new Sky(shared);
 const ground = new Ground(shared);
 const hills = new Hills(shared);
@@ -489,7 +489,7 @@ function tick(realDt, live, draw = true) {
   }
   trail.update(dt, pos, player.grounded, pos.y - groundY, ev.landed, ev.landSpeed, trailOthers);
   // A stiff breeze off the sea while the title is up: the cloak streams, the plumes bow.
-  wind.boost += ((state === 'play' ? 0 : 0.5) - wind.boost) * Math.min(1, realDt * 0.8);
+  wind.boost += ((state === 'play' ? 0 : 0.55) - wind.boost) * Math.min(1, realDt * 0.8);
   if (state === 'title') {
     rig.update(realDt, player, input, 0);
     titleShot(world.time);

@@ -864,28 +864,28 @@ function headwear(ctx) {
   if (o.headwear === 'kasa') {
     // A wide, shallow cone of woven bamboo with a small knob at the peak and a
     // thick rolled rim.
-    const R = 0.405;
+    const R = 0.335;
     const pts = [
-      [0.0, 0.14], [0.012, 0.137], [0.03, 0.124], [0.07, 0.1], [0.13, 0.073], [0.2, 0.047], [0.27, 0.025], [0.33, 0.009],
-      [0.375, -0.002], [0.398, -0.009], [R, -0.015], [0.4, -0.021], [0.385, -0.02], [0.33, -0.006], [0.25, 0.017],
-      [0.16, 0.047], [0.08, 0.078], [0.03, 0.099], [0.0, 0.106],
+      [0.0, 0.112], [0.012, 0.11], [0.03, 0.1], [0.07, 0.082], [0.12, 0.061], [0.18, 0.04], [0.24, 0.022], [0.29, 0.006],
+      [0.318, -0.003], [0.33, -0.009], [R, -0.014], [0.33, -0.019], [0.318, -0.018], [0.27, -0.004], [0.2, 0.016],
+      [0.13, 0.04], [0.07, 0.062], [0.03, 0.078], [0.0, 0.084],
     ].map(([r, y]) => new THREE.Vector2(r, y));
     const kasa = new THREE.LatheGeometry(pts, 96);
     B.add(kasa, M.hat, 'hat', { matrix: HT, uvFn: (p, u) => [u, Math.hypot(p.x, p.z)] });
-    const peak = new THREE.SphereGeometry(0.016, 12, 8);
+    const peak = new THREE.SphereGeometry(0.014, 12, 8);
     peak.scale(1, 0.8, 1);
-    B.add(peak, M.straw, 'hat', { matrix: HT.clone().multiply(new THREE.Matrix4().makeTranslation(0, 0.142, 0)) });
+    B.add(peak, M.straw, 'hat', { matrix: HT.clone().multiply(new THREE.Matrix4().makeTranslation(0, 0.114, 0)) });
     // The ring inside that sits on the head.
-    const ring = new THREE.CylinderGeometry(0.084, 0.088, 0.045, 28, 1, true);
-    B.add(ring, M.straw, 'hat', { matrix: HT.clone().multiply(new THREE.Matrix4().makeTranslation(0, 0.066, -0.004)) });
+    const ring = new THREE.CylinderGeometry(0.084, 0.088, 0.03, 28, 1, true);
+    B.add(ring, M.straw, 'hat', { matrix: HT.clone().multiply(new THREE.Matrix4().makeTranslation(0, 0.058, -0.004)) });
     // Loose straw ends bristling round the rim.
     let sd = 3;
     const rnd = () => {
       sd = (sd * 16807) % 2147483647;
       return sd / 2147483647;
     };
-    for (let k = 0; k < 90; k++) {
-      const a = (k / 90) * Math.PI * 2 + rnd() * 0.05;
+    for (let k = 0; k < 80; k++) {
+      const a = (k / 80) * Math.PI * 2 + rnd() * 0.05;
       const len = 0.012 + rnd() * 0.022;
       const out = new THREE.Vector3(Math.cos(a), 0, Math.sin(a));
       const side = new THREE.Vector3(-out.z, 0, out.x);

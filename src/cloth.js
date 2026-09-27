@@ -149,7 +149,8 @@ export class Cloth {
         const ws = Math.hypot(_w.x, _w.z);
         // The hem ripples like a flag; the higher rows mostly drag along.
         const flap = Math.sin(this.time * (7 + ws * 1.5) - row * 0.8 + (i % this.cols) * 0.4) * ws * 0.12 * row;
-        const drag = this.drag;
+        // Draped over the shoulders the cloth lies close; lower down the wind takes it.
+        const drag = this.drag * (0.3 + 0.7 * row / (this.rows - 1));
         const ax = drag * (_w.x - vx / h) + back.x * flap;
         const ay = -9.8 + drag * 0.35 * (_w.y - vy / h) + flap * 0.3;
         const az = drag * (_w.z - vz / h) + back.z * flap;

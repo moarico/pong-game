@@ -55,12 +55,12 @@ function relief(x, y) {
   d -= 0.0105 * g2(ax - 0.031, 0.0175, y - 0.001, 0.0125);
   d += 0.0042 * g2(ax - 0.031, 0.0105, y - 0.0005, 0.0062);
   // Nose: a straight, narrow bridge running down to a defined tip, wings at either side.
-  const tn = clamp((0.012 - y) / 0.053, 0, 1);
-  const bw = lerp(0.0052, 0.0092, tn);
-  const bridge = Math.exp(-((x / bw) ** 2)) * smoothstep(0.017, 0.006, y) * smoothstep(-0.053, -0.043, y);
-  d += bridge * lerp(0.005, 0.024, Math.pow(tn, 1.2));
-  d += 0.0042 * g2(x, 0.0085, y + 0.0415, 0.0065);
-  d += 0.0042 * g2(ax - 0.0128, 0.0058, y + 0.0455, 0.0052);
+  const tn = clamp((0.013 - y) / 0.058, 0, 1);
+  const bw = lerp(0.005, 0.0088, tn);
+  const bridge = Math.exp(-((x / bw) ** 2)) * smoothstep(0.018, 0.007, y) * smoothstep(-0.058, -0.047, y);
+  d += bridge * lerp(0.005, 0.025, Math.pow(tn, 1.2));
+  d += 0.0042 * g2(x, 0.0082, y + 0.0455, 0.0065);
+  d += 0.0042 * g2(ax - 0.0128, 0.0058, y + 0.0495, 0.0052);
   // Lips: the upper a little thinner, the lower fuller; a line between; the hollow
   // below the lower lip; a faint groove down from the nose.
   const my = -0.0725;
@@ -70,7 +70,7 @@ function relief(x, y) {
   d -= 0.0034 * g2(x, 0.021, y + 0.0885, 0.0042);
   d -= 0.0009 * g2(x, 0.0026, y + 0.061, 0.0058);
   // Chin: squared and prominent, with a faint cleft.
-  d += 0.0058 * g2(x, 0.02, y + 0.1035, 0.011) * (1 + 0.25 * smoothstep(0.004, 0.016, ax));
+  d += 0.0072 * g2(x, 0.021, y + 0.1035, 0.011) * (1 + 0.25 * smoothstep(0.004, 0.016, ax));
   d -= 0.0011 * g2(x, 0.0024, y + 0.106, 0.0075);
   // High cheekbones, hollows beneath them.
   d += 0.0046 * g2(ax - 0.05, 0.016, y + 0.013, 0.012);
@@ -179,7 +179,9 @@ export function buildYoungHead(ctx, W) {
 function hairline(theta) {
   const front = Math.max(0, Math.sin(theta));
   const back = Math.max(0, -Math.sin(theta));
-  return lerp(-0.035, 0.068, front * front) - 0.05 * Math.pow(back, 1.5);
+  // The fringe falls to the brows in ragged points; the sides cover the ears.
+  const jag = 0.009 * Math.abs(Math.sin(theta * 23.0)) + 0.005 * Math.sin(theta * 57.0);
+  return lerp(-0.035, 0.03 + jag * front, front * front) - 0.05 * Math.pow(back, 1.5);
 }
 
 function scalpPoint(theta, y, lift, out) {
@@ -260,11 +262,11 @@ function buildHair(ctx, W) {
     B.grid(r, M.hair, 'head', { outward: null });
   };
   const deg = Math.PI / 180;
-  // Fringe: thick locks over the brow, the longest reaching the eyebrows.
-  for (let k = 0; k < 8; k++) {
-    const u = (k / 7) * 2 - 1;
-    const th = Math.PI / 2 + u * 0.56 + (rnd() - 0.5) * 0.08;
-    lock(th - u * 0.04, th + u * 0.1 + (rnd() - 0.5) * 0.28, 0.108, 0.016 + rnd() * 0.03 + Math.abs(u) * 0.01, 0.026 + rnd() * 0.008, 0.005 + rnd() * 0.005);
+  // A few loose locks over the fringe, the longest reaching the eyes.
+  for (let k = 0; k < 5; k++) {
+    const u = (k / 4) * 2 - 1;
+    const th = Math.PI / 2 + u * 0.5 + (rnd() - 0.5) * 0.1;
+    lock(th - u * 0.04, th + u * 0.12 + (rnd() - 0.5) * 0.3, 0.1, 0.004 + rnd() * 0.02 + Math.abs(u) * 0.01, 0.03 + rnd() * 0.01, 0.005 + rnd() * 0.004);
   }
   // Side locks framing the face, down past the cheekbones, ends flicking outward.
   for (const side of [1, -1]) {

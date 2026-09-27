@@ -31,7 +31,8 @@ export class Wind {
     const speed = 3.2 + this.strength * 5.0;
     this.scroll.x += this.dir.x * speed * dt;
     this.scroll.y += this.dir.y * speed * dt;
-    this.shared.uWindStrength.value = this.strength;
+    // The grass feels only part of the title screen's extra breeze; the cloth all of it.
+    this.shared.uWindStrength.value = this.strength - this.boost * 0.6;
   }
 
   // Gust intensity (0..1) at a world position. Mirrors windGust() in glsl.js.

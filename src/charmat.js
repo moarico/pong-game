@@ -174,7 +174,7 @@ void main() {
   } else if (pat == 3) {
     float z = vUv.y * 34.0;
     float d = abs(fract(z + vUv.x * 2.0) - 0.5) + abs(fract(z - vUv.x * 2.0) - 0.5);
-    alb = mix(alb, vec3(0.62, 0.58, 0.5), (1.0 - smoothstep(0.5, 0.62, d)) * 0.85);
+    alb = mix(alb, vec3(0.2, 0.16, 0.13), (1.0 - smoothstep(0.5, 0.62, d)) * 0.85);
   } else if (pat == 4) {
     // Horizontal lacquered splints over dark mail.
     float f = fract(vUv.y * 13.0);
@@ -204,12 +204,12 @@ void main() {
     vec2 e = vec2(ax - 0.031, p.y - 0.0005);
     float t = e.x / 0.0142;
     float w = max(1.0 - t * t, 0.0);
-    float lidU = 0.0047 * pow(w, 0.7) + 0.0009 * t;
-    float lidL = -0.0034 * pow(w, 0.85) + 0.0004 * t;
+    float lidU = 0.0041 * pow(w, 0.75) + 0.0009 * t;
+    float lidL = -0.0029 * pow(w, 0.85) + 0.0004 * t;
     float aa = 0.00035;
     float open = step(abs(t), 1.0) * smoothstep(lidL - aa, lidL + aa, e.y) * smoothstep(lidU + aa, lidU - aa, e.y);
     float ir = length(vec2(ax - 0.0302, p.y - 0.0002));
-    float iris = 1.0 - smoothstep(0.0046, 0.0054, ir);
+    float iris = 1.0 - smoothstep(0.0042, 0.005, ir);
     float pupil = 1.0 - smoothstep(0.0017, 0.0023, ir);
     vec3 eyeC = mix(vec3(0.5, 0.43, 0.38), mix(vec3(0.075, 0.045, 0.03), vec3(0.012, 0.01, 0.01), pupil), iris);
     // The upper lid shades the top of the eye.
@@ -240,7 +240,7 @@ void main() {
     float mline = smoothstep(0.0009, 0.0, abs(p.y - my - 0.0006 * cos(p.x * 140.0))) * smoothstep(0.025, 0.019, ax);
     alb *= 1.0 - 0.6 * mline;
     // Nostrils.
-    float nost = 1.0 - smoothstep(0.0012, 0.0024, length(vec2((ax - 0.0072) * 0.55, p.y + 0.0508)));
+    float nost = 1.0 - smoothstep(0.0012, 0.0024, length(vec2((ax - 0.0072) * 0.55, p.y + 0.0548)));
     alb *= 1.0 - 0.5 * nost;
     // A shadow of stubble along the jaw and lip; the socket skin a touch darker.
     float jaw = smoothstep(-0.06, -0.1, p.y) * smoothstep(0.012, 0.03, ax) + smoothstep(0.012, 0.004, abs(p.y + 0.062)) * smoothstep(0.02, 0.01, ax);
@@ -276,7 +276,7 @@ void main() {
   // Against the sun a molten edge of light wraps the silhouette.
   float fres = pow(1.0 - NdV, 3.2);
   float back = pow(sat(dot(-V, L)), 1.6);
-  float rim = fres * (0.15 + 2.4 * back) * sat(NdL + 0.6) * rimAmt;
+  float rim = fres * (0.12 + 1.5 * back) * sat(NdL + 0.6) * rimAmt;
 
   // Tall grass swallows the light around the legs; the brim shades the face.
   float grassOcc = smoothstep(0.1, 1.1, vWorld.y - uGroundY);

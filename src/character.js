@@ -44,7 +44,7 @@ export class Character {
     };
     const surface = mat(this.fig.outfit.cloak || hex, { rough: 0.95, trans: 0.22, bump: 1, rim: 1.1, pat: PAT.cloak });
     this.cape = new Cloth(this.fig.material, cols, rows, rest, surface, [1.5, 1.0]);
-    this.cape.drag = 2.3;
+    this.cape.drag = 2.5; // a light travelling cloak: the wind takes it
     this.colliders = {
       spheres: Array.from({ length: 8 }, () => [new THREE.Vector3(), 0.1]),
       capsules: Array.from({ length: 6 }, () => [new THREE.Vector3(), new THREE.Vector3(), 0.1]),
