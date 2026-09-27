@@ -39,11 +39,31 @@ export class CharacterShadow {
     this.shared.uShadowMap.value = depth;
   }
 
-  render(renderer, scene, center, sunDir) {
+  // extra: other casters' positions; the map widens to take in those nearby.
+  render(renderer, scene, center, sunDir, extra = []) {
     const cam = this.camera;
     cam.position.copy(center).addScaledVector(sunDir, this.back);
     cam.lookAt(center);
     cam.updateMatrixWorld();
+    // Fit the view (in the light's frame) around everyone within reach.
+    let half = 1.4;
+    const inv = cam.matrixWorldInverse;
+    for (const p of extra) {
+      if (p.distanceToSquared(center) > 13 * 13) continue;
+      this.tmp = (this.tmp || new THREE.Vector3()).copy(p).applyMatrix4(inv);
+      half = Math.max(half, Math.abs(this.tmp.x) + 1.1, Math.abs(this.tmp.y) + 1.3);
+    }
+    half = Math.min(half, 13);
+    // Ease the size so the penumbra doesn't pump.
+    this.half = this.half ? this.half + (half - this.half) * 0.12 : half;
+    if (Math.abs(cam.right - this.half) > 1e-3) {
+      cam.left = -this.half;
+      cam.right = this.half;
+      cam.top = this.half;
+      cam.bottom = -this.half;
+      cam.updateProjectionMatrix();
+    }
+    this.width = this.half * 2;
     this.shared.uShadowMatrix.value
       .multiplyMatrices(this.bias, cam.projectionMatrix)
       .multiply(cam.matrixWorldInverse);

@@ -43,6 +43,7 @@ export const MOVE = {
   groundDecel: 11.0,
   airAccel: 2.2,
   turnRate: 11.0,
+  maxTurnSpeed: 13.0,
   gravity: 24.0,
   fallGravityMul: 1.55,
   shortJumpGravityMul: 2.4,
@@ -54,7 +55,9 @@ export const MOVE = {
   maxFallSpeed: 22,
 };
 
-export const TRAIL_N = 10;
+// Grass push slots: the samurai, his footsteps, then foes and the fallen.
+export const TRAIL_N = 16;
+export const TRAIL_STEPS = 8;
 
 export const QUALITY = {
   high: { name: 'high', pixelRatio: 1.5, msaa: 4, grass: 1.0, plumes: 1.0, motes: 1.0, bloomLevels: 6, shadowSize: 1024, dof: 1 },

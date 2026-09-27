@@ -1,4 +1,14 @@
-// Keyboard, mouse, touch and gamepad, reduced to: a move vector, run, jump and look deltas.
+// Keyboard, mouse, touch and gamepad, reduced to: a move vector, run, jump, the
+// fighting buttons (light, heavy, spin, dodge, parry) and look deltas.
+
+// Fighting keys: left hand around WASD, or right hand on J K L / U I.
+const ACTION_KEYS = {
+  KeyJ: 'attack',
+  KeyK: 'heavy',
+  KeyE: 'spin', KeyL: 'spin',
+  KeyQ: 'dodge', KeyU: 'dodge',
+  KeyF: 'parry', KeyI: 'parry',
+};
 
 const MOVE_KEYS = {
   KeyW: [0, 1], ArrowUp: [0, 1],
@@ -16,6 +26,14 @@ export class Input {
     this.run = false;
     this.jumpHeld = false;
     this.jumpPressed = false; // latched until the simulation consumes it
+    this.attackPressed = false;
+    this.heavyPressed = false;
+    this.heavyHeld = false;
+    this.spinPressed = false;
+    this.dodgePressed = false;
+    this.parryPressed = false;
+    this.usedAttack = false;
+    this.lockFailed = false;
     this.lookX = 0;
     this.lookY = 0;
     this.lastInputTime = 0;
@@ -36,41 +54,65 @@ export class Input {
         if (!e.repeat) this.pressJump();
         e.preventDefault();
       }
+      const act = ACTION_KEYS[e.code];
+      if (act && !e.repeat && !e.ctrlKey && !e.metaKey && !e.altKey) {
+        this.press(act);
+        e.preventDefault();
+      }
       if (MOVE_KEYS[e.code]) e.preventDefault();
       this.keys.add(e.code);
       this.poke();
     });
     addEventListener('keyup', (e) => {
       if (e.code === 'Space') this.jumpHeld = false;
+      if (e.code === 'KeyK') this.heavyHeld = false;
       this.keys.delete(e.code);
     });
     addEventListener('blur', () => {
       this.keys.clear();
       this.jumpHeld = false;
+      this.heavyHeld = false;
       this.dragging = false;
     });
 
-    // Mouse: drag to look, or click once to lock the pointer where the browser allows it.
+    // Mouse: the first click locks the pointer (mouse looks, left button cuts,
+    // right button is the heavy blow). Where the browser refuses the lock, drag
+    // to look and click without dragging to attack.
     c.addEventListener('mousedown', (e) => {
       if (e.button !== 0 && e.button !== 2) return;
-      this.dragging = true;
-      c.classList.add('looking');
       c.focus();
-      if (document.pointerLockElement !== c && c.requestPointerLock) {
+      if (document.pointerLockElement === c) {
+        if (e.button === 0) this.press('attack');
+        else this.press('heavy');
+        return;
+      }
+      this.dragging = true;
+      this.drag = { x: e.clientX, y: e.clientY, t: performance.now(), button: e.button, moved: 0 };
+      c.classList.add('looking');
+      if (!this.lockFailed && c.requestPointerLock) {
         try {
           const p = c.requestPointerLock();
-          if (p && p.catch) p.catch(() => {});
+          if (p && p.catch) p.catch(() => { this.lockFailed = true; });
         } catch {
-          // Pointer lock is optional; dragging still works.
+          this.lockFailed = true;
         }
+      } else if (e.button === 2) {
+        // Unlocked right button: charge while held.
+        this.press('heavy');
       }
     });
-    addEventListener('mouseup', () => {
+    document.addEventListener('pointerlockerror', () => { this.lockFailed = true; });
+    addEventListener('mouseup', (e) => {
+      if (e.button === 2) this.heavyHeld = false;
+      const d = this.drag;
+      if (this.dragging && d && this.lockFailed && e.button === 0 && d.moved < 8 && performance.now() - d.t < 350) this.press('attack');
       this.dragging = false;
+      this.drag = null;
       if (document.pointerLockElement !== c) c.classList.remove('looking');
     });
     addEventListener('mousemove', (e) => {
       if (document.pointerLockElement === c || this.dragging) {
+        if (this.drag) this.drag.moved += Math.abs(e.movementX) + Math.abs(e.movementY);
         this.lookX += e.movementX * this.sensitivity;
         this.lookY += e.movementY * this.sensitivity;
         this.usedLook = true;
@@ -166,9 +208,43 @@ export class Input {
       });
       jumpEl.addEventListener('mouseup', () => { this.jumpHeld = false; });
     }
+    for (const [id, act] of [['btn-attack', 'attack'], ['btn-heavy', 'heavy'], ['btn-spin', 'spin'], ['btn-dodge', 'dodge'], ['btn-parry', 'parry']]) {
+      const el = document.getElementById(id);
+      if (!el) continue;
+      el.addEventListener('touchstart', (e) => {
+        document.body.classList.add('touch');
+        el.classList.add('down');
+        this.press(act);
+        e.preventDefault();
+      }, { passive: false });
+      const up = (e) => {
+        el.classList.remove('down');
+        if (act === 'heavy') this.heavyHeld = false;
+        e.preventDefault();
+      };
+      el.addEventListener('touchend', up);
+      el.addEventListener('touchcancel', up);
+      el.addEventListener('mousedown', (e) => {
+        this.press(act);
+        e.preventDefault();
+      });
+      el.addEventListener('mouseup', () => { if (act === 'heavy') this.heavyHeld = false; });
+    }
     if (matchMedia('(pointer: coarse)').matches && navigator.maxTouchPoints > 0) {
       document.body.classList.add('touch');
     }
+  }
+
+  press(act) {
+    if (act === 'attack') this.attackPressed = true;
+    else if (act === 'heavy') {
+      this.heavyPressed = true;
+      this.heavyHeld = true;
+    } else if (act === 'spin') this.spinPressed = true;
+    else if (act === 'dodge') this.dodgePressed = true;
+    else if (act === 'parry') this.parryPressed = true;
+    this.usedAttack = true;
+    this.poke();
   }
 
   pressJump() {
@@ -229,7 +305,16 @@ export class Input {
       const dz = (v) => (Math.abs(v) < 0.14 ? 0 : (v - Math.sign(v) * 0.14) / 0.86);
       const gx = dz(p.axes[0] || 0);
       const gy = -dz(p.axes[1] || 0);
-      const run = !!(p.buttons[1]?.pressed || p.buttons[7]?.pressed || p.buttons[10]?.pressed);
+      const run = !!(p.buttons[7]?.pressed || p.buttons[10]?.pressed);
+      // X cuts, Y is the heavy blow, B dodges, RB spins, LB parries.
+      const btn = (i) => !!p.buttons[i]?.pressed;
+      const prev = this.padPrev || (this.padPrev = {});
+      for (const [i, act] of [[2, 'attack'], [3, 'heavy'], [1, 'dodge'], [5, 'spin'], [4, 'parry']]) {
+        const on = btn(i);
+        if (on && !prev[i]) this.press(act);
+        if (!on && prev[i] && act === 'heavy') this.heavyHeld = false;
+        prev[i] = on;
+      }
       if (gx || gy) {
         apply(gx, gy, run);
         this.usedMove = true;

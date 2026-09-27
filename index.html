@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
 <title>Samurai at Dusk</title>
-<meta name="description" content="A samurai walks through wind-blown susuki grass at sunset. Walking and jumping demo.">
+<meta name="description" content="A samurai fights bandits in wind-blown susuki grass at sunset.">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Zen+Kaku+Gothic+New:wght@400;500&display=swap">
@@ -17,6 +17,9 @@
     --ink-faint: rgba(244, 231, 207, 0.28);
     --ember: #ffb45e;
     --glass: rgba(20, 12, 10, 0.28);
+    --life: #e9c27c;
+    --wound: #c2412b;
+    --track: rgba(10, 6, 5, 0.45);
     --font: "Zen Kaku Gothic New", "Hiragino Sans", "Yu Gothic", "Segoe UI", system-ui, sans-serif;
   }
   [hidden] { display: none !important; }
@@ -122,23 +125,135 @@
     background: rgba(244, 231, 207, 0.22);
     border: 1px solid rgba(244, 231, 207, 0.45);
   }
-  #jump {
+  /* Right-thumb cluster: a big cut button with the rest around it. */
+  .pad {
     position: fixed;
-    right: calc(28px + env(safe-area-inset-right, 0px));
-    bottom: calc(34px + env(safe-area-inset-bottom, 0px));
-    width: 78px;
-    height: 78px;
+    right: calc(var(--r) + env(safe-area-inset-right, 0px));
+    bottom: calc(var(--b) + env(safe-area-inset-bottom, 0px));
+    width: var(--s);
+    height: var(--s);
     border-radius: 50%;
-    border: 1px solid rgba(244, 231, 207, 0.5);
-    background: rgba(20, 12, 10, 0.3);
+    border: 1px solid rgba(244, 231, 207, 0.45);
+    background: rgba(20, 12, 10, 0.32);
     color: var(--ink);
-    font: 500 13px/1 var(--font);
-    letter-spacing: 0.14em;
+    font: 500 10px/1 var(--font);
+    letter-spacing: 0.12em;
     z-index: 4;
     touch-action: none;
+    padding: 0;
   }
-  #jump.down { background: rgba(255, 180, 94, 0.3); border-color: var(--ember); }
-  body.touch #hint { bottom: calc(132px + env(safe-area-inset-bottom, 0px)); }
+  .pad.down { background: rgba(255, 180, 94, 0.32); border-color: var(--ember); }
+  #btn-attack { --r: 24px; --b: 34px; --s: 84px; font-size: 12px; border-color: rgba(244, 231, 207, 0.6); }
+  #btn-heavy { --r: 122px; --b: 26px; --s: 62px; }
+  #btn-dodge { --r: 36px; --b: 134px; --s: 58px; }
+  #jump { --r: 112px; --b: 106px; --s: 58px; }
+  #btn-parry { --r: 190px; --b: 60px; --s: 54px; }
+  #btn-spin { --r: 100px; --b: 180px; --s: 52px; }
+  body.touch #hint { bottom: calc(250px + env(safe-area-inset-bottom, 0px)); }
+
+  /* Health: a thin ember-gold line, with the recent wound trailing in red. */
+  #hud-life {
+    position: fixed;
+    left: calc(24px + env(safe-area-inset-left, 0px));
+    bottom: calc(26px + env(safe-area-inset-bottom, 0px));
+    width: min(240px, 42vw);
+    z-index: 3;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 0.8s ease;
+  }
+  #hud-life.on { opacity: 1; }
+  #hud-life .label {
+    font: 500 10px/1 var(--font);
+    letter-spacing: 0.3em;
+    text-transform: uppercase;
+    color: var(--ink-soft);
+    margin-bottom: 7px;
+    text-shadow: 0 1px 6px rgba(0, 0, 0, 0.6);
+  }
+  .bar {
+    position: relative;
+    height: 4px;
+    border-radius: 2px;
+    background: var(--track);
+    box-shadow: 0 0 0 1px rgba(244, 231, 207, 0.12);
+    overflow: hidden;
+  }
+  .bar i, .bar b {
+    position: absolute;
+    inset: 0 auto 0 0;
+    width: 100%;
+    border-radius: 2px;
+  }
+  .bar b { background: var(--wound); transition: width 0.6s ease 0.25s; }
+  .bar i { background: linear-gradient(90deg, #d9a458, var(--life)); box-shadow: 0 0 8px rgba(233, 194, 124, 0.45); }
+  body.touch #hud-life { bottom: auto; top: calc(18px + env(safe-area-inset-top, 0px)); }
+
+  /* Foes' bars float over their heads. */
+  #hud-foes { position: fixed; inset: 0; pointer-events: none; z-index: 2; }
+  .foe {
+    position: absolute;
+    width: 64px;
+    margin-left: -32px;
+    opacity: 0;
+    transition: opacity 0.35s ease;
+  }
+  .foe.on { opacity: 1; }
+  .foe .bar { height: 3px; }
+  .foe .bar i { background: linear-gradient(90deg, #b2402c, #e0634a); box-shadow: 0 0 6px rgba(224, 99, 74, 0.5); }
+  .foe .bar b { background: rgba(244, 231, 207, 0.55); }
+
+  /* Wave banners and moments (perfect parry, riposte). */
+  #banner, #moment {
+    position: fixed;
+    left: 0;
+    right: 0;
+    text-align: center;
+    pointer-events: none;
+    z-index: 3;
+    opacity: 0;
+    transition: opacity 0.9s ease, transform 0.9s ease;
+    text-shadow: 0 2px 18px rgba(0, 0, 0, 0.55);
+  }
+  #banner { top: 18vh; transform: translateY(6px); }
+  #banner.on, #moment.on { opacity: 1; transform: none; }
+  #banner h2 {
+    margin: 0;
+    font: 500 13px/1 var(--font);
+    letter-spacing: 0.55em;
+    text-transform: uppercase;
+    color: var(--ink);
+  }
+  #banner p {
+    margin: 12px 0 0;
+    font: 400 12px/1.4 var(--font);
+    letter-spacing: 0.16em;
+    color: var(--ink-soft);
+  }
+  #moment {
+    top: 30vh;
+    font: 500 12px/1 var(--font);
+    letter-spacing: 0.5em;
+    text-transform: uppercase;
+    color: var(--ember);
+    transition: opacity 0.25s ease;
+  }
+  #fallen {
+    position: fixed;
+    inset: 0;
+    display: grid;
+    place-content: center;
+    gap: 14px;
+    text-align: center;
+    background: radial-gradient(ellipse at center, rgba(12, 4, 3, 0.25), rgba(12, 4, 3, 0.7));
+    z-index: 4;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 1.8s ease;
+  }
+  #fallen.on { opacity: 1; }
+  #fallen h2 { margin: 0; font: 500 15px/1 var(--font); letter-spacing: 0.5em; text-transform: uppercase; color: var(--ink); }
+  #fallen p { margin: 0; font: 400 12px/1 var(--font); letter-spacing: 0.2em; color: var(--ink-soft); }
 
   #fps {
     position: fixed;
@@ -161,7 +276,7 @@
     z-index: 6;
   }
   @media (prefers-reduced-motion: reduce) {
-    #veil, #hint { transition: none; }
+    #veil, #hint, #banner, #moment, #fallen, .bar b { transition: none; }
   }
 </style>
 <script type="importmap">
@@ -169,17 +284,32 @@
 </script>
 </head>
 <body>
-<canvas id="game" tabindex="0" aria-label="Samurai walking through a grass field at sunset"></canvas>
+<canvas id="game" tabindex="0" aria-label="A samurai fighting bandits in a grass field at sunset"></canvas>
 <div id="veil"><span>Loading</span></div>
 <div id="hint" class="gone">
-  <span class="desk-only"><kbd>W A S D</kbd>walk</span>
+  <span class="desk-only"><kbd>W A S D</kbd>move</span>
   <span class="desk-only"><kbd>Shift</kbd>run</span>
   <span class="desk-only"><kbd>Space</kbd>jump</span>
-  <span class="desk-only"><kbd>Drag</kbd>look around</span>
-  <span class="touch-only">Left thumb walks · right thumb looks · tap Jump</span>
+  <span class="desk-only"><kbd>Click</kbd>cut</span>
+  <span class="desk-only"><kbd>Right click</kbd>heavy, hold to charge</span>
+  <span class="desk-only"><kbd>E</kbd>spin</span>
+  <span class="desk-only"><kbd>Q</kbd>dodge</span>
+  <span class="desk-only"><kbd>F</kbd>parry</span>
+  <span class="desk-only"><kbd>Mouse</kbd>look</span>
+  <span class="touch-only">Left thumb moves · right thumb looks · Cut, Heavy, Dodge, Parry, Spin</span>
 </div>
 <div id="stick" class="touch-only"><i></i></div>
-<button id="jump" class="touch-only" type="button" aria-label="Jump">JUMP</button>
+<button id="btn-attack" class="pad touch-only" type="button" aria-label="Cut">CUT</button>
+<button id="btn-heavy" class="pad touch-only" type="button" aria-label="Heavy blow, hold to charge">HEAVY</button>
+<button id="btn-dodge" class="pad touch-only" type="button" aria-label="Dodge">DODGE</button>
+<button id="jump" class="pad touch-only" type="button" aria-label="Jump">JUMP</button>
+<button id="btn-parry" class="pad touch-only" type="button" aria-label="Parry">PARRY</button>
+<button id="btn-spin" class="pad touch-only" type="button" aria-label="Spinning cut">SPIN</button>
+<div id="hud-life"><div class="label">Ronin</div><div class="bar"><b></b><i></i></div></div>
+<div id="hud-foes"></div>
+<div id="banner"><h2></h2><p></p></div>
+<div id="moment"></div>
+<div id="fallen"><h2>You have fallen</h2><p></p></div>
 <div id="fps" hidden></div>
 <div id="error" hidden></div>
 <script type="module" src="./src/main.js"></script>
