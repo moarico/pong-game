@@ -340,7 +340,7 @@ void main() {
     alb *= mix(1.0, 0.55, wetMask);
     rough = mix(rough, 0.18, wetMask * 0.8);
     if (N.y > 0.85 && uWet > 0.0) {
-      puddle = smoothstep(0.56, 0.62, fbm3(vWorld.xz * 0.23));
+      puddle = smoothstep(0.63, 0.69, fbm3(vWorld.xz * 0.23));
       if (puddle > 0.0) {
         float r = ripples(vWorld.xz, uTime);
         N = normalize(N + vec3(r * 0.08, 0.0, r * 0.05) * puddle);
@@ -387,7 +387,7 @@ void main() {
   }
   // Lightning floods the upward faces with cold light.
   col += (alb + specCol * (1.0 - rough) * 0.3) * uFlashLight * vec3(0.55, 0.65, 1.0) * (0.25 + 0.75 * sat(N.y * 0.6 + 0.4));
-  col += puddle * env * 0.6;
+  col += puddle * env * 0.35;
   col += emit + alb * glow;
   col = applyFog(col, vWorld);
   gl_FragColor = vec4(col, alphaOut);

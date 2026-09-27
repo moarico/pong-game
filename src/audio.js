@@ -429,6 +429,38 @@ export class Sound {
         this.ring(o, t, 700, 0.05, 0.3);
         break;
       }
+      case 'whinny': {
+        // A horse screaming: a sawtooth whinny through a nasal formant, rising then shaking down.
+        const o = this.out(pos, 1.1);
+        const c = this.ctx;
+        const osc = c.createOscillator();
+        osc.type = 'sawtooth';
+        const f0 = 420 * p;
+        osc.frequency.setValueAtTime(f0 * 0.7, t);
+        osc.frequency.linearRampToValueAtTime(f0 * 1.5, t + 0.25);
+        osc.frequency.linearRampToValueAtTime(f0 * 1.1, t + 0.7);
+        osc.frequency.linearRampToValueAtTime(f0 * 0.6, t + 1.3);
+        const lfo = c.createOscillator();
+        lfo.frequency.value = 24;
+        const lg = c.createGain();
+        lg.gain.value = f0 * 0.08;
+        lfo.connect(lg).connect(osc.frequency);
+        const bp = c.createBiquadFilter();
+        bp.type = 'bandpass';
+        bp.frequency.value = 1400;
+        bp.Q.value = 2.5;
+        const g = c.createGain();
+        g.gain.setValueAtTime(0.0001, t);
+        g.gain.exponentialRampToValueAtTime(0.3, t + 0.08);
+        g.gain.exponentialRampToValueAtTime(0.0001, t + 1.4);
+        osc.connect(bp).connect(g).connect(o);
+        osc.start(t);
+        lfo.start(t);
+        osc.stop(t + 1.5);
+        lfo.stop(t + 1.5);
+        this.noiseBurst(o, t, 1.2, 'bandpass', 2200, 900, 1.5, 0.12, 0.1);
+        break;
+      }
       case 'victory': {
         const o = this.out(null, 0.8);
         [196, 247, 294, 392].forEach((f, i) => this.tone(o, t + i * 0.18, 2.6 - i * 0.2, f, f, 0.12, 'triangle', 0.06));
