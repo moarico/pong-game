@@ -1,6 +1,25 @@
 # Samurai at Dusk
 
-A ronin in a woven kasa stands in a golden pampas field on a hilltop above the sea, with the sun going down over the bay. Bandits come for him through the grass, wave after wave.
+A ronin in a woven kasa stands in a golden pampas field on a hilltop above the sea, with the sun going down over the bay. Bandits come for him through the grass, wave after wave. Beyond the hill wait four halls, each ruled by one great foe.
+
+## The halls and their bosses
+
+Press Play to choose a battle. Each card on the stage select is a live render of its hall.
+
+- **The Sunken Cathedral: the Maw of the Deep.**
+  - **The hall:** a gothic nave flooded to the ankle, with clustered pillars, pointed arcades, a ribbed vault and stained glass. Light pours through a great rose window, caustics play on the flagstones and ripples spread from every step.
+  - **The Maw:** a vast anglerfish rises from the drowned crypt with a glowing lure and six tentacles. It slams and sweeps with its arms, blinds you with its lure (hide behind a pillar or dodge) and lunges across the broken floor to bite. Wounded, it spits bile (parry it back) and sends a flood rolling down the nave.
+- **The Clockwork Forge: the Brass Colossus.**
+  - **The hall:** a round foundry with a glowing pit, molten channels, a roaring furnace and a pouring crucible. Great gears turn in the walls, and the pipes, gauges and vents hiss.
+  - **The Colossus:** an eight-metre steam engine on planted, stomping feet. It fights with a wrench slam whose shockwave you can jump, a sweep, a steam blast, a stomp, a parryable claw and a low spin. It also throws gears that a perfect parry sends back into it. Hotter, it opens its furnace and charges, then must kneel to vent with its core exposed.
+- **The Crystal Caves: the Crystal Wyrm.**
+  - **The hall:** a cavern lit by its own crystals, with a pillar wrapped in a spiral stair, miners' scaffolding and a glowing pool under a waterfall.
+  - **The Wyrm:** its body follows wherever its head has been, so it coils about the pillar and dives through the rock. It breathes a spray of crystal, lunges, sends spikes bursting along the floor, burrows up beneath you and lashes its tail. In its second phase it brings the roof down. When it dies it turns to crystal and shatters.
+- **The Ruined Bastion: the Storm Rider.**
+  - **The hall:** a castle courtyard in a thunderstorm, with rain, lightning, braziers and banners tearing in the gale.
+  - **The Rider:** a knight on a warhorse split by embers, with a flaming lance and a cloak streaming behind. He charges through you, sweeps fire across the stones, rears to stamp a shockwave and calls lightning down. Wounded, his fire turns blue and the storm follows his charges.
+
+Bosses signal their attacks with glowing shapes on the floor that fill as the blow comes. A white glint means you can parry the attack; a red one means you must dodge. Enough damage breaks a boss's poise and it staggers, dropping its weak point within reach. At half health each boss enters a second phase with new attacks. Every boss has an intro, a death scene and a victory screen, and the halls you've won are marked on the stage select.
 
 - **Combat:** a four-cut combo, a heavy thrust or a charged leaping cleave, a spinning cut, a dashing cut on the run, two aerial cuts and a plunge from the air. There's also a dodge, and a parry that opens the enemy up for a lethal riposte. Attacks turn toward the nearest enemy and step in to cutting range, and combos flow into each other. Hits land with hit-stop, screen shake, sparks or blood, and a trail of light along the blade. Big moments slow time.
 - **Enemies:** bandits, ronin and an armoured heavy. They close in through the grass, circle you and take turns to attack. A glint runs along the blade just before a strike, and it's red when the strike can't be parried. They also guard against your cuts, reel back, get knocked down, and fall dead in the grass.
@@ -59,6 +78,7 @@ Add these to the URL hash, for example `index.html#fps,medium`:
 - `fps` shows the frame rate and the quality level.
 - `lock` keeps the chosen quality level and turns off automatic downgrades.
 - `play` skips the title screen.
+- `nopreview` skips rendering the stage select previews at startup.
 
 ## Layout
 
@@ -92,4 +112,11 @@ src/camera.js      third-person camera, fight framing, shake
 src/trail.js       where the grass is being pushed down
 src/shadow.js      sunset shadows of everyone in the fight
 src/post.js        depth of field, light shafts, bloom, exposure, lens flare, tone mapping
+src/ground.js      the floor under everyone's feet: the terrain on the hilltop, each hall's own floor and walls
+src/stage.js       stage manager: entering and leaving halls, light and air per hall, shared effects, intros
+src/boss.js        boss base: attack state machine, poise and stagger, phases, hazards, reflectable projectiles
+src/arenamat.js    hall shading (stone, flagstones, brass, iron, timber, rock, crystal, glass, lava, grating, banners) and builders
+src/vfx.js         sprite particles, floor telegraphs, shockwave rings, lightning
+src/tube.js        tubes rebuilt every frame from a curve (tentacles, the wyrm's body)
+src/stages/        the four halls and their bosses: cathedral + maw, forge + colossus, caves + wyrm, bastion + rider
 ```

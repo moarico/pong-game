@@ -116,7 +116,7 @@ export class CavesStage extends Stage {
         { t: 10.5, pos: [2.8, 3.6, 17], look: [0.5, 3.5, 4], fov: 48 },
       ],
     };
-    this.preview = { pos: [5.5, 3.2, 12.5], look: [0, 7.5, -4], fov: 54 };
+    this.preview = { pos: [8.5, 4.2, 15], look: [0, 7, -4], fov: 50 };
     this.rand = mulberry32(55);
     this.sporeT = 0;
   }

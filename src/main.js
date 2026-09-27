@@ -250,6 +250,7 @@ let state = 'title';
 let debugCam = null; // { pos, target, fov }: a fixed camera for checks from the console
 let introT = 0;
 let introSkip = false;
+let introStarted = 0;
 let victoryT = -1;
 let victoryPrompt = false;
 const introLook = new THREE.Vector3();
@@ -370,6 +371,7 @@ function startStage(id) {
     state = 'intro';
     introT = 0;
     introSkip = false;
+    introStarted = performance.now();
     victoryT = -1;
     victoryPrompt = false;
     input.enabled = false;
@@ -465,7 +467,7 @@ menu.setSound(!sound.muted);
 for (const id of Object.keys(loadDone())) menu.setDone(id, true);
 // Any key or tap skips an intro once it has begun, or leaves after a victory.
 function skipOrLeave(e) {
-  if (state === 'intro' && introT > 0.8) introSkip = true;
+  if (state === 'intro' && performance.now() - introStarted > 700) introSkip = true;
   else if (state === 'play' && victoryPrompt && e.type !== 'keyup') returnToSelect();
 }
 addEventListener('keydown', skipOrLeave);
@@ -787,6 +789,15 @@ function showHint() {
 // Live renders of each hall for the stage select, taken behind the loading veil.
 async function renderPreviews() {
   const src = renderer.domElement;
+  // Render at a fixed landscape size whatever the screen, then put everything back.
+  const pw = 960;
+  const ph = 540;
+  renderer.setPixelRatio(1);
+  renderer.setSize(pw, ph, false);
+  post.setSize(pw, ph, 0, quality.bloomLevels);
+  camera.aspect = pw / ph;
+  rig.aspect = camera.aspect;
+  camera.updateProjectionMatrix();
   const shoot = (cv) => {
     const ctx = cv.getContext('2d');
     const aw = cv.width / cv.height;
@@ -822,6 +833,8 @@ async function renderPreviews() {
   }
   debugCam = null;
   if (stages.current) stages.exit();
+  appliedKey = '';
+  applyQuality();
   post.init = true;
 }
 
@@ -883,6 +896,9 @@ window.samurai = {
   },
   get introT() {
     return introT;
+  },
+  get introInfo() {
+    return { introT, introSkip, since: performance.now() - introStarted, state };
   },
   // Advance the game by n fixed steps (for deterministic captures and tests);
   // draw = false runs the game without rendering.

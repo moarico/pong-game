@@ -154,7 +154,7 @@ export class BastionStage extends Stage {
         { t: 9.8, pos: [1.2, 3.2, 18], look: [0, 3, 6], fov: 48 },
       ],
     };
-    this.preview = { pos: [4.2, 2.1, 7.5], look: [-0.5, 3.0, -8], fov: 54 };
+    this.preview = { pos: [2.6, 1.7, 0.2], look: [-0.6, 2.9, -6.5], fov: 52 };
     this.rand = mulberry32(99);
     this.flash = new THREE.Vector4(0, 1, 0, 0);
     this.strikeT = 4;
