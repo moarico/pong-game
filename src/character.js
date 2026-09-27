@@ -4,7 +4,7 @@ import { Animator } from './animator.js';
 import { Cloth } from './cloth.js';
 import { mat } from './meshbuilder.js';
 import { PAT } from './charmat.js';
-import { terrainHeight } from './terrain.js';
+import { groundHeight } from './ground.js';
 import { MOVE } from './config.js';
 
 const _v = new THREE.Vector3();
@@ -65,7 +65,7 @@ export class Character {
   update(dt, state) {
     this.anim.update(dt, state);
     const u = this.uniforms;
-    u.uGroundY.value = terrainHeight(state.pos.x, state.pos.z);
+    u.uGroundY.value = groundHeight(state.pos.x, state.pos.z);
     if (this.hatRadius > 0) {
       _v.set(0, -0.01, 0).applyMatrix4(this.fig.bones.hat.matrixWorld);
       u.uHat.value.set(_v.x, _v.y, _v.z, this.hatRadius * this.scale * 0.98);

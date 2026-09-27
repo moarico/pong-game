@@ -16,6 +16,7 @@ export class Wind {
     this.time = 0;
     this.strength = 0.55;
     this.boost = 0; // extra wind for the title screen
+    this.scale = 1; // indoors the air is still; on the bastion walls a gale blows
     this.scroll = shared.uWindScroll.value; // metres the gust pattern has travelled
     shared.uWindDir.value.copy(this.dir);
   }
@@ -26,7 +27,7 @@ export class Wind {
     // Slow swells between calm and blustery, with the odd strong spell.
     const swell = noise1(t * 0.055, 1) * 0.7 + noise1(t * 0.19, 2) * 0.3;
     const spell = smoothstep(0.62, 0.9, noise1(t * 0.021, 3));
-    this.strength = 0.3 + swell * 0.5 + spell * 0.35 + this.boost;
+    this.strength = (0.3 + swell * 0.5 + spell * 0.35) * this.scale + this.boost;
     // Gust bands travel downwind faster when it blows harder.
     const speed = 3.2 + this.strength * 5.0;
     this.scroll.x += this.dir.x * speed * dt;

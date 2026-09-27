@@ -1,6 +1,6 @@
 import * as THREE from 'three';
-import { MOVE, PLAY_RADIUS } from './config.js';
-import { terrainHeight } from './terrain.js';
+import { MOVE } from './config.js';
+import { groundHeight, clampToArena } from './ground.js';
 
 const wrapAngle = (a) => Math.atan2(Math.sin(a), Math.cos(a));
 
@@ -12,7 +12,7 @@ const wrapAngle = (a) => Math.atan2(Math.sin(a), Math.cos(a));
 export class Mover {
   constructor(x = 0, z = 0, yaw = 0, tuning = MOVE) {
     this.T = tuning;
-    this.pos = new THREE.Vector3(x, terrainHeight(x, z), z);
+    this.pos = new THREE.Vector3(x, groundHeight(x, z), z);
     this.vel = new THREE.Vector3();
     this.yaw = yaw; // facing = (sin yaw, 0, cos yaw)
     this.grounded = true;
@@ -114,20 +114,10 @@ export class Mover {
     }
 
     this.pos.addScaledVector(this.vel, dt);
-    // The fight stays on the hilltop: an unseen fence well short of the cliffs.
-    const r = Math.hypot(this.pos.x, this.pos.z);
-    if (r > PLAY_RADIUS) {
-      const nx = this.pos.x / r;
-      const nz = this.pos.z / r;
-      this.pos.x = nx * PLAY_RADIUS;
-      this.pos.z = nz * PLAY_RADIUS;
-      const out = this.vel.x * nx + this.vel.z * nz;
-      if (out > 0) {
-        this.vel.x -= out * nx;
-        this.vel.z -= out * nz;
-      }
-    }
-    const ground = terrainHeight(this.pos.x, this.pos.z);
+    // The fight stays on the hilltop (an unseen fence well short of the cliffs) or
+    // inside the arena's walls.
+    clampToArena(this.pos, this.vel);
+    const ground = groundHeight(this.pos.x, this.pos.z);
     if (this.grounded) {
       // Follow the rolling ground; step off crests into a fall.
       if (this.pos.y - ground < 0.25) {

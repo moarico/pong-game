@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { terrainHeight } from './terrain.js';
+import { groundHeight, clampCamera } from './ground.js';
 
 const smoothstep = (a, b, x) => {
   const t = Math.min(Math.max((x - a) / (b - a), 0), 1);
@@ -43,6 +43,13 @@ export class CameraRig {
     this.trauma = 0;
     this.shakeT = 0;
     this.combat = 0;
+    // Boss fights: a point to keep in view, a wider stance, a tilt toward tall foes.
+    this.focus = null;
+    this.focusW = 0;
+    this.focusAmt = 0;
+    this.lookIdle = 0;
+    this.extraDist = 0;
+    this.pitchBias = 0;
   }
 
   // Screen shake from blows and impacts (amount ~0.2 light .. 1 huge).
@@ -54,11 +61,26 @@ export class CameraRig {
     const [lx, ly] = input.consumeLook();
     this.yaw -= lx;
     this.pitch = Math.min(1.1, Math.max(-0.42, this.pitch + ly));
+    // Keep the boss in view: turn toward it gently whenever the player leaves the camera alone.
+    this.focusAmt = damp(this.focusAmt, this.focus ? this.focusW : 0, 1.5, dt);
+    if (this.focus && this.focusAmt > 0.01) {
+      const p = player.renderPos;
+      const dx = this.focus.x - p.x;
+      const dz = this.focus.z - p.z;
+      this.lookIdle = Math.abs(lx) + Math.abs(ly) > 1e-4 ? 0 : this.lookIdle + dt;
+      if (Math.hypot(dx, dz) > 1.5) {
+        const want = Math.atan2(-dx, -dz);
+        const k = 1 - Math.exp(-dt * 2.2 * this.focusAmt * smoothstep(0.5, 1.4, this.lookIdle));
+        let d = want - this.yaw;
+        d = Math.atan2(Math.sin(d), Math.cos(d));
+        this.yaw += d * k;
+      }
+    }
 
     const p = player.renderPos;
     // Track the ground under his feet and only part of a jump, so leaps rise
     // through the frame instead of dragging the whole view up and down.
-    const ground = terrainHeight(p.x, p.z);
+    const ground = groundHeight(p.x, p.z);
     const air = Math.max(0, p.y - ground);
     const goalY = ground + 1.45 + air * 0.72 + (this.extraY || 0);
     if (!this.ready) {
@@ -75,12 +97,12 @@ export class CameraRig {
     const run = smoothstep(2.4, 5.2, speed);
     // In a fight, pull back and up a little so the foes stay in view.
     this.combat = damp(this.combat, fight, 1.6, dt);
-    this.dist = damp(this.dist, this.baseDist + run * 0.6 + this.combat * 0.9, 2.2, dt);
+    this.dist = damp(this.dist, this.baseDist + run * 0.6 + this.combat * 0.9 + this.extraDist, 2.2, dt);
     // Portrait screens get a taller view so the sides are not cropped away.
     const baseFov = this.aspect >= 1 ? 44 : Math.min(74, THREE.MathUtils.radToDeg(2 * Math.atan(Math.tan(THREE.MathUtils.degToRad(22)) / this.aspect)) * 0.8);
     this.fov = damp(this.fov, baseFov + run * 4 + this.combat * 2, 2.5, dt);
 
-    const pitch = this.pitch + this.combat * 0.07;
+    const pitch = this.pitch + this.combat * 0.07 + this.pitchBias * this.focusAmt;
     const cp = Math.cos(pitch);
     const sp = Math.sin(pitch);
     this.look.set(-Math.sin(this.yaw) * cp, -sp, -Math.cos(this.yaw) * cp);
@@ -90,7 +112,8 @@ export class CameraRig {
     const offset = this.shoulder * Math.min(1, this.aspect) * (1 - this.combat * 0.3);
     this.aim.copy(this.target).addScaledVector(this.right, offset);
     cam.position.copy(this.aim).addScaledVector(this.look, -this.dist);
-    const minY = terrainHeight(cam.position.x, cam.position.z) + 0.45;
+    clampCamera(this.aim, cam.position);
+    const minY = groundHeight(cam.position.x, cam.position.z) + 0.45;
     if (cam.position.y < minY) cam.position.y = minY;
     cam.lookAt(this.aim);
     // Shake: smooth noise, scaled by trauma squared, decaying in real time.

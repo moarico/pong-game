@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { common, sharedUniforms, atmosphere } from './glsl.js';
+import { common, sharedUniforms, atmosphere, lights } from './glsl.js';
 
 // ---------------------------------------------------------------------------
 // One material for a whole character. Every vertex carries its own albedo and
@@ -22,6 +22,15 @@ export const PAT = {
   face: 8, // uv = face coordinates in metres (x across, y up from the eye line): eyes, brows, lips
   brocade: 9, // uv in metres of cloth: a dark damask of medallions and vines
   cloak: 10, // damask, with a torn hem and the odd hole (uv.y = metres above the hem)
+  // Monsters and machines (uv in metres unless noted).
+  glow: 11, // pure light: albedo x rim value x uGlow (eyes, lures, furnaces)
+  scales: 12, // overlapping scales with an oily sheen
+  brass: 13, // brushed brass plates, rivets, verdigris in the seams
+  crystal: 14, // faceted crystal with a cold fire inside (rim value = glow)
+  bone: 15, // ivory, pitted and cracked (teeth, horns, skulls)
+  flesh: 16, // wet skin, mottled; suckers along the underside (uv.x = around, 0..1)
+  armor: 17, // dark hammered steel, scratched, bright on the worn edges
+  hide: 18, // short black hair, split by glowing cracks (rim value = glow)
 };
 
 const vert = /* glsl */ `
@@ -56,9 +65,11 @@ const frag = /* glsl */ `
 ${common}
 ${sharedUniforms}
 ${atmosphere}
+${lights}
 uniform float uGroundY;
 uniform vec4 uHat;
 uniform vec4 uFlash;
+uniform vec4 uGlow;
 varying vec3 vWorld;
 varying vec3 vNormal;
 varying vec2 vUv;
@@ -66,8 +77,10 @@ varying vec3 vColor;
 varying vec4 vMat;
 varying vec2 vPatRim;
 
-// What polished steel sees: bright hazy sky above, the sunlit golden field below.
+// What polished steel sees: bright hazy sky above, the sunlit golden field below
+// (or, in an arena, the hall around it).
 vec3 envColor(vec3 r) {
+  if (uArena > 0.5) return mix(uEnvGround, uEnvSky, smoothstep(-0.35, 0.45, r.y));
   vec3 sky = mix(hazeColor(r), vec3(0.6, 0.78, 1.15), smoothstep(0.1, 0.8, r.y));
   vec3 field = mix(vec3(1.05, 0.72, 0.36), uFogSunColor * 0.5, pow(sat(dot(r, uSunDir)), 3.0));
   return mix(field, sky, smoothstep(-0.12, 0.04, r.y));
@@ -137,6 +150,8 @@ void main() {
   float bump = vMat.w;
   int pat = int(vPatRim.x + 0.5);
   float rimAmt = vPatRim.y;
+  vec3 emit = vec3(0.0);
+  float sheen = 0.0;
 
   if (pat == 1) {
     // Woven cane: strips running round the cone, over one spoke and under the next,
@@ -246,6 +261,85 @@ void main() {
     float jaw = smoothstep(-0.06, -0.1, p.y) * smoothstep(0.012, 0.03, ax) + smoothstep(0.012, 0.004, abs(p.y + 0.062)) * smoothstep(0.02, 0.01, ax);
     alb *= 1.0 - 0.08 * jaw;
     alb *= 1.0 - 0.1 * exp(-pow((ax - 0.031) / 0.02, 2.0) - pow((p.y - 0.004) / 0.013, 2.0));
+  } else if (pat == 11) {
+    emit = alb * rimAmt * uGlow.rgb * uGlow.a;
+    rimAmt = 0.0;
+  } else if (pat == 12) {
+    // Scales in overlapping rows, each rimmed dark, every one its own shade.
+    vec2 g = vUv * vec2(7.0, 9.0);
+    float row = floor(g.y);
+    g.x += 0.5 * mod(row, 2.0);
+    vec2 f = fract(g) - vec2(0.5, 0.05);
+    float d = length(vec2(f.x, f.y * 1.15));
+    float fw = length(fwidth(g));
+    float edge = smoothstep(0.4, 0.52, d) * (1.0 - smoothstep(0.4, 0.9, fw));
+    alb *= mix(0.8 + 0.4 * hash12(floor(g)), 0.42, edge);
+    rough = mix(rough, min(rough + 0.25, 1.0), edge);
+    N = bumpNormal(N, (0.6 - d) * 0.006 * (1.0 - smoothstep(0.3, 0.8, fw)));
+    sheen = 1.0;
+  } else if (pat == 13) {
+    // Brushed brass plates on a riveted grid, dulled and greened in the seams.
+    vec2 g = vUv * 1.6;
+    vec2 f = fract(g);
+    float e = min(min(f.x, 1.0 - f.x), min(f.y, 1.0 - f.y));
+    float fw = length(fwidth(g));
+    float seam = (1.0 - smoothstep(0.0, 0.025, e)) * (1.0 - smoothstep(0.08, 0.3, fw));
+    vec2 rv = fract(g * 7.0) - 0.5;
+    float rivet = (1.0 - smoothstep(0.16, 0.26, length(rv))) * step(e, 0.075) * (1.0 - smoothstep(0.05, 0.2, fw));
+    float brush = vnoise(vec2(vUv.x * 260.0, vUv.y * 5.0));
+    float patina = smoothstep(0.58, 0.82, vnoise(vUv * 2.7) * 0.6 + vnoise(vUv * 10.0) * 0.4);
+    alb *= 0.82 + 0.3 * brush;
+    alb = mix(alb, vec3(0.12, 0.27, 0.21), patina * 0.6 + seam * 0.35);
+    metal = mix(metal, 0.15, patina * 0.8 + seam * 0.5);
+    rough = mix(rough, 0.72, patina);
+    rough = mix(rough, 0.22, rivet);
+    N = bumpNormal(N, rivet * 0.004 * (0.3 - length(rv)) - seam * 0.0015);
+  } else if (pat == 14) {
+    // Crystal: facets come from the geometry; inside, veins of cold fire.
+    float vein = vnoise(vWorld.xz * 3.1 + vWorld.y * 2.3) * 0.6 + vnoise(vWorld.xy * 7.3 - uTime * 0.2) * 0.4;
+    float core = pow(sat(1.0 - abs(dot(N, V))), 1.2);
+    float pulse = 0.85 + 0.15 * sin(uTime * 2.1 + vWorld.x * 0.7 + vWorld.z * 0.5);
+    emit = alb * uGlow.rgb * uGlow.a * rimAmt * (0.25 + 0.9 * core + 0.8 * smoothstep(0.55, 0.8, vein)) * pulse;
+    rough = 0.08;
+    rimAmt = 0.4;
+  } else if (pat == 15) {
+    float pits = vnoise(vUv * 55.0);
+    float crack = smoothstep(0.025, 0.0, abs(vnoise(vUv * 7.0) - 0.5)) * 0.7;
+    alb *= (0.86 + 0.18 * pits) * (1.0 - crack * 0.6);
+    rough = mix(rough, 0.9, crack);
+  } else if (pat == 16) {
+    // Wet skin: mottled, veined, pale suckers down the underside.
+    float mott = vnoise(vUv * vec2(9.0, 4.0)) * 0.6 + vnoise(vUv * vec2(25.0, 11.0)) * 0.4;
+    alb *= 0.7 + 0.55 * mott;
+    float vein = smoothstep(0.03, 0.0, abs(vnoise(vUv * vec2(6.0, 2.5) + 3.0) - 0.5));
+    alb = mix(alb, alb * vec3(0.6, 0.35, 0.5), vein * 0.5);
+    float under = 1.0 - smoothstep(0.12, 0.2, abs(fract(vUv.x) - 0.5));
+    vec2 sc = vec2(fract(vUv.x) * 9.0, vUv.y * 5.5);
+    sc.y += 0.5 * mod(floor(sc.x), 2.0);
+    vec2 sf = fract(sc) - 0.5;
+    float sd = length(sf);
+    float ring = (1.0 - smoothstep(0.26, 0.34, sd)) * under;
+    float hole = (1.0 - smoothstep(0.1, 0.16, sd)) * under;
+    alb = mix(alb, vec3(0.55, 0.42, 0.4), ring * 0.7);
+    alb *= 1.0 - hole * 0.7;
+    N = bumpNormal(N, (ring - hole) * 0.01);
+    rough = 0.3;
+    sheen = 0.6;
+  } else if (pat == 17) {
+    // Dark hammered steel, scratched, bright where the edges have worn.
+    float ham = vnoise(vUv * 38.0) * 0.6 + vnoise(vUv * 90.0) * 0.4;
+    float scratch = smoothstep(0.012, 0.0, abs(vnoise(vec2(vUv.x * 140.0, vUv.y * 9.0)) - 0.5)) * 0.8;
+    alb *= 0.75 + 0.35 * ham + scratch * 0.9;
+    rough = mix(rough, 0.25, scratch);
+    N = bumpNormal(N, ham * 0.0025);
+  } else if (pat == 18) {
+    // Black hide over embers: short hair, and cracks glowing from within.
+    float hair = vnoise(vec2(vUv.x * 380.0, vUv.y * 26.0));
+    alb *= 0.8 + 0.3 * hair;
+    float c = abs(vnoise(vUv * 3.2 + 1.7) - 0.5);
+    float crack = smoothstep(0.03, 0.0, c) * smoothstep(0.35, 0.6, vnoise(vUv * 1.3));
+    emit = vec3(1.0, 0.36, 0.08) * uGlow.a * rimAmt * crack * (0.8 + 0.2 * sin(uTime * 5.0 + vUv.y * 9.0));
+    sheen = 0.3;
   } else if (pat == 7) {
     // Frosty tempered edge below a wavy hamon; mirror-polished body above it.
     float h = 0.6 + 0.07 * sin(vUv.y * 38.0) + 0.035 * sin(vUv.y * 91.0 + 1.3);
@@ -279,7 +373,7 @@ void main() {
   float rim = fres * (0.12 + 1.5 * back) * sat(NdL + 0.6) * rimAmt;
 
   // Tall grass swallows the light around the legs; the brim shades the face.
-  float grassOcc = smoothstep(0.1, 1.1, vWorld.y - uGroundY);
+  float grassOcc = mix(smoothstep(0.1, 1.1, vWorld.y - uGroundY), 1.0, uArena);
   float sunVis = grassOcc * hatShadow(vWorld);
   vec3 sun = uSunColor * sunVis;
   vec3 amb = mix(uAmbGround, uAmbSky, 0.5 + 0.5 * N.y) * mix(0.5, 1.0, grassOcc) * hatOcclusion(vWorld);
@@ -294,6 +388,11 @@ void main() {
   // Thin cloth, straw and ears glow where the sun shines through them.
   float thru = pow(sat(dot(-V, L)), 2.5) * (0.35 + 0.65 * sat(-NdL + 0.3));
   col += alb * uSunColor * thru * trans * sunVis;
+  // Torches, furnaces and lures close by; lightning; an oily sheen on scales and skin.
+  if (uArena > 0.5) col += pointLights(vWorld, N, V, alb * (1.0 - metal * 0.7), rough, 0.25) * mix(1.0, 0.75, metal);
+  col += alb * uFlashLight * vec3(0.55, 0.65, 1.0) * (0.35 + 0.65 * sat(N.y * 0.5 + 0.5));
+  col += sheen * (vec3(0.03, 0.05, 0.06) * uAmbSky * 6.0) * pow(1.0 - NdV, 2.0);
+  col += emit;
   // Struck: a brief flash that blooms around the silhouette.
   col += uFlash.rgb * uFlash.a * uFlash.a * (0.12 + 1.4 * fres);
   col = applyFog(col, vWorld);
@@ -309,6 +408,7 @@ export function makeCharacterMaterial(shared) {
       uGroundY: { value: 0 },
       uHat: { value: new THREE.Vector4(0, -1000, 0, 0) },
       uFlash: { value: new THREE.Vector4(1, 1, 1, 0) },
+      uGlow: { value: new THREE.Vector4(1, 1, 1, 1) },
     },
     vertexShader: vert,
     fragmentShader: frag,

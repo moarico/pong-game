@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { common, sharedUniforms, atmosphere } from './glsl.js';
-import { terrainHeight } from './terrain.js';
+import { groundHeight } from './ground.js';
 import { mulberry32 } from './noise.js';
 
 // ---------------------------------------------------------------------------
@@ -336,7 +336,7 @@ export class Blood {
       this.p[o + 1] += this.v[o + 1] * dt;
       this.p[o + 2] += this.v[o + 2] * dt;
       // Lost in the grass once it falls below the stems' mid-height.
-      if (this.p[o + 1] < terrainHeight(this.p[o], this.p[o + 2]) + 0.25) this.lifeA[i] = 0;
+      if (this.p[o + 1] < groundHeight(this.p[o], this.p[o + 2]) + 0.25) this.lifeA[i] = 0;
     }
     this.posAttr.needsUpdate = true;
     this.lifeAttr.needsUpdate = true;

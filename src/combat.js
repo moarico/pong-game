@@ -87,8 +87,16 @@ export function hurtCapsule(pos, scale, a, b) {
   return 0.3 * scale;
 }
 
-// Sweeps an action's blade over (t0, t1] against targets, calling onHit(target, point, dir)
-// at most once per target per action. Also feeds the trail.
+// Where to aim at a target: the nearest point of a big foe, the feet of a small one.
+const _aim = new THREE.Vector3();
+const _imp = new THREE.Vector3();
+export function aimAt(e, from, out = _aim) {
+  return e.aimPoint ? e.aimPoint(from, out) : out.copy(e.body.pos);
+}
+
+// Sweeps an action's blade over (t0, t1] against targets, calling onHit(target, point, dir, part)
+// at most once per target per action. Also feeds the trail. Big foes offer several
+// hurt volumes ({ a, b, r, part }) instead of one body capsule.
 export function sweepBlade(owner, action, t0, t1, prevPos, prevYaw, targets, trail, now, onHit) {
   const char = owner.char;
   const scale = char.scale;
@@ -110,13 +118,27 @@ export function sweepBlade(owner, action, t0, t1, prevPos, prevYaw, targets, tra
     if (targets && action.hitActive(t)) {
       for (const tg of targets) {
         if (!tg.hittable() || action.hits.has(tg)) continue;
-        const r = hurtCapsule(tg.body.pos, tg.char.scale, ca, cb);
-        const dist = segSeg(base, tip, ca, cb, _p1, _p2);
-        if (dist < r) {
+        let part = null;
+        let hitAt = null;
+        if (tg.hurtVolumes) {
+          let best = Infinity;
+          for (const v of tg.hurtVolumes()) {
+            const dist = segSeg(base, tip, v.a, v.b, _p1, _p2);
+            if (dist < v.r && dist - v.r < best) {
+              best = dist - v.r;
+              part = v;
+              hitAt = _p2.clone().lerp(_p1, 0.5);
+            }
+          }
+        } else {
+          const r = hurtCapsule(tg.body.pos, tg.char.scale, ca, cb);
+          if (segSeg(base, tip, ca, cb, _p1, _p2) < r) hitAt = _p1.clone();
+        }
+        if (hitAt) {
           action.hits.add(tg);
           // Direction the blade was travelling at the point of contact.
           const dir = havePrev ? tip.clone().sub(prevTip).normalize() : new THREE.Vector3(0, -1, 0);
-          onHit(tg, _p1.clone(), dir);
+          onHit(tg, hitAt, dir, part);
         }
       }
     }
@@ -199,15 +221,18 @@ export class PlayerCombat {
     let nearD = Infinity;
     for (const e of enemies) {
       if (!e.alive) continue;
-      const d = e.body.pos.distanceTo(body.pos);
+      const d = aimAt(e, body.pos).distanceTo(body.pos);
       if (d < nearD) {
         nearD = d;
         near = e;
       }
     }
-    this.inCombat = near && nearD < 11 ? 1 : 0;
-    this.hasLook = !!near && nearD < 14;
-    if (near) this.lookAt.copy(near.body.pos).y += 1.5 * near.char.scale;
+    this.inCombat = near && nearD < (near && near.isBoss ? 40 : 11) ? 1 : 0;
+    this.hasLook = !!near && nearD < (near.isBoss ? 40 : 14);
+    if (near) {
+      if (near.lookPoint) this.lookAt.copy(near.lookPoint);
+      else this.lookAt.copy(near.body.pos).y += 1.5 * near.char.scale;
+    }
 
     if (this.dead) {
       this.deadT += dt;
@@ -253,7 +278,7 @@ export class PlayerCombat {
     a.update(dt);
     this.moveEvents(a, t0, enemies);
     if (a === this.action) {
-      sweepBlade(this, a, t0, a.t, this.prevPos, this.prevYaw, enemies, this.g.fx.trailP, this.g.world.time, (e, point, dir) => this.strike(e, a, point, dir));
+      sweepBlade(this, a, t0, a.t, this.prevPos, this.prevYaw, enemies, this.g.fx.trailP, this.g.world.time, (e, point, dir, part) => this.strike(e, a, point, dir, part));
     }
     if (this.action && this.action.done) this.endAction();
   }
@@ -329,9 +354,10 @@ export class PlayerCombat {
       let best = null;
       let bestScore = Infinity;
       for (const e of enemies) {
-        if (!e.alive) continue;
-        const dx = e.body.pos.x - body.pos.x;
-        const dz = e.body.pos.z - body.pos.z;
+        if (!e.alive || (e.targetable && !e.targetable())) continue;
+        const ap = aimAt(e, body.pos);
+        const dx = ap.x - body.pos.x;
+        const dz = ap.z - body.pos.z;
         const dist = Math.hypot(dx, dz);
         if (dist > range) continue;
         const ang = Math.abs(wrapAngle(Math.atan2(dx, dz) - want));
@@ -344,8 +370,9 @@ export class PlayerCombat {
       }
       if (best) {
         this.target = best;
-        const dx = best.body.pos.x - body.pos.x;
-        const dz = best.body.pos.z - body.pos.z;
+        const ap = aimAt(best, body.pos);
+        const dx = ap.x - body.pos.x;
+        const dz = ap.z - body.pos.z;
         const dist = Math.hypot(dx, dz);
         act.faceYaw = Math.atan2(dx, dz);
         act.moveYaw = act.faceYaw;
@@ -391,26 +418,28 @@ export class PlayerCombat {
     if (!d.radius) return;
     for (const e of enemies) {
       if (!e.hittable() || a.hits.has(e)) continue;
-      const dx = e.body.pos.x - cx;
-      const dz = e.body.pos.z - cz;
+      const ap = aimAt(e, _imp.set(cx, body.pos.y, cz));
+      const dx = ap.x - cx;
+      const dz = ap.z - cz;
       const dist = Math.hypot(dx, dz);
-      if (dist > d.radius) continue;
+      if (dist > d.radius || ap.y - body.pos.y > 2.6) continue;
       a.hits.add(e);
-      const p = e.body.pos.clone();
-      p.y += 1.0;
-      this.strike(e, a, p, new THREE.Vector3(dx, 0.4, dz).normalize());
+      const p = ap.clone();
+      if (!e.aimPoint) p.y += 1.0;
+      this.strike(e, a, p, new THREE.Vector3(dx, 0.4, dz).normalize(), e.partAt ? e.partAt(p) : null);
     }
   }
 
-  strike(e, a, point, dir) {
+  strike(e, a, point, dir, part = null) {
     const d = a.def;
     const fx = this.g.fx;
     let dmg = d.dmg;
     if (d.dmgCharged) dmg = d.dmg + (d.dmgCharged - d.dmg) * a.charged;
-    const away = new THREE.Vector3(e.body.pos.x - this.body.pos.x, 0, e.body.pos.z - this.body.pos.z).normalize();
+    const from = e.isBoss ? point : e.body.pos;
+    const away = new THREE.Vector3(from.x - this.body.pos.x, 0, from.z - this.body.pos.z).normalize();
     const heavy = d.react === 'knockdown' || d.react === 'stagger';
     const res = e.receiveHit({
-      dmg, react: d.react, knock: d.knock || 1, dir: away, point, bladeDir: dir, heavy,
+      dmg, react: d.react, knock: d.knock || 1, dir: away, point, bladeDir: dir, heavy, part,
       breaks: heavy || d.radius > 0 || a.name === 'nukido' || a.name === 'kaiten', from: this, move: a.name,
     });
     if (res === 'blocked') {
@@ -429,7 +458,8 @@ export class PlayerCombat {
     }
     if (res === 'ignored') return;
     const killing = res === 'dead';
-    fx.blood.spray(point, dir, killing ? 44 : 22, killing ? 4.5 : 3);
+    if (e.hitFx) e.hitFx(point, dir, killing, part);
+    else fx.blood.spray(point, dir, killing ? 44 : 22, killing ? 4.5 : 3);
     fx.glints.flash(point, { color: 0xfff0dc, size: 0.35, life: 0.12, intensity: 5 });
     this.g.audio?.play(killing ? 'kill' : 'hit', { pos: point });
     const stop = killing ? 0.12 : heavy ? 0.1 : 0.065;
@@ -564,7 +594,8 @@ export class PlayerCombat {
       if (a.faceYaw !== null && a.faceYaw !== undefined && (d.kind !== 'slash' || a.t < d.wind + d.strike)) {
         // Track a moving target through the windup.
         if (this.target && this.target.alive && a.t < (d.wind || 0.2)) {
-          a.faceYaw = Math.atan2(this.target.body.pos.x - body.pos.x, this.target.body.pos.z - body.pos.z);
+          const tp = aimAt(this.target, body.pos);
+          a.faceYaw = Math.atan2(tp.x - body.pos.x, tp.z - body.pos.z);
           a.moveYaw = a.faceYaw;
         }
         C.face = a.faceYaw;

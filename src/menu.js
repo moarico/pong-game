@@ -7,10 +7,13 @@ import { firstPad } from './input.js';
 // ---------------------------------------------------------------------------
 
 export class Menu {
-  constructor({ onPlay, onResume, onQuit, onSound }) {
+  constructor({ onPlay, onResume, onQuit, onSound, onStage }) {
     this.el = document.getElementById('menu');
     this.main = document.getElementById('menu-main');
     this.controls = document.getElementById('menu-controls');
+    this.stagesEl = document.getElementById('menu-stages');
+    this.cards = [...this.stagesEl.querySelectorAll('.stage-card')];
+    this.sback = document.getElementById('m-sback');
     this.btn = {
       play: document.getElementById('m-play'),
       controls: document.getElementById('m-controls'),
@@ -20,7 +23,7 @@ export class Menu {
     };
     this.tabs = ['pad', 'keys', 'touch'].map((k) => ({ key: k, tab: document.getElementById(`t-${k}`), panel: document.getElementById(`p-${k}`) }));
     this.chip = document.getElementById('pad-chip');
-    this.cb = { onPlay, onResume, onQuit, onSound };
+    this.cb = { onPlay, onResume, onQuit, onSound, onStage };
     this.mode = 'title';
     this.screen = 'main';
     this.isOpen = false;
@@ -35,12 +38,15 @@ export class Menu {
     this.btn.sound.addEventListener('click', () => this.setSound(this.cb.onSound?.()));
     this.btn.quit.addEventListener('click', () => this.cb.onQuit?.());
     this.tabs.forEach((t, i) => t.tab.addEventListener('click', () => this.selectTab(i)));
-    for (const b of this.el.querySelectorAll('.mi, .tab')) {
+    for (const c of this.cards) c.addEventListener('click', () => this.cb.onStage?.(c.dataset.stage));
+    this.sback.addEventListener('click', () => this.showScreen('main'));
+    for (const b of this.el.querySelectorAll('.mi, .tab, .stage-card')) {
       b.addEventListener('pointerenter', () => this.focusEl(b));
     }
     addEventListener('keydown', (e) => {
       if (!this.isOpen) return;
-      if (e.code === 'ArrowDown' || e.code === 'ArrowRight' && this.onTab()) this.move(e.code === 'ArrowDown' ? 1 : 1, e.code);
+      if (this.screen === 'stages' && e.code.startsWith('Arrow')) this.moveGrid(e.code);
+      else if (e.code === 'ArrowDown' || e.code === 'ArrowRight' && this.onTab()) this.move(e.code === 'ArrowDown' ? 1 : 1, e.code);
       else if (e.code === 'ArrowUp' || e.code === 'ArrowLeft' && this.onTab()) this.move(-1, e.code);
       else if (e.code === 'Escape' || e.code === 'Backspace') this.back();
       else if (e.code === 'KeyP' && this.mode === 'pause') this.cb.onResume?.();
@@ -51,6 +57,7 @@ export class Menu {
 
   items() {
     if (this.screen === 'controls') return [...this.tabs.map((t) => t.tab), this.btn.back];
+    if (this.screen === 'stages') return [...this.cards, this.sback];
     return [this.btn.play, this.btn.controls, this.btn.sound, this.btn.quit].filter((b) => !b.hidden);
   }
 
@@ -86,9 +93,12 @@ export class Menu {
     this.screen = name;
     this.main.hidden = name !== 'main';
     this.controls.hidden = name !== 'controls';
+    this.stagesEl.hidden = name !== 'stages';
     this.el.classList.toggle('sub', name === 'controls');
+    this.el.classList.toggle('stages', name === 'stages');
+    if (name === 'stages') this.onStagesShown?.();
     if (name === 'controls') this.selectTab(this.tabs.findIndex((t) => t.tab.getAttribute('aria-selected') === 'true'), false);
-    this.index = name === 'controls' ? this.items().length - 1 : 0;
+    this.index = name === 'controls' ? this.items().length - 1 : name === 'stages' ? Math.max(0, this.cards.indexOf(this.lastCard)) : 0;
     this.focusIndex(this.index);
   }
 
@@ -110,11 +120,33 @@ export class Menu {
 
   activatePlay() {
     if (this.mode === 'pause') this.cb.onResume?.();
-    else this.cb.onPlay?.();
+    else this.showScreen('stages');
+  }
+
+  // Mark the halls whose boss has fallen.
+  setDone(id, on) {
+    const c = this.cards.find((k) => k.dataset.stage === id);
+    if (c) c.classList.toggle('done', on);
+  }
+
+  // Grid moves on the stage select: the hilltop across the top, the halls two by two, Back below.
+  moveGrid(code) {
+    const rows = [[0], [1, 2], [3, 4], [5]];
+    const i = this.index;
+    let r = rows.findIndex((row) => row.includes(i));
+    let c = Math.max(0, rows[r].indexOf(i));
+    if (code === 'ArrowLeft' || code === 'ArrowRight') {
+      const row = rows[r];
+      c = (c + (code === 'ArrowLeft' ? -1 : 1) + row.length) % row.length;
+    } else {
+      r = (r + (code === 'ArrowUp' ? -1 : 1) + rows.length) % rows.length;
+      c = Math.min(c, rows[r].length - 1);
+    }
+    this.focusIndex(rows[r][c]);
   }
 
   back() {
-    if (this.screen === 'controls') this.showScreen('main');
+    if (this.screen === 'controls' || this.screen === 'stages') this.showScreen('main');
     else if (this.mode === 'pause') this.cb.onResume?.();
   }
 
@@ -129,6 +161,7 @@ export class Menu {
     this.index = (i + list.length) % list.length;
     for (const b of this.el.querySelectorAll('.focus')) b.classList.remove('focus');
     const el = list[this.index];
+    if (this.cards.includes(el)) this.lastCard = el;
     el.classList.add('focus');
     try {
       el.focus({ preventScroll: true });
@@ -192,14 +225,18 @@ export class Menu {
       horiz = true;
     }
     const code = dir ? (horiz ? 'padH' : 'padV') : 0;
+    const go = () => {
+      if (this.screen === 'stages') this.moveGrid(horiz ? (dir < 0 ? 'ArrowLeft' : 'ArrowRight') : dir < 0 ? 'ArrowUp' : 'ArrowDown');
+      else this.move(dir, code);
+    };
     if (code !== this.lastDir) {
       this.repeat = 0.38;
-      if (dir) this.move(dir, code);
+      if (dir) go();
     } else if (dir) {
       this.repeat -= dt;
       if (this.repeat <= 0) {
         this.repeat = 0.15;
-        this.move(dir, code);
+        go();
       }
     }
     this.lastDir = code;
@@ -208,7 +245,7 @@ export class Menu {
     if (edge(1)) this.back();
     if (edge(9) || edge(8)) {
       if (this.mode === 'pause') this.cb.onResume?.();
-      else this.cb.onPlay?.();
+      else if (this.screen !== 'stages') this.showScreen('stages');
     }
   }
 }

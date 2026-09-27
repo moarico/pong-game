@@ -4,7 +4,7 @@ import { Mover } from './player.js';
 import { Action, Fall, MOVES } from './moves.js';
 import { sweepBlade } from './combat.js';
 import { SwordTrail } from './fx.js';
-import { terrainHeight } from './terrain.js';
+import { groundHeight } from './ground.js';
 import { MOVE } from './config.js';
 
 // ---------------------------------------------------------------------------
@@ -47,7 +47,7 @@ export class Enemy {
 
   spawn(x, z, yaw) {
     const b = this.body;
-    b.pos.set(x, terrainHeight(x, z), z);
+    b.pos.set(x, groundHeight(x, z), z);
     b.prevPos.copy(b.pos);
     b.renderPos.copy(b.pos);
     b.vel.set(0, 0, 0);

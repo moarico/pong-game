@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { DIM, SAYA_DIR } from './figure.js';
-import { terrainHeight } from './terrain.js';
+import { groundHeight } from './ground.js';
 
 // A damped spring toward target, taken in steps of at most 1/120 s so it stays
 // stable however long the frame (a slow phone, a hitch). Returns [x, v].
@@ -344,7 +344,7 @@ export class Animator {
     if (c.grounded && !this.wasGrounded) {
       for (const f of this.feet) {
         f.mode = 'plant';
-        f.plant.set(f.ankle.x, terrainHeight(f.ankle.x, f.ankle.z), f.ankle.z);
+        f.plant.set(f.ankle.x, groundHeight(f.ankle.x, f.ankle.z), f.ankle.z);
         f.yaw = f.outYaw;
         f.stanceAge = 0;
         // The foot was a hand's breadth up; settle it rather than snap it down.
@@ -488,7 +488,7 @@ export class Animator {
     for (let i = 0; i < 2; i++) {
       const f = this.feet[i];
       if (f.mode === 'plant') {
-        f.plant.y = terrainHeight(f.plant.x, f.plant.z);
+        f.plant.y = groundHeight(f.plant.x, f.plant.z);
         const q = clamp(f.p / duty, 0, 1);
         const roll = heelMax * (1 - smoothstep(0, 0.22, q)) - toeMax * smoothstep(0.55, 1, q);
         f.pitch = damp(f.pitch, moveW * roll * fw, 30, dt);
@@ -505,7 +505,7 @@ export class Animator {
         const sn = Math.sin(Math.PI * f.s);
         const ks = Math.sin(Math.PI * Math.min(1, f.s * 1.5));
         const kick = runW * 0.2 * ks * ks * (1 - f.s);
-        _v.y = terrainHeight(_v.x, _v.z) + (liftH * (0.8 * sn * sn + 0.2 * sn) + kick) * s;
+        _v.y = groundHeight(_v.x, _v.z) + (liftH * (0.8 * sn * sn + 0.2 * sn) + kick) * s;
         f.pitch = lerp(f.liftPitch, heelMax * moveW * fw, smoothstep(0.15, 0.9, f.s)) - runW * 0.55 * sn * sn;
         f.outYaw = lerpAngle(f.liftYaw, f.targetYaw, h);
         this.ankleFrom(_v, f.outYaw, f.pitch, f.ankle);
@@ -520,7 +520,7 @@ export class Animator {
         let tuck = rise > 0 ? smoothstep(1.0, 0.2, rise) : 1 - smoothstep(0.0, 0.85, -rise) * 0.7;
         tuck *= smoothstep(0.02, 0.16, this.airT);
         // Falling: legs reach for the ground as it comes up.
-        const above = (c.pos.y - terrainHeight(c.pos.x, c.pos.z)) / s;
+        const above = (c.pos.y - groundHeight(c.pos.x, c.pos.z)) / s;
         if (rise < 0) tuck *= smoothstep(0.05, 0.7, above);
         const lead = clamp(runW * 0.8 + moveW * 0.3, 0, 1);
         const air = i === 0
@@ -726,7 +726,7 @@ export class Animator {
       const f = this.feet[i];
       this.neutral(i, null, _v);
       this.toWorld(_v, f.plant);
-      f.plant.y = terrainHeight(f.plant.x, f.plant.z);
+      f.plant.y = groundHeight(f.plant.x, f.plant.z);
       f.yaw = c.yaw;
       f.outYaw = c.yaw;
       f.mode = 'plant';
@@ -782,7 +782,7 @@ export class Animator {
       tx = hx + (dx * maxL) / dl;
       tz = hz + (dz * maxL) / dl;
     }
-    f.target.set(tx, terrainHeight(tx, tz), tz);
+    f.target.set(tx, groundHeight(tx, tz), tz);
     f.targetYaw = yawPred + 0.07 * f.side * (1 - this.runW);
   }
 
@@ -821,8 +821,8 @@ export class Animator {
     const fx = Math.sin(f.outYaw);
     const fz = Math.cos(f.outYaw);
     const d = 0.12 * s;
-    const h1 = terrainHeight(x + fx * d, z + fz * d);
-    const h0 = terrainHeight(x - fx * d, z - fz * d);
+    const h1 = groundHeight(x + fx * d, z + fz * d);
+    const h0 = groundHeight(x - fx * d, z - fz * d);
     void yaw;
     return Math.atan2(h1 - h0, 2 * d);
   }

@@ -59,6 +59,7 @@ export class MeshBuilder {
     else this.col.push(m.color[0] * t, m.color[1] * t, m.color[2] * t);
     this.mat.push(m.rough, m.metal, m.trans, m.bump);
     this.pat.push(m.pat, m.rim);
+    if (!this.boneIndex) return;
     let w = typeof weights === 'function' ? weights(p) : weights;
     if (typeof w === 'string') w = [[w, 1]];
     const list = w
@@ -204,8 +205,10 @@ export class MeshBuilder {
     g.setAttribute('aColor', new THREE.Float32BufferAttribute(this.col, 3));
     g.setAttribute('aMat', new THREE.Float32BufferAttribute(this.mat, 4));
     g.setAttribute('aPat', new THREE.Float32BufferAttribute(this.pat, 2));
-    g.setAttribute('skinIndex', new THREE.Uint16BufferAttribute(this.si, 4));
-    g.setAttribute('skinWeight', new THREE.Float32BufferAttribute(this.sw, 4));
+    if (this.boneIndex) {
+      g.setAttribute('skinIndex', new THREE.Uint16BufferAttribute(this.si, 4));
+      g.setAttribute('skinWeight', new THREE.Float32BufferAttribute(this.sw, 4));
+    }
     g.setIndex(this.count > 65535 ? new THREE.Uint32BufferAttribute(this.idx, 1) : new THREE.Uint16BufferAttribute(this.idx, 1));
     g.computeBoundingSphere();
     return g;

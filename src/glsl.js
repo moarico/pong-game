@@ -82,6 +82,35 @@ uniform vec2 uMist;
 uniform vec2 uWindDir;
 uniform float uWindStrength;
 uniform vec2 uWindScroll;
+uniform float uArena; // 0 on the hilltop, 1 inside a boss arena
+uniform vec4 uPtPos[4]; // point lights: position, radius (0 = off)
+uniform vec4 uPtCol[4]; // colour x intensity
+uniform vec3 uEnvSky; // what polished surfaces see above and below, in an arena
+uniform vec3 uEnvGround;
+uniform float uFlashLight; // lightning: a brief cold flood of light
+`;
+
+// Local lights in the arenas: torches, furnaces, crystals, a lure in the dark.
+export const lights = /* glsl */ `
+vec3 pointLights(vec3 p, vec3 N, vec3 V, vec3 alb, float rough, float wrap) {
+  vec3 sum = vec3(0.0);
+  for (int i = 0; i < 4; i++) {
+    vec4 L = uPtPos[i];
+    if (L.w <= 0.0) continue;
+    vec3 d = L.xyz - p;
+    float d2 = dot(d, d);
+    float r2 = L.w * L.w;
+    if (d2 >= r2) continue;
+    float k = 1.0 - d2 / r2;
+    float att = k * k / (1.0 + d2 * 0.35);
+    vec3 l = d * inversesqrt(max(d2, 1e-4));
+    float ndl = max((dot(N, l) + wrap) / (1.0 + wrap), 0.0);
+    vec3 h = normalize(l + V);
+    float spec = pow(max(dot(N, h), 0.0), mix(90.0, 6.0, rough)) * (1.0 - rough) * 0.6;
+    sum += uPtCol[i].rgb * att * (alb * ndl + spec * ndl);
+  }
+  return sum;
+}
 `;
 
 const v2 = (a) => `vec2(${f(a[0])}, ${f(a[1])})`;

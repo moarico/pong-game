@@ -19,6 +19,9 @@ import { SwordTrail, Sparks, Blood, Glints } from './fx.js';
 import { Hud } from './hud.js';
 import { Sound } from './audio.js';
 import { Menu } from './menu.js';
+import { groundHeight } from './ground.js';
+import { StageManager } from './stage.js';
+import { STAGES } from './stages/index.js';
 
 const canvas = document.getElementById('game');
 const veil = document.getElementById('veil');
@@ -85,6 +88,12 @@ const shared = {
   uShadowMap: { value: null },
   uShadowMatrix: { value: new THREE.Matrix4() },
   uShadowParams: { value: new THREE.Vector4(2.8, 40, 0.2, 0) },
+  uArena: { value: 0 },
+  uPtPos: { value: Array.from({ length: 4 }, () => new THREE.Vector4()) },
+  uPtCol: { value: Array.from({ length: 4 }, () => new THREE.Vector4()) },
+  uEnvSky: { value: new THREE.Vector3(0.3, 0.3, 0.35) },
+  uEnvGround: { value: new THREE.Vector3(0.1, 0.08, 0.07) },
+  uFlashLight: { value: 0 },
 };
 
 let qName = initialQuality();
@@ -174,8 +183,9 @@ const fx = {
   glints,
   puffs,
   groundImpact(x, z, s) {
-    puffs.burst(x, terrainHeight(x, z), z, Math.min(1, s));
-    trail.ring(x, z, Math.min(1, 0.5 + s * 0.5));
+    puffs.burst(x, groundHeight(x, z), z, Math.min(1, s));
+    if (!stages.current) trail.ring(x, z, Math.min(1, 0.5 + s * 0.5));
+    else stages.current.onImpact?.(x, z, s);
   },
 };
 
@@ -207,6 +217,12 @@ game.combat = new PlayerCombat(game);
 game.playerTargets = [game.combat];
 const combat = game.combat;
 const director = new Director(game, scene);
+// The boss arenas. The hilltop's own sky, ground, sea, grass and dust step aside inside them.
+const stages = new StageManager(game, scene, post, [sky.mesh, ground.mesh, sea.mesh, hills.group, grass.group, motes.points]);
+for (const [id, S] of STAGES) stages.register(id, S);
+game.stages = stages;
+stages.onVictory = (st) => onVictory(st);
+const encounter = () => (stages.current ? stages.current.encounter : director);
 const trailOthers = [];
 const trailSlots = Array.from({ length: 8 }, () => ({ x: 0, z: 0, s: 0, r: 1 }));
 
@@ -214,8 +230,13 @@ const trailSlots = Array.from({ length: 8 }, () => ({ x: 0, z: 0, s: 0, r: 1 }))
 function revive() {
   if (!combat.dead || combat.deadT < 2.2) return;
   combat.revive();
-  director.reset();
   hud.setFallen(false);
+  if (stages.current) {
+    stages.restartFight();
+    hud.show('Rise', 'Face it again', 2.4);
+    return;
+  }
+  director.reset();
   hud.show('Rise', 'The grass remembers', 2.4);
 }
 addEventListener('keydown', revive);
@@ -227,6 +248,20 @@ addEventListener('pointerdown', revive);
 
 let state = 'title';
 let debugCam = null; // { pos, target, fov }: a fixed camera for checks from the console
+let introT = 0;
+let introSkip = false;
+let victoryT = -1;
+let victoryPrompt = false;
+const introLook = new THREE.Vector3();
+const fadeEl = document.getElementById('fade');
+const doneKey = 'samurai-vanquished';
+function loadDone() {
+  try {
+    return JSON.parse(localStorage.getItem(doneKey) || '{}');
+  } catch {
+    return {};
+  }
+}
 let camBlend = 1; // 0..1 glide from the title shot into the play camera
 let wasLocked = false;
 const cine = { pos: new THREE.Vector3(), quat: new THREE.Quaternion(), fov: 48.8 };
@@ -306,7 +341,102 @@ function resume() {
   canvas.focus({ preventScroll: true });
 }
 
+// Fade to black, do something, fade back in.
+function fade(then) {
+  fadeEl.classList.add('on');
+  setTimeout(() => {
+    then();
+    setTimeout(() => fadeEl.classList.remove('on'), 120);
+  }, 520);
+}
+
+// Into a boss arena: the hall, the samurai at its door, the boss in its lair, and an intro.
+function startStage(id) {
+  if (state !== 'title') return;
+  if (id === 'hilltop') {
+    startPlay();
+    return;
+  }
+  menu.close();
+  state = 'loading';
+  fade(() => {
+    director.reset(true);
+    combat.revive();
+    combat.fall = null;
+    hud.setFallen(false);
+    const st = stages.enter(id);
+    state = 'intro';
+    introT = 0;
+    introSkip = false;
+    victoryT = -1;
+    victoryPrompt = false;
+    input.enabled = false;
+    document.body.classList.add('cinematic');
+    hud.setBoss(st.boss);
+    hud.hideCard();
+    sound.setAmbient(id);
+    rig.ready = false;
+    rig.yaw = st.spawn.yaw + Math.PI;
+    rig.pitch = 0.06;
+  });
+}
+
+function endIntro() {
+  const st = stages.current;
+  state = 'play';
+  document.body.classList.remove('cinematic');
+  input.enabled = true;
+  input.syncPad();
+  st.boss.endIntro?.();
+  camBlend = 0;
+  const b = st.boss.focus;
+  const P = player.pos;
+  rig.yaw = Math.atan2(-(b.x - P.x), -(b.z - P.z));
+  rig.pitch = 0.1;
+  hud.card(st.boss.name, st.boss.epithet, 3.2);
+  lockPointer();
+  canvas.focus({ preventScroll: true });
+}
+
+function onVictory(st) {
+  victoryT = 0;
+  victoryPrompt = false;
+  sound.play('victory');
+  hud.card('Vanquished', `${st.boss.name} has fallen`, 6.5);
+  const done = loadDone();
+  done[st.id] = 1;
+  try {
+    localStorage.setItem(doneKey, JSON.stringify(done));
+  } catch {
+    // Not remembered; fine.
+  }
+  menu.setDone(st.id, true);
+}
+
+function returnToSelect() {
+  fade(() => {
+    quitToTitle();
+    menu.showScreen('stages');
+  });
+}
+
 function quitToTitle() {
+  if (stages.current) {
+    stages.exit();
+    sound.setAmbient(null);
+    hud.setBoss(null);
+    hud.hideCard();
+    hud.show('', '', 0.01);
+    rig.focus = null;
+    rig.extraDist = 0;
+    rig.pitchBias = 0;
+    rig.ready = false;
+    player.pos.set(0, groundHeight(0, 0), 0);
+    player.prevPos.copy(player.pos);
+    player.renderPos.copy(player.pos);
+    document.body.classList.remove('cinematic');
+  }
+  victoryT = -1;
   director.reset(true);
   combat.revive();
   combat.fall = null;
@@ -320,6 +450,7 @@ function quitToTitle() {
 
 const menu = new Menu({
   onPlay: startPlay,
+  onStage: startStage,
   onResume: resume,
   onQuit: quitToTitle,
   onSound: () => {
@@ -329,6 +460,14 @@ const menu = new Menu({
   },
 });
 menu.setSound(!sound.muted);
+for (const id of Object.keys(loadDone())) menu.setDone(id, true);
+// Any key or tap skips an intro once it has begun, or leaves after a victory.
+function skipOrLeave(e) {
+  if (state === 'intro' && introT > 0.8) introSkip = true;
+  else if (state === 'play' && victoryPrompt && e.type !== 'keyup') returnToSelect();
+}
+addEventListener('keydown', skipOrLeave);
+addEventListener('pointerdown', skipOrLeave);
 input.onPadChange = (on) => menu.setPad(on);
 document.getElementById('pause').addEventListener('click', (e) => {
   e.preventDefault();
@@ -423,14 +562,16 @@ function tick(realDt, live, draw = true) {
     pause();
   }
   menu.update(realDt);
-  const dt = state === 'paused' ? 0 : world.advance(realDt);
+  const dt = state === 'paused' || state === 'loading' ? 0 : world.advance(realDt);
   shared.uTime.value += dt;
-  const enemies = director.enemies;
+  const enc = encounter();
+  const enemies = enc.enemies;
+  const arena = stages.current;
 
   // Decide: the player's buttons, the foes' minds.
   combat.think(dt, enemies);
   for (const e of enemies) e.think(dt, combat);
-  if (state === 'play') director.update(dt);
+  if (state === 'play' && !arena) director.update(dt);
 
   // Physics at a fixed 120 Hz, interpolated for rendering.
   acc += dt;
@@ -442,8 +583,10 @@ function tick(realDt, live, draw = true) {
     for (let i = 0; i < enemies.length; i++) {
       const a = enemies[i];
       if (!a.active || !a.alive) continue;
-      if (!combat.dead) player.pushApart(a.body, 0.35);
-      for (let j = i + 1; j < enemies.length; j++) if (enemies[j].active && enemies[j].alive) a.body.pushApart(enemies[j].body);
+      if (a.collide) a.collide(player);
+      else if (!combat.dead) player.pushApart(a.body, 0.35);
+      if (a.isBoss) continue;
+      for (let j = i + 1; j < enemies.length; j++) if (enemies[j].active && enemies[j].alive && !enemies[j].isBoss) a.body.pushApart(enemies[j].body);
     }
     acc -= FIXED;
     steps++;
@@ -459,7 +602,7 @@ function tick(realDt, live, draw = true) {
   wind.update(dt);
   const ev = player.consumeEvents();
   const pos = player.renderPos;
-  const groundY = terrainHeight(pos.x, pos.z);
+  const groundY = groundHeight(pos.x, pos.z);
   const running = Math.hypot(player.vel.x, player.vel.z) > 3;
   samurai.update(dt, {
     pos,
@@ -479,7 +622,7 @@ function tick(realDt, live, draw = true) {
   // Grass parts around foes, and lies flat where the fallen lie.
   trailOthers.length = 0;
   for (const e of enemies) {
-    if (!e.active || trailOthers.length >= trailSlots.length) continue;
+    if (!e.active || e.isBoss || trailOthers.length >= trailSlots.length) continue;
     const b = e.body.renderPos;
     const o = trailSlots[trailOthers.length];
     o.x = b.x;
@@ -488,15 +631,54 @@ function tick(realDt, live, draw = true) {
     o.r = e.alive ? 0.85 * e.char.scale : 1.25;
     trailOthers.push(o);
   }
-  trail.update(dt, pos, player.grounded, pos.y - groundY, ev.landed, ev.landSpeed, trailOthers);
+  if (!arena) trail.update(dt, pos, player.grounded, pos.y - groundY, ev.landed, ev.landSpeed, trailOthers);
   // A stiff breeze off the sea while the title is up: the cloak streams, the plumes bow.
-  wind.boost += ((state === 'play' ? 0 : 0.55) - wind.boost) * Math.min(1, realDt * 0.8);
-  if (state === 'title') {
+  wind.boost += ((state === 'play' || arena ? 0 : 0.55) - wind.boost) * Math.min(1, realDt * 0.8);
+  if (arena) {
+    const boss = arena.boss;
+    rig.focus = boss.alive || boss.state === 'dying' ? boss.focus : null;
+    rig.focusW = 1;
+    rig.extraDist = arena.camDist ?? 1.2;
+    rig.pitchBias = arena.pitchBias ?? -0.08;
+  }
+  if (state === 'intro') {
+    introT += realDt;
+    const fov = arena.introCamera(introT, cine.pos, introLook);
+    arena.introEvents?.(introT, hud);
+    if (fov && !introSkip) {
+      camera.position.copy(cine.pos);
+      camera.lookAt(introLook);
+      cine.quat.copy(camera.quaternion);
+      cine.fov = fov;
+      if (Math.abs(camera.fov - fov) > 1e-3) {
+        camera.fov = fov;
+        camera.updateProjectionMatrix();
+      }
+      rig.update(realDt, player, input, 0);
+      setCamera(cine.pos, cine.quat, cine.fov);
+    } else {
+      rig.update(realDt, player, input, 1);
+      endIntro();
+      if (introSkip) {
+        arena.boss.skipIntro?.();
+        hud.hideCard();
+        camBlend = 1;
+      }
+    }
+  } else if (state === 'title') {
     rig.update(realDt, player, input, 0);
     titleShot(world.time);
     setCamera(cine.pos, cine.quat, cine.fov);
   } else if (state === 'play') {
     rig.update(realDt, player, input, combat.inCombat);
+    if (victoryT >= 0) {
+      victoryT += realDt;
+      if (victoryT > 3 && hud.boss) hud.setBoss(null);
+      if (victoryT > 6.5 && !victoryPrompt) {
+        victoryPrompt = true;
+        hud.show('Victory', isTouchDevice() ? 'Tap to choose your next battle' : 'Press any key to choose your next battle', 9999);
+      }
+    }
     if (camBlend < 1) {
       // Glide from the title shot into the play camera.
       camBlend = Math.min(1, camBlend + realDt / 1.6);
@@ -530,26 +712,30 @@ function tick(realDt, live, draw = true) {
   const halfH = Math.atan(Math.tan(THREE.MathUtils.degToRad(camera.fov) / 2) * camera.aspect);
   shared.uCullCos.value = Math.cos(Math.min(Math.PI, halfH + 0.45));
 
-  sky.update(dt, camera, wind);
-  ground.update(camera);
-  hills.update(camera);
-  sea.update(camera);
-  motes.update(dt, wind, camera, post.h);
+  if (!arena) {
+    sky.update(dt, camera, wind);
+    ground.update(camera);
+    hills.update(camera);
+    sea.update(camera);
+    motes.update(dt, wind, camera, post.h);
+  } else {
+    stages.update(dt, camera, post.h);
+  }
   puffs.update(dt, wind, camera, post.h);
 
   center.copy(pos).y += 0.95;
   casters.length = 0;
   for (const e of enemies) if (e.active && e.sink < 0.5) casters.push(e.body.renderPos);
-  if (draw) shadow.render(renderer, scene, center, SUN_DIR, casters);
+  if (draw) shadow.render(renderer, scene, center, shared.uSunDir.value, casters);
   // Keep the samurai's chest in focus; in a fight, soften the blur so foes stay readable.
   center.y += 0.35;
   post.focus = camera.position.distanceTo(center);
-  post.dof = quality.dof * (1 - 0.55 * rig.combat) * (state === 'play' ? 1 : 0.4);
-  if (draw) post.render(scene, camera, dt, SUN_DISC);
+  post.dof = quality.dof * (1 - 0.55 * rig.combat) * (state === 'play' ? 1 : 0.4) * (arena ? 0.35 : 1);
+  if (draw) post.render(scene, camera, dt, stages.lightDir);
 
   combat.endFrame();
   for (const e of enemies) e.endFrame();
-  hud.update(realDt, combat, director.all, camera, innerWidth, innerHeight);
+  hud.update(realDt, combat, enc.all, camera, innerWidth, innerHeight);
   sound.setListener(camera.position.x, camera.position.z, rig.yaw);
   sound.setWind(wind.strength);
 
@@ -570,6 +756,47 @@ function showHint() {
   setTimeout(check, 500);
 }
 
+// Live renders of each hall for the stage select, taken behind the loading veil.
+async function renderPreviews() {
+  const src = renderer.domElement;
+  const shoot = (cv) => {
+    const ctx = cv.getContext('2d');
+    const aw = cv.width / cv.height;
+    let sw = src.width;
+    let sh = sw / aw;
+    if (sh > src.height) {
+      sh = src.height;
+      sw = sh * aw;
+    }
+    ctx.drawImage(src, (src.width - sw) / 2, (src.height - sh) * 0.45, sw, sh, 0, 0, cv.width, cv.height);
+    cv.classList.add('ready');
+  };
+  for (const card of document.querySelectorAll('.stage-card')) {
+    const id = card.dataset.stage;
+    const cv = card.querySelector('canvas');
+    try {
+      if (id !== 'hilltop') {
+        const st = stages.enter(id);
+        if (!st) continue;
+        st.boss.previewPose?.();
+        const pv = st.preview;
+        debugCam = { pos: new THREE.Vector3(...pv.pos), target: new THREE.Vector3(...pv.look), fov: pv.fov };
+      }
+      post.init = true;
+      for (let i = 0; i < 40; i++) tick(1 / 30, false, false);
+      tick(1 / 30, false, true);
+      tick(1 / 30, false, true);
+      shoot(cv);
+      await new Promise((r) => setTimeout(r, 0));
+    } catch (err) {
+      console.warn('preview', id, err);
+    }
+  }
+  debugCam = null;
+  if (stages.current) stages.exit();
+  post.init = true;
+}
+
 async function start() {
   if (opts.has('fps')) fpsEl.hidden = false;
   try {
@@ -583,6 +810,7 @@ async function start() {
   } catch {
     // Older browsers without parallel compile simply compile on first draw.
   }
+  if (!opts.has('nopreview')) await renderPreviews();
   last = performance.now();
   if (opts.has('play')) {
     state = 'title';
@@ -616,7 +844,18 @@ window.samurai = {
   set debugCam(v) {
     debugCam = v;
   },
-  groundAt: (x, z) => terrainHeight(x, z),
+  groundAt: (x, z) => groundHeight(x, z),
+  stages,
+  startStage(id) {
+    state = 'title';
+    startStage(id);
+  },
+  skipIntro() {
+    introSkip = true;
+  },
+  get introT() {
+    return introT;
+  },
   // Advance the game by n fixed steps (for deterministic captures and tests);
   // draw = false runs the game without rendering.
   step(n = 1, dt = 1 / 30, draw = true) {

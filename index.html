@@ -65,6 +65,9 @@
     color: var(--ink-faint);
   }
   #veil.gone { opacity: 0; }
+  #whiteout { position: fixed; inset: 0; background: radial-gradient(ellipse at center, #fffdf4, #e8fff8 60%, #c8e8e4); opacity: 0; pointer-events: none; z-index: 2; mix-blend-mode: screen; }
+  #fade { position: fixed; inset: 0; background: #000; opacity: 0; pointer-events: none; transition: opacity 0.5s ease; z-index: 8; }
+  #fade.on { opacity: 1; }
 
   #hint {
     position: fixed;
@@ -238,6 +241,59 @@
     color: var(--ember);
     transition: opacity 0.25s ease;
   }
+  /* A boss's name and life across the top. */
+  #boss-bar {
+    position: fixed;
+    top: calc(22px + env(safe-area-inset-top, 0px));
+    left: 50%;
+    width: min(620px, calc(100vw - 150px));
+    transform: translate(-50%, -8px);
+    display: grid;
+    gap: 8px;
+    pointer-events: none;
+    z-index: 3;
+    opacity: 0;
+    transition: opacity 0.8s ease, transform 0.8s ease;
+    text-shadow: 0 1px 10px rgba(0, 0, 0, 0.7);
+  }
+  #boss-bar.on { opacity: 1; transform: translate(-50%, 0); }
+  #boss-bar .bb-head { display: flex; justify-content: space-between; align-items: baseline; gap: 16px; }
+  #boss-bar .bb-name { font: 500 13px/1 var(--font); letter-spacing: 0.42em; text-transform: uppercase; color: var(--ink); }
+  #boss-bar .bb-sub { font: 400 11px/1 var(--font); letter-spacing: 0.18em; color: var(--ink-soft); white-space: nowrap; }
+  #boss-bar .bar { height: 7px; border-radius: 3px; background: rgba(8, 5, 4, 0.6); box-shadow: 0 0 0 1px rgba(244, 231, 207, 0.18); }
+  #boss-bar .bar i { background: linear-gradient(90deg, #7a1a12, #c8402a 60%, #f0764c); box-shadow: 0 0 10px rgba(240, 118, 76, 0.55); }
+  #boss-bar .bar b { background: rgba(244, 231, 207, 0.7); }
+  #boss-bar .bar u { position: absolute; left: 50%; top: -3px; bottom: -3px; width: 1px; background: rgba(244, 231, 207, 0.55); }
+  #boss-bar.stagger .bar { box-shadow: 0 0 0 1px rgba(255, 200, 120, 0.8), 0 0 16px rgba(255, 180, 94, 0.5); }
+  body.touch #boss-bar { top: calc(70px + env(safe-area-inset-top, 0px)); width: calc(100vw - 48px); }
+
+  /* The cinematic caption: stage and boss names, the victory. */
+  #title-card {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 20vh;
+    display: grid;
+    gap: 14px;
+    justify-items: center;
+    text-align: center;
+    pointer-events: none;
+    z-index: 3;
+    opacity: 0;
+    transform: translateY(10px);
+    transition: opacity 1.2s ease, transform 1.6s ease;
+    text-shadow: 0 2px 24px rgba(0, 0, 0, 0.75), 0 0 2px rgba(0, 0, 0, 0.6);
+  }
+  #title-card.on { opacity: 1; transform: none; }
+  #title-card h1 {
+    margin: 0;
+    font: 500 clamp(24px, 4.2vw, 46px)/1 var(--font);
+    letter-spacing: 0.3em;
+    text-transform: uppercase;
+    color: var(--ink);
+  }
+  #title-card p { margin: 0; font: 400 clamp(12px, 1.4vw, 15px)/1.4 var(--font); letter-spacing: 0.34em; text-transform: uppercase; color: var(--ember); }
+
   #fallen {
     position: fixed;
     inset: 0;
@@ -458,6 +514,65 @@
   .keys dd { margin: 0; color: var(--ink-soft); text-align: right; }
   .keys kbd { font: 500 11px/1 var(--font); color: var(--ink); padding: 3px 7px 4px; border: 1px solid var(--ink-faint); border-radius: 4px; background: var(--glass); }
   .mi.back { justify-self: start; }
+
+  /* Stage select: the halls as a grid of live renders. */
+  .menu-stages {
+    width: min(1000px, 100%);
+    margin: auto;
+    display: grid;
+    gap: 14px;
+    align-content: center;
+    max-height: calc(100% - 20px);
+    overflow: auto;
+    padding: 20px clamp(12px, 2.6vw, 28px);
+    background: rgba(10, 7, 5, 0.84);
+    border: 1px solid rgba(244, 231, 207, 0.12);
+    border-radius: 14px;
+    box-shadow: 0 30px 80px rgba(0, 0, 0, 0.45);
+    -webkit-backdrop-filter: blur(6px);
+    backdrop-filter: blur(6px);
+  }
+  .menu-stages header { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 8px 24px; }
+  .menu-stages h2 { margin: 0; font: 500 13px/1 var(--font); letter-spacing: 0.55em; text-transform: uppercase; }
+  .ms-hint { font: 400 12px/1.4 var(--font); letter-spacing: 0.06em; color: var(--ink-soft); }
+  .stage-grid { display: grid; grid-template-columns: 1fr 1fr; gap: clamp(8px, 1.4vw, 14px); }
+  .stage-card {
+    position: relative;
+    appearance: none;
+    border: 0;
+    padding: 0;
+    border-radius: 10px;
+    overflow: hidden;
+    aspect-ratio: 16 / 9;
+    background: #120c09 radial-gradient(ellipse at 50% 40%, rgba(255, 180, 94, 0.12), rgba(0, 0, 0, 0) 60%);
+    cursor: pointer;
+    outline: none;
+    box-shadow: 0 0 0 1px rgba(244, 231, 207, 0.14);
+    transition: transform 0.25s ease, box-shadow 0.25s ease;
+    color: var(--ink);
+    font-family: var(--font);
+  }
+  .stage-card.wide { grid-column: 1 / -1; aspect-ratio: 32 / 7; }
+  .stage-card canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; opacity: 0; transition: opacity 0.6s ease; }
+  .stage-card canvas.ready { opacity: 1; }
+  .stage-card::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(180deg, rgba(6, 4, 3, 0.62) 0%, rgba(6, 4, 3, 0.1) 38%, rgba(6, 4, 3, 0) 60%, rgba(6, 4, 3, 0.35) 100%);
+    pointer-events: none;
+  }
+  .sc-text { position: absolute; left: 14px; right: 14px; top: 12px; z-index: 1; display: grid; gap: 7px; text-align: left; text-shadow: 0 1px 10px rgba(0, 0, 0, 0.8); }
+  .sc-title { font: 500 clamp(14px, 2.1vw, 23px)/1.1 var(--font); color: #fff; letter-spacing: 0.01em; }
+  .sc-sub { font: 500 clamp(9px, 1vw, 11px)/1 var(--font); letter-spacing: 0.26em; text-transform: uppercase; color: var(--ember); }
+  .sc-done { position: absolute; right: 10px; bottom: 10px; z-index: 1; font: 600 9px/1 var(--font); letter-spacing: 0.3em; text-transform: uppercase; color: #1a120c; background: var(--ember); padding: 5px 8px 5px 10px; border-radius: 999px; display: none; }
+  .stage-card.done .sc-done { display: block; }
+  .stage-card.focus, .stage-card:hover, .stage-card:focus-visible { transform: translateY(-2px); box-shadow: 0 0 0 2px var(--ember), 0 14px 40px rgba(0, 0, 0, 0.5); }
+  #menu.stages::before { background: rgba(9, 6, 5, 0.7); }
+  @media (max-width: 560px) {
+    .sc-text { left: 9px; top: 8px; gap: 4px; }
+    .ms-hint { display: none; }
+  }
   @media (max-width: 620px), (max-height: 420px) and (max-width: 620px) {
     .pad-map .callouts { display: none; }
     .legend { display: grid; }
@@ -474,7 +589,8 @@
     .tagline { display: none; }
   }
   body.menu-open #hud-life, body.menu-open #hint, body.menu-open #banner, body.menu-open #moment,
-  body.menu-open .touch-only, body.menu-open #hud-foes { display: none !important; }
+  body.menu-open .touch-only, body.menu-open #hud-foes, body.menu-open #boss-bar, body.menu-open #title-card { display: none !important; }
+  body.cinematic .touch-only, body.cinematic #hud-life, body.cinematic #hint, body.cinematic #boss-bar { opacity: 0 !important; pointer-events: none; }
 
   /* Pause button for touch screens (it stays when a controller takes over). */
   #pause {
@@ -519,6 +635,7 @@
 <body>
 <canvas id="game" tabindex="0" aria-label="A samurai fighting bandits in a grass field at sunset"></canvas>
 <div id="veil"><span>Loading</span></div>
+<div id="fade"></div>
 <div id="hint" class="gone">
   <span class="desk-only"><kbd>W A S D</kbd>move</span>
   <span class="desk-only"><kbd>Shift</kbd>run</span>
@@ -548,6 +665,9 @@
 <div id="hud-life"><div class="label">Ronin</div><div class="bar"><b></b><i></i></div></div>
 <div id="hud-foes"></div>
 <div id="banner"><h2></h2><p></p></div>
+<div id="boss-bar"><div class="bb-head"><span class="bb-name"></span><span class="bb-sub"></span></div><div class="bar"><b></b><i></i><u></u></div></div>
+<div id="title-card"><h1></h1><p></p></div>
+<div id="whiteout"></div>
 <div id="moment"></div>
 <div id="fallen"><h2>You have fallen</h2><p></p></div>
 <div id="menu" hidden>
@@ -679,6 +799,20 @@
       </dl>
     </div>
     <button id="m-back" class="mi back" type="button">Back</button>
+  </section>
+  <section class="menu-stages" id="menu-stages" aria-label="Choose your battle" hidden>
+    <header>
+      <h2>Choose your battle</h2>
+      <span class="ms-hint">Four halls, four great foes. Or the grass at dusk.</span>
+    </header>
+    <div class="stage-grid">
+      <button class="stage-card wide" type="button" data-stage="hilltop"><canvas width="960" height="210"></canvas><span class="sc-text"><span class="sc-title">The Hilltop.</span><span class="sc-sub">Bandits in the grass · endless waves</span></span></button>
+      <button class="stage-card" type="button" data-stage="cathedral"><canvas width="640" height="360"></canvas><span class="sc-text"><span class="sc-title">The Sunken Cathedral.</span><span class="sc-sub">The Maw of the Deep</span></span><span class="sc-done">Vanquished</span></button>
+      <button class="stage-card" type="button" data-stage="forge"><canvas width="640" height="360"></canvas><span class="sc-text"><span class="sc-title">The Clockwork Forge.</span><span class="sc-sub">The Brass Colossus</span></span><span class="sc-done">Vanquished</span></button>
+      <button class="stage-card" type="button" data-stage="caves"><canvas width="640" height="360"></canvas><span class="sc-text"><span class="sc-title">The Crystal Caves.</span><span class="sc-sub">The Crystal Wyrm</span></span><span class="sc-done">Vanquished</span></button>
+      <button class="stage-card" type="button" data-stage="bastion"><canvas width="640" height="360"></canvas><span class="sc-text"><span class="sc-title">The Ruined Bastion.</span><span class="sc-sub">The Storm Rider</span></span><span class="sc-done">Vanquished</span></button>
+    </div>
+    <button id="m-sback" class="mi back" type="button">Back</button>
   </section>
 </div>
 <button id="pause" class="touch-only" type="button" aria-label="Pause"></button>
