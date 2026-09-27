@@ -165,7 +165,8 @@ float terrainHeight(vec2 p) {
   float r2 = dot(p, p);
   // Smooth on the hilltop, livelier further out.
   float detail = 0.3 + 0.7 * smoothstep(150.0, 600.0, sqrt(r2));
-  float h = ${f(TERRAIN.top)} - fall + climb + n * detail;
+  float knoll = ${f(TERRAIN.knoll)} * exp(-r2 * ${f(1 / (2 * TERRAIN.knollRadius * TERRAIN.knollRadius))});
+  float h = ${f(TERRAIN.top)} - fall + climb + knoll + n * detail;
   if (r2 > ${f(TERRAIN.near * TERRAIN.near)}) h = terrainCoast(p, h, n);
   return h;
 }

@@ -9,6 +9,7 @@ const [RX, RZ] = T.right;
 const CX = SX * T.crest;
 const CZ = SZ * T.crest;
 const NEAR2 = T.near * T.near;
+const KNOLL_K = 1 / (2 * T.knollRadius * T.knollRadius);
 const FLOOR = -120;
 
 const smoothstep = (a, b, x) => {
@@ -104,7 +105,8 @@ export function terrainHeight(x, z) {
   const r2 = x * x + z * z;
   // Smooth on the hilltop, livelier further out.
   const detail = 0.3 + 0.7 * smoothstep(150, 600, Math.sqrt(r2));
-  let h = T.top - fall + climb + n * detail;
+  const knoll = T.knoll * Math.exp(-r2 * KNOLL_K);
+  let h = T.top - fall + climb + knoll + n * detail;
   if (r2 > NEAR2) h = coast(x, z, h, n);
   return h;
 }

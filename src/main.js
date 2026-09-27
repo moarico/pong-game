@@ -238,16 +238,17 @@ function titleShot(t) {
   const S = player.renderPos;
   const portrait = camera.aspect < 0.9;
   // Bearing of the view from the sun, bearing of him from the view, his distance.
-  const view = portrait ? deg(-3.5) : deg(-13.6);
-  const off = portrait ? deg(4) : deg(9.7);
+  const view = portrait ? deg(-8) : deg(-13.6);
+  const off = portrait ? deg(3.5) : deg(9.7);
   const dist = portrait ? 5.6 : 6.0;
   const drift = Math.sin(t * 0.07) * 0.12;
   const camYaw = SUN_YAW - view + Math.sin(t * 0.05) * deg(0.6);
   const toHim = camYaw - off;
   cine.pos.set(S.x - Math.sin(toHim) * dist + Math.cos(camYaw) * drift, 0, S.z - Math.cos(toHim) * dist - Math.sin(camYaw) * drift);
   const ground = terrainHeight(cine.pos.x, cine.pos.z);
-  cine.pos.y = Math.max(S.y, ground) + (portrait ? 2.7 : 2.85) + Math.sin(t * 0.09) * 0.04;
-  titleEuler.set(portrait ? deg(-10) : deg(-8.8), camYaw + Math.PI, 0);
+  cine.pos.y = Math.max(S.y, ground) + (portrait ? 2.6 : 2.4) + Math.sin(t * 0.09) * 0.04;
+  // On a tall screen he stands higher, clear of the menu at the bottom.
+  titleEuler.set(portrait ? deg(-16) : deg(-8.8), camYaw + Math.PI, 0);
   cine.quat.setFromEuler(titleEuler);
   cine.fov = portrait ? 66 : 48.8;
 }

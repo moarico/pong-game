@@ -54,7 +54,9 @@ export const TERRAIN = {
   sunH,
   right,
   top: 150, // the hilltop above the sea
-  crest: 0, // centre of the dome (the spawn stands on top), metres toward the sun
+  crest: 10, // centre of the dome, metres toward the sun from the spawn
+  knoll: 1.5, // a low rise under the spawn, so he stands on the brow
+  knollRadius: 10,
   flat: 8, // radius of its level top
   slope: 0.42, // the fall of its sides, far from the top
   round: 90, // how gently the top rolls over into that fall

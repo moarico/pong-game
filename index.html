@@ -293,10 +293,12 @@
     content: "";
     position: absolute;
     inset: 0;
-    background: linear-gradient(90deg, rgba(9, 6, 5, 0.82) 0%, rgba(9, 6, 5, 0.5) 34%, rgba(9, 6, 5, 0) 62%);
+    background: linear-gradient(90deg, rgba(9, 6, 5, 0.58) 0%, rgba(9, 6, 5, 0.3) 30%, rgba(9, 6, 5, 0) 54%);
     pointer-events: none;
     transition: background 0.5s ease;
   }
+  /* A soft shadow keeps the lettering legible over the bright sky without dimming the picture. */
+  .menu-main { text-shadow: 0 1px 14px rgba(8, 5, 3, 0.7), 0 0 3px rgba(8, 5, 3, 0.5); }
   #menu.paused::before { background: rgba(9, 6, 5, 0.58); }
   #menu.sub::before { background: rgba(9, 6, 5, 0.8); }
   .menu-main, .menu-controls { position: relative; }
@@ -463,7 +465,7 @@
   /* Portrait phones: the shot above, the menu below. */
   @media (orientation: portrait) and (max-width: 700px) {
     #menu { align-items: flex-end; padding-bottom: calc(40px + env(safe-area-inset-bottom, 0px)); }
-    #menu::before { background: linear-gradient(0deg, rgba(9, 6, 5, 0.88) 0%, rgba(9, 6, 5, 0.55) 38%, rgba(9, 6, 5, 0) 64%); }
+    #menu::before { background: linear-gradient(0deg, rgba(9, 6, 5, 0.74) 0%, rgba(9, 6, 5, 0.4) 34%, rgba(9, 6, 5, 0) 58%); }
     .menu-main { gap: 20px; }
   }
   @media (max-height: 460px) and (orientation: landscape) {
