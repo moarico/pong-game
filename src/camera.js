@@ -60,7 +60,7 @@ export class CameraRig {
     // through the frame instead of dragging the whole view up and down.
     const ground = terrainHeight(p.x, p.z);
     const air = Math.max(0, p.y - ground);
-    const goalY = ground + 1.32 + air * 0.72 + (this.extraY || 0);
+    const goalY = ground + 1.45 + air * 0.72 + (this.extraY || 0);
     if (!this.ready) {
       this.tx.x = p.x;
       this.ty.x = goalY;

@@ -1,9 +1,10 @@
 import * as THREE from 'three';
-import { SUN_DIR, LIGHT, QUALITY, QUALITY_ORDER, TRAIL_N } from './config.js';
+import { SUN_DIR, SUN_DISC, LIGHT, QUALITY, QUALITY_ORDER, TRAIL_N } from './config.js';
 import { Wind } from './wind.js';
 import { Sky } from './sky.js';
 import { Ground, Hills, terrainHeight } from './terrain.js';
 import { Grass } from './grass.js';
+import { Sea } from './sea.js';
 import { Motes, Puffs } from './particles.js';
 import { Character } from './character.js';
 import { Player } from './player.js';
@@ -64,6 +65,7 @@ const hdr = renderer.extensions.has('EXT_color_buffer_float') || renderer.extens
 const shared = {
   uTime: { value: 0 },
   uSunDir: { value: SUN_DIR.clone() },
+  uSunDisc: { value: SUN_DISC.clone() },
   uSunColor: { value: LIGHT.sun.clone() },
   uAmbSky: { value: LIGHT.ambSky.clone() },
   uAmbGround: { value: LIGHT.ambGround.clone() },
@@ -71,6 +73,7 @@ const shared = {
   uFogSunColor: { value: LIGHT.fogSun.clone() },
   uFogDensity: { value: LIGHT.fogDensity },
   uFogFalloff: { value: LIGHT.fogFalloff },
+  uMist: { value: new THREE.Vector2(LIGHT.mist, LIGHT.mistFalloff) },
   uWindDir: { value: new THREE.Vector2(1, 0) },
   uWindStrength: { value: 0.5 },
   uWindScroll: { value: new THREE.Vector2() },
@@ -88,18 +91,20 @@ let qName = initialQuality();
 let quality = QUALITY[qName];
 
 const scene = new THREE.Scene();
-const camera = new THREE.PerspectiveCamera(50, 1, 0.1, 8000);
+const camera = new THREE.PerspectiveCamera(50, 1, 0.1, 60000);
 camera.layers.enable(1);
 
 const wind = new Wind(shared);
+wind.boost = 0.5; // the game opens on the title, in a stiff breeze
 const sky = new Sky(shared);
 const ground = new Ground(shared);
 const hills = new Hills(shared);
+const sea = new Sea(shared);
 const grass = new Grass(shared);
 const motes = new Motes(shared);
 const puffs = new Puffs(shared);
 const samurai = new Character(shared, wind, 'samurai', { cape: true });
-scene.add(sky.mesh, ground.mesh, hills.group, grass.group, motes.points, puffs.points);
+scene.add(sky.mesh, ground.mesh, sea.mesh, hills.group, grass.group, motes.points, puffs.points);
 samurai.addTo(scene);
 
 // Combat effects.
@@ -110,9 +115,11 @@ const blood = new Blood(shared);
 const glints = new Glints();
 scene.add(trailP.mesh, sparks.mesh, blood.points, glints.points);
 
-// Start facing the setting sun, with the camera nudged so it sits just beside the hat.
-// On the title screen he stands turned a little from the sun, blade low.
-const TITLE_YAW = Math.atan2(SUN_DIR.x, SUN_DIR.z) + 0.5;
+// On the title screen he stands on the brow of the hill looking out over the bay,
+// just left of the sun.
+const SUN_YAW = Math.atan2(SUN_DIR.x, SUN_DIR.z);
+const deg = THREE.MathUtils.degToRad;
+const TITLE_YAW = SUN_YAW + deg(3);
 const player = new Player(0, 0, TITLE_YAW);
 const input = new Input(canvas);
 const rig = new CameraRig(camera, 0.0, -0.06);
@@ -218,32 +225,31 @@ addEventListener('pointerdown', revive);
 // ---------------------------------------------------------------------------
 
 let state = 'title';
+let debugCam = null; // { pos, target, fov }: a fixed camera for checks from the console
 let camBlend = 1; // 0..1 glide from the title shot into the play camera
 let wasLocked = false;
-const UP = new THREE.Vector3(0, 1, 0);
-const sunH = new THREE.Vector2(SUN_DIR.x, SUN_DIR.z).normalize();
-const cine = { pos: new THREE.Vector3(), look: new THREE.Vector3(), quat: new THREE.Quaternion(), m: new THREE.Matrix4(), fov: 34 };
+const cine = { pos: new THREE.Vector3(), quat: new THREE.Quaternion(), fov: 48.8 };
 
-// The title shot: low behind his shoulder, looking into the sun, which hangs
-// just over the brim of his kasa. It drifts slowly, like a held camera.
+// The title shot: from just behind and above him, looking out over the crest to the
+// sea. He stands right of centre with the sun a little further right, low over the
+// water. The camera drifts slowly, like a held camera.
+const titleEuler = new THREE.Euler(0, 0, 0, 'YXZ');
 function titleShot(t) {
   const S = player.renderPos;
-  const hx = sunH.x;
-  const hz = sunH.y;
-  const rx = -hz; // camera right, looking toward the sun
-  const rz = hx;
   const portrait = camera.aspect < 0.9;
-  const sway = Math.sin(t * 0.07) * 0.18;
-  // Just off the line to the sun, so it burns at the edge of his brim.
-  const side = portrait ? 0.34 + sway * 0.6 : 0.46 + sway;
-  const back = portrait ? 3.4 : 3.7;
-  cine.pos.set(S.x - hx * back + rx * side, 0, S.z - hz * back + rz * side);
-  cine.pos.y = Math.max(S.y + 0.82 + Math.sin(t * 0.05) * 0.05, terrainHeight(cine.pos.x, cine.pos.z) + 0.35);
-  const aim = portrait ? 0.05 : -0.62;
-  cine.look.set(S.x + hx * 1.2 + rx * aim, S.y + (portrait ? 1.05 : 1.42), S.z + hz * 1.2 + rz * aim);
-  cine.m.lookAt(cine.pos, cine.look, UP);
-  cine.quat.setFromRotationMatrix(cine.m);
-  cine.fov = portrait ? 58 : 34;
+  // Bearing of the view from the sun, bearing of him from the view, his distance.
+  const view = portrait ? deg(-3.5) : deg(-13.6);
+  const off = portrait ? deg(4) : deg(9.7);
+  const dist = portrait ? 5.6 : 6.0;
+  const drift = Math.sin(t * 0.07) * 0.12;
+  const camYaw = SUN_YAW - view + Math.sin(t * 0.05) * deg(0.6);
+  const toHim = camYaw - off;
+  cine.pos.set(S.x - Math.sin(toHim) * dist + Math.cos(camYaw) * drift, 0, S.z - Math.cos(toHim) * dist - Math.sin(camYaw) * drift);
+  const ground = terrainHeight(cine.pos.x, cine.pos.z);
+  cine.pos.y = Math.max(S.y, ground) + (portrait ? 2.7 : 2.85) + Math.sin(t * 0.09) * 0.04;
+  titleEuler.set(portrait ? deg(-10) : deg(-8.8), camYaw + Math.PI, 0);
+  cine.quat.setFromEuler(titleEuler);
+  cine.fov = portrait ? 66 : 48.8;
 }
 
 function setCamera(pos, quat, fov) {
@@ -274,7 +280,7 @@ function startPlay() {
   camBlend = 0;
   // The play camera starts over his shoulder, looking toward the sun.
   rig.yaw = Math.atan2(-SUN_DIR.x, -SUN_DIR.z);
-  rig.pitch = -0.06;
+  rig.pitch = 0.12;
   lockPointer();
   canvas.focus({ preventScroll: true });
   setTimeout(showHint, 900);
@@ -407,7 +413,7 @@ function frame(now) {
   tick(Math.min(dt, 0.1), true);
 }
 
-function tick(realDt, live) {
+function tick(realDt, live, draw = true) {
   input.enabled = state === 'play';
   input.update();
   if (state === 'play' && input.pausePressed) {
@@ -481,6 +487,8 @@ function tick(realDt, live) {
     trailOthers.push(o);
   }
   trail.update(dt, pos, player.grounded, pos.y - groundY, ev.landed, ev.landSpeed, trailOthers);
+  // A stiff breeze off the sea while the title is up: the cloak streams, the plumes bow.
+  wind.boost += ((state === 'play' ? 0 : 0.5) - wind.boost) * Math.min(1, realDt * 0.8);
   if (state === 'title') {
     rig.update(realDt, player, input, 0);
     titleShot(world.time);
@@ -494,6 +502,15 @@ function tick(realDt, live) {
       camera.position.lerpVectors(cine.pos, camera.position, e);
       camera.quaternion.slerpQuaternions(cine.quat, camera.quaternion, e);
       camera.fov = cine.fov + (rig.fov - cine.fov) * e;
+      camera.updateProjectionMatrix();
+    }
+  }
+
+  if (debugCam) {
+    camera.position.copy(debugCam.pos);
+    camera.lookAt(debugCam.target);
+    if (camera.fov !== debugCam.fov) {
+      camera.fov = debugCam.fov;
       camera.updateProjectionMatrix();
     }
   }
@@ -514,18 +531,19 @@ function tick(realDt, live) {
   sky.update(dt, camera, wind);
   ground.update(camera);
   hills.update(camera);
+  sea.update(camera);
   motes.update(dt, wind, camera, post.h);
   puffs.update(dt, wind, camera, post.h);
 
   center.copy(pos).y += 0.95;
   casters.length = 0;
   for (const e of enemies) if (e.active && e.sink < 0.5) casters.push(e.body.renderPos);
-  shadow.render(renderer, scene, center, SUN_DIR, casters);
+  if (draw) shadow.render(renderer, scene, center, SUN_DIR, casters);
   // Keep the samurai's chest in focus; in a fight, soften the blur so foes stay readable.
   center.y += 0.35;
   post.focus = camera.position.distanceTo(center);
-  post.dof = quality.dof * (1 - 0.55 * rig.combat);
-  post.render(scene, camera, dt, SUN_DIR);
+  post.dof = quality.dof * (1 - 0.55 * rig.combat) * (state === 'play' ? 1 : 0.4);
+  if (draw) post.render(scene, camera, dt, SUN_DISC);
 
   combat.endFrame();
   for (const e of enemies) e.endFrame();
@@ -593,9 +611,13 @@ window.samurai = {
   get state() {
     return state;
   },
-  // Advance the game by n fixed steps (for deterministic captures and tests).
-  step(n = 1, dt = 1 / 30) {
-    for (let i = 0; i < n; i++) tick(dt, false);
+  set debugCam(v) {
+    debugCam = v;
+  },
+  // Advance the game by n fixed steps (for deterministic captures and tests);
+  // draw = false runs the game without rendering.
+  step(n = 1, dt = 1 / 30, draw = true) {
+    for (let i = 0; i < n; i++) tick(dt, false, draw);
   },
   setQuality(name) {
     if (!QUALITY[name]) return;

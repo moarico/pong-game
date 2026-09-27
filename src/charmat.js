@@ -19,6 +19,9 @@ export const PAT = {
   gaiter: 5, // diagonal kyahan wraps
   lames: 6, // armour lames with red lacing
   hamon: 7, // uv.x across the blade (0 spine .. 1 edge): frosted temper line
+  face: 8, // uv = face coordinates in metres (x across, y up from the eye line): eyes, brows, lips
+  brocade: 9, // uv in metres of cloth: a dark damask of medallions and vines
+  cloak: 10, // damask, with a torn hem and the odd hole (uv.y = metres above the hem)
 };
 
 const vert = /* glsl */ `
@@ -90,6 +93,22 @@ float fabricHeight(vec2 p) {
   return folds * 0.006 + weave * 0.0007;
 }
 
+// Damask: medallions in a half-drop repeat, linked by a diamond trellis of vines,
+// woven in a slightly paler, sheenier thread. Fades to its average when too fine to see.
+float damask(vec2 uv) {
+  vec2 g = uv * 16.0;
+  vec2 cell = floor(g);
+  vec2 f = fract(g + vec2(0.5 * mod(cell.y, 2.0), 0.0)) - 0.5;
+  float r = length(f);
+  float ang = atan(f.y, f.x);
+  float petals = 0.5 + 0.5 * cos(ang * 5.0 + r * 9.0);
+  float medallion = (1.0 - smoothstep(0.3, 0.34, r)) * smoothstep(0.05, 0.12, r) * smoothstep(0.35, 0.65, petals + 0.25 * sin(r * 40.0));
+  float vine = 1.0 - smoothstep(0.0, 0.035, abs(abs(f.x) + abs(f.y) - 0.46));
+  float m = max(medallion, vine * 0.7);
+  float fw = length(fwidth(g));
+  return mix(m, 0.22, smoothstep(0.25, 0.7, fw));
+}
+
 // The kasa's brim shades whatever sits beneath it from the sun.
 float hatShadow(vec3 p) {
   float dy = uHat.y - p.y;
@@ -120,11 +139,36 @@ void main() {
   float rimAmt = vPatRim.y;
 
   if (pat == 1) {
-    float a = vUv.x * TAU;
+    // Woven cane: strips running round the cone, over one spoke and under the next,
+    // dark gaps between them, every piece of cane its own shade.
+    float su = vUv.x * 72.0;
     float rr = vUv.y;
-    float reeds = 0.5 + 0.5 * sin(a * 150.0 + rr * 8.0);
-    float rings = smoothstep(0.75, 1.0, sin(rr * 95.0));
-    alb *= 0.8 + 0.2 * reeds - 0.2 * rings;
+    float band = rr * 62.0;
+    float over = mod(floor(band) + floor(su), 2.0);
+    float bf = fract(band);
+    float sf = fract(su);
+    float strip = smoothstep(0.0, 0.16, bf) * (1.0 - smoothstep(0.84, 1.0, bf));
+    float spoke = 1.0 - smoothstep(0.12, 0.22, abs(sf - 0.5));
+    float shade = mix(0.28, 1.0, strip);
+    shade *= mix(1.0, 0.7, spoke * (1.0 - over));
+    shade *= 0.86 + 0.28 * hash12(floor(vec2(su, band)));
+    float fw = max(fwidth(band), fwidth(su));
+    alb *= mix(shade, 0.74, smoothstep(0.35, 0.9, fw));
+    N = bumpNormal(N, strip * 0.0015 * (1.0 - smoothstep(0.35, 0.9, fw)));
+  } else if (pat == 9) {
+    float m = damask(vUv);
+    alb = mix(alb, alb * 1.45 + vec3(0.01, 0.01, 0.011), m * 0.4);
+    rough = mix(rough, 0.6, m * 0.5);
+  } else if (pat == 10) {
+    // A traveller's cloak: damask worn thin, the hem torn into tatters, a few holes.
+    float hem = vUv.y;
+    float n = vnoise(vec2(vUv.x * 16.0, 0.0)) * 0.6 + vnoise(vec2(vUv.x * 43.0, 3.0)) * 0.4;
+    float tear = 0.015 + 0.12 * n * n + 0.2 * smoothstep(0.9, 1.0, vnoise(vec2(vUv.x * 7.0, 7.0)));
+    if (hem < tear) discard;
+    if (hem < 0.45 && vnoise(vUv * vec2(15.0, 11.0) + 5.0) > 0.87) discard;
+    float m = damask(vUv);
+    alb = mix(alb, alb * 1.6 + vec3(0.01), m * 0.45);
+    alb *= mix(0.72, 1.0, smoothstep(0.0, 0.06, hem - tear));
   } else if (pat == 2) {
     alb *= 0.88 + 0.12 * step(0.66, fract(vUv.x * 28.0));
   } else if (pat == 3) {
@@ -153,6 +197,55 @@ void main() {
     rough = mix(rough, 0.9, lace);
     alb *= 1.0 - 0.55 * groove;
     N = bumpNormal(N, f * 0.002);
+  } else if (pat == 8) {
+    // Face detail. Eyes: almond openings, dark irises, a lash line along the upper lid.
+    vec2 p = vUv;
+    float ax = abs(p.x);
+    vec2 e = vec2(ax - 0.031, p.y - 0.0005);
+    float t = e.x / 0.0142;
+    float w = max(1.0 - t * t, 0.0);
+    float lidU = 0.0047 * pow(w, 0.7) + 0.0009 * t;
+    float lidL = -0.0034 * pow(w, 0.85) + 0.0004 * t;
+    float aa = 0.00035;
+    float open = step(abs(t), 1.0) * smoothstep(lidL - aa, lidL + aa, e.y) * smoothstep(lidU + aa, lidU - aa, e.y);
+    float ir = length(vec2(ax - 0.0302, p.y - 0.0002));
+    float iris = 1.0 - smoothstep(0.0046, 0.0054, ir);
+    float pupil = 1.0 - smoothstep(0.0017, 0.0023, ir);
+    vec3 eyeC = mix(vec3(0.5, 0.43, 0.38), mix(vec3(0.075, 0.045, 0.03), vec3(0.012, 0.01, 0.01), pupil), iris);
+    // The upper lid shades the top of the eye.
+    eyeC *= mix(0.55, 1.0, smoothstep(lidU - 0.0006, lidU - 0.0028, e.y));
+    alb = mix(alb, eyeC, open);
+    rough = mix(rough, 0.12, open);
+    float lash = smoothstep(0.0011, 0.0002, abs(e.y - lidU - 0.0002)) * step(abs(t), 1.1);
+    alb = mix(alb, vec3(0.025, 0.02, 0.018), lash * 0.95);
+    float crease = smoothstep(0.0008, 0.0, abs(e.y - lidU - 0.0042 * (1.0 - 0.5 * t * t))) * step(abs(t), 0.95);
+    alb *= 1.0 - 0.22 * crease;
+    // Brows: straight, thick, dark, tapering at the outer end.
+    float bx = (ax - 0.013) / 0.04;
+    float bxc = clamp(bx, 0.0, 1.0);
+    float bc = 0.0205 + 0.0012 * bxc - 0.003 * bxc * bxc;
+    float bh = 0.0034 * (1.0 - 0.45 * bxc);
+    float brow = (1.0 - smoothstep(bh * 0.5, bh, abs(p.y - bc))) * smoothstep(0.0, 0.08, bx) * (1.0 - smoothstep(0.92, 1.0, bx));
+    brow *= 0.75 + 0.25 * vnoise(vec2(p.x * 2200.0, p.y * 600.0));
+    alb = mix(alb, vec3(0.03, 0.024, 0.02), brow * 0.92);
+    // Lips: a little darker and rosier than the skin, a fine line between.
+    float my = -0.0725;
+    float lx = ax / 0.0215;
+    float lw = sqrt(max(1.0 - lx * lx, 0.0));
+    float upTop = my + 0.0065 * lw - 0.0012 * exp(-pow(p.x / 0.0035, 2.0)) + 0.0008 * exp(-pow((ax - 0.0055) / 0.004, 2.0));
+    float loBot = my - 0.0085 * pow(max(1.0 - pow(ax / 0.0195, 2.0), 0.0), 0.6);
+    float lip = smoothstep(upTop + 0.0007, upTop - 0.0007, p.y) * smoothstep(loBot - 0.0009, loBot + 0.0009, p.y) * step(lx, 1.0);
+    alb *= mix(vec3(1.0), vec3(0.82, 0.62, 0.58), lip);
+    rough = mix(rough, 0.38, lip);
+    float mline = smoothstep(0.0009, 0.0, abs(p.y - my - 0.0006 * cos(p.x * 140.0))) * smoothstep(0.025, 0.019, ax);
+    alb *= 1.0 - 0.6 * mline;
+    // Nostrils.
+    float nost = 1.0 - smoothstep(0.0012, 0.0024, length(vec2((ax - 0.0072) * 0.55, p.y + 0.0508)));
+    alb *= 1.0 - 0.5 * nost;
+    // A shadow of stubble along the jaw and lip; the socket skin a touch darker.
+    float jaw = smoothstep(-0.06, -0.1, p.y) * smoothstep(0.012, 0.03, ax) + smoothstep(0.012, 0.004, abs(p.y + 0.062)) * smoothstep(0.02, 0.01, ax);
+    alb *= 1.0 - 0.08 * jaw;
+    alb *= 1.0 - 0.1 * exp(-pow((ax - 0.031) / 0.02, 2.0) - pow((p.y - 0.004) / 0.013, 2.0));
   } else if (pat == 7) {
     // Frosty tempered edge below a wavy hamon; mirror-polished body above it.
     float h = 0.6 + 0.07 * sin(vUv.y * 38.0) + 0.035 * sin(vUv.y * 91.0 + 1.3);

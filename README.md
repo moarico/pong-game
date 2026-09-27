@@ -1,14 +1,16 @@
 # Samurai at Dusk
 
-A ronin in a straw kasa stands in a golden pampas field on rolling hills under a hazy golden-hour sun. Bandits come for him through the grass, wave after wave.
+A ronin in a woven kasa stands in a golden pampas field on a hilltop above the sea, with the sun going down over the bay. Bandits come for him through the grass, wave after wave.
 
 - **Combat:** a four-cut combo, a heavy thrust or a charged leaping cleave, a spinning cut, a dashing cut on the run, two aerial cuts and a plunge from the air. There's also a dodge, and a parry that opens the enemy up for a lethal riposte. Attacks turn toward the nearest enemy and step in to cutting range, and combos flow into each other. Hits land with hit-stop, screen shake, sparks or blood, and a trail of light along the blade. Big moments slow time.
 - **Enemies:** bandits, ronin and an armoured heavy. They close in through the grass, circle you and take turns to attack. A glint runs along the blade just before a strike, and it's red when the strike can't be parried. They also guard against your cuts, reel back, get knocked down, and fall dead in the grass.
-- **Characters:** skinned, sculpted figures: a kimono over a broad chest, a crossed collar, obi, wide pleated hakama, lacquered kote, and a kasa, jingasa or crested kabuto. The samurai wears a cloth cape that streams in the wind.
+- **Characters:** skinned, sculpted figures: a kimono over a broad chest, a crossed collar, obi, wide pleated hakama, lacquered kote, and a kasa, jingasa or crested kabuto. The samurai is a young ronin with a strong jaw and shaggy black hair under a wide woven bamboo kasa tied beneath his chin. He wears a heavy wrapped scarf, leather straps crossed over a dark damask robe, and a long, tattered cloak that streams in the wind.
 - **Movement:** planted feet that never skate, a gait that runs from a stroll to a sprint without a hitch, hips that stay within the legs' reach, and a fixed 120 Hz simulation interpolated for any frame rate.
-- **Sun and grass:** a bright hazy sky with bloom, light shafts, lens flare and eye adaptation. About 200,000 grass blades and plumes wave in rolling gusts, part around every fighter, lie flat where the fallen lie, and ripple outward from heavy blows. Depth of field keeps the fight in focus.
+- **The coast:** the hill rolls over a crest and falls to a bay. Headlands, islands and far mountains stand in the water, and the sun lays a road of glitter across the sea. Inland, meadows and pine woods climb toward the mountains.
+- **Sun and sky:** a low sun under a deck of broken cloud, dark and smoky where it's thick, burning gold at the edges, with blue showing through overhead. There's bloom, light shafts, lens flare, eye adaptation and a thin sea mist.
+- **Grass:** about 200,000 grass blades and feathery susuki plumes wave in rolling gusts. The grass parts around every fighter, lies flat where the fallen lie, and ripples outward from heavy blows. Depth of field keeps the fight in focus.
 - **Sound:** blade swishes, steel on steel, the glint before an attack, impacts and wind, all synthesised in the browser. Press `M` to mute.
-- **Title screen:** the game opens on a live shot of the samurai against the setting sun, with Play, a controls screen (a controller diagram, plus keyboard and touch tabs) and a sound switch. Pause at any time to get the same menu back.
+- **Title screen:** the game opens on a live shot of the samurai from behind on the crest of the hill, looking out over the bay into the setting sun, his cloak and the plumes blowing in a stiff breeze. The menu has Play, a controls screen (a controller diagram, plus keyboard and touch tabs) and a sound switch. Pause at any time to get the same menu back.
 - **Controllers:** connect an Xbox (or any standard) controller, including to a phone, and press a button: the on-screen touch controls step aside, leaving only the pause button. Unplug it and they come back.
 
 ## Run it
@@ -66,11 +68,13 @@ src/main.js        renderer, game loop, time scale (hit-stop, slow motion), qual
 src/config.js      sun direction, light colours, movement tuning, quality presets
 src/glsl.js        shared shader code: noise, terrain, wind, atmosphere, character shadow
 src/sky.js         sky, clouds and sun disc
+src/sea.js         the bay: sky reflections and the sun's glitter
 src/grass.js       grass blades and susuki plumes
-src/terrain.js     rolling hills, far-field ground, mountain ranges (JavaScript twin of the terrain function)
+src/terrain.js     the hilltop, coast, headlands and islands, far mountain ranges (JavaScript twin of the terrain function)
 src/wind.js        wind field shared by the grass, dust and cloth
 src/particles.js   drifting dust and seed fluff, landing puffs
 src/figure.js      skeletons and sculpted, skinned bodies for the samurai and each kind of enemy
+src/face.js        the samurai's face and hair, and the kasa's chin cords
 src/meshbuilder.js builds one skinned mesh from many parts, with a material per vertex
 src/charmat.js     character shading: cloth, skin, straw, lacquer, steel, hit flash
 src/animator.js    procedural animation: foot planting, gait, hips, arms and sword by IK, secondary motion

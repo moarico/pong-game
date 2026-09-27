@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { MOVE } from './config.js';
+import { MOVE, PLAY_RADIUS } from './config.js';
 import { terrainHeight } from './terrain.js';
 
 const wrapAngle = (a) => Math.atan2(Math.sin(a), Math.cos(a));
@@ -114,6 +114,19 @@ export class Mover {
     }
 
     this.pos.addScaledVector(this.vel, dt);
+    // The fight stays on the hilltop: an unseen fence well short of the cliffs.
+    const r = Math.hypot(this.pos.x, this.pos.z);
+    if (r > PLAY_RADIUS) {
+      const nx = this.pos.x / r;
+      const nz = this.pos.z / r;
+      this.pos.x = nx * PLAY_RADIUS;
+      this.pos.z = nz * PLAY_RADIUS;
+      const out = this.vel.x * nx + this.vel.z * nz;
+      if (out > 0) {
+        this.vel.x -= out * nx;
+        this.vel.z -= out * nz;
+      }
+    }
     const ground = terrainHeight(this.pos.x, this.pos.z);
     if (this.grounded) {
       // Follow the rolling ground; step off crests into a fall.

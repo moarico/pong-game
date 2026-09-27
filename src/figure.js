@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { MeshBuilder, mat, profile, superPoint, ribbonRings, tubeRings, capRings, smoothstep, lerp, clamp } from './meshbuilder.js';
 import { makeCharacterMaterial, PAT } from './charmat.js';
+import { buildYoungHead, buildChinCords } from './face.js';
 
 // ---------------------------------------------------------------------------
 // Figures: a skeleton and one skinned, sculpted mesh per character. The body is
@@ -57,9 +58,10 @@ export const OUTFITS = {
   samurai: {
     scale: 1,
     build: 1,
-    kimono: '#4d4540', hakama: '#433e3b', obi: '#3b2819', collar: '#d3cab8', trim: '#2c2624',
-    skin: '#b88866', hair: '#141212', gaiter: '#37312d', tabi: '#cdc6b6', glove: '#231c18',
-    sleeves: 'kote', headwear: 'kasa', face: 'beard', hairStyle: 'topknot', armor: null,
+    kimono: '#2e2a27', hakama: '#262220', obi: '#2c2219', collar: '#4a423b', trim: '#1b1715',
+    skin: '#b98463', hair: '#0e0c0b', gaiter: '#221e1b', tabi: '#1e1a17', glove: '#1b1613',
+    scarf: '#34302c', strap: '#4b301d', cloak: '#2a2624', hat: '#8a6a3e', cord: '#2e2218',
+    sleeves: 'kote', headwear: 'kasa', face: 'young', hairStyle: null, armor: null,
     blade: 'katana', koshiita: true,
   },
   bandit: {
@@ -117,6 +119,10 @@ export function buildFigure(shared, outfitName) {
   torso(ctx);
   collar(ctx);
   obi(ctx);
+  if (o.scarf) {
+    straps(ctx);
+    scarf(ctx);
+  }
   hakama(ctx);
   legs(ctx);
   arms(ctx);
@@ -153,20 +159,21 @@ export function buildFigure(shared, outfitName) {
 
 function makeMats(o) {
   return {
-    kimono: mat(o.kimono, { rough: 0.9, trans: 0.12, bump: 1 }),
+    kimono: mat(o.kimono, { rough: 0.9, trans: 0.12, bump: 1, pat: o.scarf ? PAT.brocade : 0 }),
     trim: mat(o.trim, { rough: 0.85, bump: 1 }),
     collar: mat(o.collar, { rough: 0.8, bump: 0.6 }),
     hakama: mat(o.hakama, { rough: 0.92, pat: PAT.stripe, bump: 1.2, trans: 0.08 }),
     hakamaIn: mat(o.hakama, { rough: 0.95, bump: 1 }),
     obi: mat(o.obi, { rough: 0.75, bump: 0.8 }),
     skin: mat(o.skin, { rough: 0.58, rim: 0.8, trans: 0.06 }),
+    face: mat(o.skin, { rough: 0.52, rim: 0.8, trans: 0.08, pat: PAT.face }),
     ear: mat(o.skin, { rough: 0.6, rim: 0.8, trans: 0.5 }),
     lip: mat(o.skin, { rough: 0.45 }),
     hair: mat(o.hair, { rough: 0.5, rim: 1.2 }),
     eye: mat('#0c0a0a', { rough: 0.15 }),
     white: mat('#d8d0c0', { rough: 0.4 }),
-    hat: mat('#b8955a', { rough: 0.85, pat: PAT.straw, rim: 1.2, trans: 0.3 }),
-    straw: mat('#9e814c', { rough: 0.9, trans: 0.2 }),
+    hat: mat(o.hat || '#b8955a', { rough: 0.8, pat: PAT.straw, rim: o.hat ? 0.55 : 1.2, trans: 0.1 }),
+    straw: mat(o.hat ? '#6e5432' : '#9e814c', { rough: 0.9, trans: 0.12 }),
     lacquer: mat('#0f0e0f', { rough: 0.22, rim: 0.6 }),
     kote: mat('#141213', { rough: 0.3, pat: PAT.plates, rim: 0.7 }),
     glove: mat(o.glove, { rough: 0.7, rim: 0.8 }),
@@ -176,7 +183,9 @@ function makeMats(o) {
     steel: mat('#c9cdd3', { rough: 0.12, metal: 1, rim: 0.3, pat: PAT.hamon }),
     gaiter: mat(o.gaiter, { rough: 0.9, pat: PAT.gaiter }),
     tabi: mat(o.tabi, { rough: 0.85, bump: 0.5 }),
-    cord: mat('#2b2521', { rough: 0.8 }),
+    cord: mat(o.cord || '#2b2521', { rough: 0.8 }),
+    scarf: mat(o.scarf || '#34302c', { rough: 0.95, bump: 1.6, pat: PAT.brocade, trans: 0.05 }),
+    strap: mat(o.strap || '#4b301d', { rough: 0.42, bump: 0.5, rim: 0.9 }),
     band: mat(o.band || '#b8b2a6', { rough: 0.85, bump: 0.6, trans: 0.25 }),
     mask: mat(o.mask || '#1b1c22', { rough: 0.9, bump: 1 }),
     armor: mat(o.armorColor || '#5a0f0c', { rough: 0.3, pat: PAT.lames, rim: 0.8 }),
@@ -304,6 +313,91 @@ function collar(ctx) {
   band(thRight, yRight, 40, 0.03, 0.007, 0.0, M.collar, 0.012);
   band(thLeft, yLeft, 64, 0.036, 0.009, 0.004, M.trim, -0.004);
   band(thRight, yRight, 40, 0.036, 0.009, 0.003, M.trim, -0.004);
+}
+
+// ---------------------------------------------------------------------------
+// Scarf: a heavy length of cloth wound three times round the neck, sitting low
+// in front under the chin and high at the back, its loose end draped over the
+// chest.
+// ---------------------------------------------------------------------------
+
+function scarf(ctx) {
+  const { M, B, at } = ctx;
+  const n0 = at('neck');
+  const cz = n0.z + 0.006;
+  const wraps = [
+    // y      rx     rz     tube   tilt  twist
+    [1.468, 0.108, 0.1, 0.034, 0.018, 0.0],
+    [1.508, 0.094, 0.087, 0.03, 0.026, 1.7],
+    [1.546, 0.079, 0.074, 0.025, 0.034, 3.1],
+  ];
+  const neckW = (p) => {
+    const a = smoothstep(1.46, 1.56, p.y);
+    return W(['chest', 1 - a], ['neck', a * 0.8], ['head', a * 0.2]);
+  };
+  for (const [y, rx, rz, tube, tilt, twist] of wraps) {
+    const pts = [];
+    const n = 40;
+    for (let k = 0; k <= n; k++) {
+      const th = (k / n) * Math.PI * 2;
+      // Folds: the cloth bunches and slackens as it goes round.
+      const f = 1 + 0.07 * Math.sin(th * 3 + twist) + 0.04 * Math.sin(th * 7 + twist * 2);
+      pts.push(new THREE.Vector3(Math.cos(th) * rx * f, y - tilt * Math.sin(th) + 0.006 * Math.sin(th * 5 + twist), cz + Math.sin(th) * rz * f));
+    }
+    const rad = (t) => tube * (1 + 0.18 * Math.sin(t * Math.PI * 2 * 4 + twist));
+    B.grid(tubeRings(pts, rad, 14, 0.8), M.scarf, neckW, { outward: null });
+  }
+  // The loose end: a soft fold hanging down over the chest from under the wraps.
+  const S = ctx.torso;
+  const rows = [];
+  for (let j = 0; j <= 10; j++) {
+    const t = j / 10;
+    const y = lerp(1.47, 1.33, t);
+    const half = lerp(0.62, 0.3, t) * (1 - 0.3 * t * t);
+    const ring = [];
+    for (let i = 0; i <= 12; i++) {
+      const u = (i / 12) * 2 - 1;
+      const th = Math.PI / 2 + 0.25 + u * half;
+      const bulge = 0.022 + 0.014 * Math.cos(u * Math.PI / 2) * (1 - t) + 0.006 * Math.sin(u * 9 + t * 4);
+      ring.push(S.point(th, y, bulge));
+    }
+    rows.push(ring);
+  }
+  B.grid(rows, M.scarf, torsoWeights, { closed: false, outward: (p) => new THREE.Vector3(p.x, 0, p.z) });
+}
+
+// ---------------------------------------------------------------------------
+// Straps: two leather bands crossing the chest and the back, shoulder to hip,
+// from under the scarf; an iron ring where they cross in front.
+// ---------------------------------------------------------------------------
+
+function straps(ctx) {
+  const { M, B } = ctx;
+  const S = ctx.torso;
+  const band = (th0, th1, y0, y1, off) => {
+    const pts = [];
+    const ups = [];
+    const n = 24;
+    for (let k = 0; k <= n; k++) {
+      const t = k / n;
+      const th = lerp(th0, th1, t);
+      const y = lerp(y0, y1, t);
+      const nrm = S.normal(th, y);
+      pts.push(S.point(th, y, 0.009 + off).addScaledVector(nrm, 0.003));
+      ups.push(nrm);
+    }
+    B.grid(ribbonRings(pts, ups, 0.042, 0.006, 8), M.strap, torsoWeights, { outward: null });
+  };
+  // Front: left shoulder to right hip over right shoulder to left hip.
+  band(0.95, 2.45, 1.4, 1.02, 0.0);
+  band(2.2, 0.72, 1.4, 1.02, 0.006);
+  // Back.
+  band(-0.95, -2.45, 1.4, 1.02, 0.0);
+  band(-2.2, -0.72, 1.4, 1.02, 0.006);
+  // The ring where the front straps cross.
+  const cross = S.point(Math.PI / 2 + 0.08, 1.225, 0.02);
+  const ring = new THREE.TorusGeometry(0.016, 0.0035, 6, 18);
+  B.add(ring, M.iron, W(['chest', 0.5], ['spine', 0.5]), { matrix: new THREE.Matrix4().makeTranslation(cross.x, cross.y, cross.z) });
 }
 
 // ---------------------------------------------------------------------------
@@ -655,6 +749,11 @@ function neckAndHead(ctx) {
   };
   B.grid(nr, M.skin, neckW, { outward: (p) => new THREE.Vector3(p.x, 0, p.z - n0.z) });
 
+  if (o.face === 'young') {
+    buildYoungHead(ctx, W);
+    return;
+  }
+
   const HM = T('head');
   // Face tint: shadowed sockets, a hint of lip, stubble or beard for the ronin.
   const beard = o.face === 'beard';
@@ -763,30 +862,54 @@ function headwear(ctx) {
   const { M, B, o, T, bind } = ctx;
   const HT = T('hat');
   if (o.headwear === 'kasa') {
+    // A wide, shallow cone of woven bamboo with a small knob at the peak and a
+    // thick rolled rim.
+    const R = 0.405;
     const pts = [
-      [0.0, 0.165], [0.02, 0.158], [0.07, 0.13], [0.15, 0.09], [0.23, 0.052], [0.31, 0.016],
-      [0.365, -0.005], [0.38, -0.014], [0.374, -0.021], [0.356, -0.016], [0.27, 0.017],
-      [0.18, 0.054], [0.09, 0.092], [0.03, 0.116], [0.0, 0.12],
+      [0.0, 0.14], [0.012, 0.137], [0.03, 0.124], [0.07, 0.1], [0.13, 0.073], [0.2, 0.047], [0.27, 0.025], [0.33, 0.009],
+      [0.375, -0.002], [0.398, -0.009], [R, -0.015], [0.4, -0.021], [0.385, -0.02], [0.33, -0.006], [0.25, 0.017],
+      [0.16, 0.047], [0.08, 0.078], [0.03, 0.099], [0.0, 0.106],
     ].map(([r, y]) => new THREE.Vector2(r, y));
-    const kasa = new THREE.LatheGeometry(pts, 72);
+    const kasa = new THREE.LatheGeometry(pts, 96);
     B.add(kasa, M.hat, 'hat', { matrix: HT, uvFn: (p, u) => [u, Math.hypot(p.x, p.z)] });
-    const peak = new THREE.CylinderGeometry(0.014, 0.022, 0.028, 10);
-    B.add(peak, M.straw, 'hat', { matrix: HT.clone().multiply(new THREE.Matrix4().makeTranslation(0, 0.172, 0)) });
+    const peak = new THREE.SphereGeometry(0.016, 12, 8);
+    peak.scale(1, 0.8, 1);
+    B.add(peak, M.straw, 'hat', { matrix: HT.clone().multiply(new THREE.Matrix4().makeTranslation(0, 0.142, 0)) });
     // The ring inside that sits on the head.
-    const ring = new THREE.CylinderGeometry(0.086, 0.09, 0.05, 24, 1, true);
-    B.add(ring, M.straw, 'hat', { matrix: HT.clone().multiply(new THREE.Matrix4().makeTranslation(0, 0.07, -0.004)) });
-    // Chin cords.
-    for (const sx of [1, -1]) {
-      const c = [
-        new THREE.Vector3(0.08 * sx, 0.05, 0.015),
-        new THREE.Vector3(0.086 * sx, -0.04, 0.035),
-        new THREE.Vector3(0.07 * sx, -0.11, 0.055),
-        new THREE.Vector3(0.03 * sx, -0.158, 0.07),
-        new THREE.Vector3(0.0, -0.166, 0.072),
-      ].map((p) => p.add(bind.hat));
-      B.grid(tubeRings(c, 0.0032, 6), M.straw, 'hat');
+    const ring = new THREE.CylinderGeometry(0.084, 0.088, 0.045, 28, 1, true);
+    B.add(ring, M.straw, 'hat', { matrix: HT.clone().multiply(new THREE.Matrix4().makeTranslation(0, 0.066, -0.004)) });
+    // Loose straw ends bristling round the rim.
+    let sd = 3;
+    const rnd = () => {
+      sd = (sd * 16807) % 2147483647;
+      return sd / 2147483647;
+    };
+    for (let k = 0; k < 90; k++) {
+      const a = (k / 90) * Math.PI * 2 + rnd() * 0.05;
+      const len = 0.012 + rnd() * 0.022;
+      const out = new THREE.Vector3(Math.cos(a), 0, Math.sin(a));
+      const side = new THREE.Vector3(-out.z, 0, out.x);
+      const base = out.clone().multiplyScalar(R - 0.004).add(new THREE.Vector3(0, -0.015, 0));
+      const dir = out.clone().multiplyScalar(0.8).addScaledVector(side, (rnd() - 0.5) * 0.9).add(new THREE.Vector3(0, -0.35 - rnd() * 0.3, 0)).normalize();
+      const tip = base.clone().addScaledVector(dir, len);
+      const p0 = base.clone().add(bind.hat);
+      const p1 = tip.clone().add(bind.hat);
+      B.grid(tubeRings([p0, p0.clone().lerp(p1, 0.5), p1], (t) => 0.0014 * (1 - t * 0.8), 3), M.straw, 'hat', { outward: null });
     }
-    ctx.dims.hatRadius = 0.378;
+    if (o.face === 'young') buildChinCords(ctx, W, M.cord);
+    else {
+      for (const sx of [1, -1]) {
+        const c = [
+          new THREE.Vector3(0.08 * sx, 0.05, 0.015),
+          new THREE.Vector3(0.086 * sx, -0.04, 0.035),
+          new THREE.Vector3(0.07 * sx, -0.11, 0.055),
+          new THREE.Vector3(0.03 * sx, -0.158, 0.07),
+          new THREE.Vector3(0.0, -0.166, 0.072),
+        ].map((p) => p.add(bind.hat));
+        B.grid(tubeRings(c, 0.0032, 6), M.straw, 'hat');
+      }
+    }
+    ctx.dims.hatRadius = R;
   } else if (o.headwear === 'jingasa') {
     const pts = [[0, 0.1], [0.03, 0.09], [0.12, 0.05], [0.24, 0.0], [0.27, -0.012], [0.265, -0.02], [0.2, 0.0], [0.1, 0.04], [0.0, 0.055]]
       .map(([r, y]) => new THREE.Vector2(r, y));

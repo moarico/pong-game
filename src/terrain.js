@@ -3,12 +3,41 @@ import { common, sharedUniforms, terrain as terrainGLSL, wind as windGLSL, atmos
 import { SUN_AZIMUTH, TERRAIN } from './config.js';
 import { inoise, inoise5 } from './noise.js';
 
-const HERO_K = 1 / (2 * TERRAIN.heroRadius * TERRAIN.heroRadius);
+const T = TERRAIN;
+const [SX, SZ] = T.sunH;
+const [RX, RZ] = T.right;
+const CX = SX * T.crest;
+const CZ = SZ * T.crest;
+const NEAR2 = T.near * T.near;
+const FLOOR = -120;
 
-// Keep in sync with terrainHeight() in glsl.js (same operations, same order).
-export function terrainHeight(x, z) {
-  let qx = (x + TERRAIN.offset[0]) * (1 / 240);
-  let qy = (z + TERRAIN.offset[1]) * (1 / 240);
+const smoothstep = (a, b, x) => {
+  const t = Math.min(Math.max((x - a) / (b - a), 0), 1);
+  return t * t * (3 - 2 * t);
+};
+
+// Polynomial smooth maximum: land rising out of the seabed without a crease.
+function smax(a, b, k) {
+  const h = Math.max(k - Math.abs(a - b), 0) / k;
+  return Math.max(a, b) + h * h * k * 0.25;
+}
+
+// A rounded mound: 1 at the centre, 0 (and flat) at the rim.
+function mound(t) {
+  const u = Math.max(1 - t * t, 0);
+  return u * u;
+}
+
+const RIDGES = T.ridges.map(([x1, z1, x2, z2, r1, r2, h1, h2]) => {
+  const dx = x2 - x1;
+  const dz = z2 - z1;
+  return { x1, z1, dx, dz, inv: 1 / (dx * dx + dz * dz), r1, r2, h1, h2 };
+});
+
+// Layered noise for the lie of the land. Mirrors terrainRolling() in glsl.js.
+function rolling(x, z) {
+  let qx = (x + T.offset[0]) * (1 / 240);
+  let qy = (z + T.offset[1]) * (1 / 240);
   let h = (inoise5(qx, qy) - 0.5) * 26;
   let rx = 0.8 * qx - 0.6 * qy;
   let ry = 0.6 * qx + 0.8 * qy;
@@ -25,18 +54,67 @@ export function terrainHeight(x, z) {
   qx = rx * 2.5 + 7.7;
   qy = ry * 2.5 - 2.4;
   h += (inoise5(qx, qy) - 0.5) * 0.8;
-  const dx = x - TERRAIN.hero[0];
-  const dz = z - TERRAIN.hero[1];
-  h += TERRAIN.heroHeight * Math.exp(-(dx * dx + dz * dz) * HERO_K);
+  return h;
+}
+
+// The coast beyond the hilltop: the seabed, headlands and islands.
+function coast(x, z, h, n) {
+  h = smax(h, T.seabed + n * 0.5, 30);
+  let crag = 1 - Math.abs(inoise5(x * (1 / 640) + 19, z * (1 / 640) + 7) * 2 - 1);
+  crag = 0.6 + 0.6 * crag + (inoise5(x * (1 / 230) - 5, z * (1 / 230) + 11) - 0.5) * 0.35;
+  for (const R of RIDGES) {
+    const px = x - R.x1;
+    const pz = z - R.z1;
+    const t = Math.min(Math.max((px * R.dx + pz * R.dz) * R.inv, 0), 1);
+    const qx = px - R.dx * t;
+    const qz = pz - R.dz * t;
+    const dist = Math.sqrt(qx * qx + qz * qz);
+    const r = R.r1 + (R.r2 - R.r1) * t;
+    if (dist < r) {
+      const peak = (R.h1 + (R.h2 - R.h1) * t) * crag;
+      h = smax(h, FLOOR + (peak - FLOOR) * mound(dist / r), 40);
+    }
+  }
+  for (const [ix, iz, r, peak] of T.islands) {
+    const dist = Math.hypot(x - ix, z - iz);
+    if (dist < r) h = smax(h, FLOOR + (peak * crag - FLOOR) * mound(dist / r), 40);
+  }
+  // Spurs and gullies on the high ground.
+  const rid = 1 - Math.abs(inoise5(x * (1 / 170) + 3, z * (1 / 170) - 9) * 2 - 1);
+  h += (rid - 0.55) * 46 * smoothstep(90, 320, h);
+  return h;
+}
+
+// Keep in sync with terrainHeight() in glsl.js (same operations, same order).
+export function terrainHeight(x, z) {
+  const n = rolling(x, z);
+  const dx = x - CX;
+  const dz = z - CZ;
+  const a = dx * SX + dz * SZ; // toward the sea
+  // The hill: a broad dome just ahead of the spawn, rolling over and falling to the sea
+  // on three sides, and running back into the plateau inland.
+  const b = dx * RX + dz * RZ; // across
+  const bs = b * T.across;
+  const rp = Math.max(Math.sqrt(a * a + bs * bs) - T.flat, 0);
+  // The coast curves out on either side, so the bay's arms stay land.
+  const fall = T.slope * (Math.sqrt(rp * rp + T.round * T.round) - T.round) * smoothstep(-450, -50, a - b * b * 0.0004);
+  // Inland the ground climbs gently toward the mountains.
+  const ip = Math.max(-a - 300, 0);
+  const climb = 0.05 * (Math.sqrt(ip * ip + 40000) - 200);
+  const r2 = x * x + z * z;
+  // Smooth on the hilltop, livelier further out.
+  const detail = 0.3 + 0.7 * smoothstep(150, 600, Math.sqrt(r2));
+  let h = T.top - fall + climb + n * detail;
+  if (r2 > NEAR2) h = coast(x, z, h, n);
   return h;
 }
 
 // Radial grid that follows the camera: fine under the player, coarse at the horizon.
 function makeGroundGeometry() {
-  const rings = 110;
-  const segs = 192;
+  const rings = 150;
+  const segs = 256;
   const inner = 0.35;
-  const outer = 2600;
+  const outer = 13000;
   const pos = [0, 0, 0];
   const idx = [];
   for (let r = 0; r < rings; r++) {
@@ -105,13 +183,13 @@ void main() {
   // Up close: shaded litter between the stems. Further out this surface stands in
   // for the pampas canopy itself, combed by the wind and flecked with seed heads.
   float n = vnoise(p * 1.3) * 0.6 + vnoise(p * 5.1) * 0.4;
-  vec3 soil = mix(vec3(0.06, 0.04, 0.022), vec3(0.13, 0.085, 0.045), n);
+  vec3 soil = mix(vec3(0.05, 0.032, 0.016), vec3(0.11, 0.07, 0.035), n);
   vec2 wd = uWindDir;
   vec2 combed = vec2(dot(p, wd) * 0.35, dot(p, vec2(-wd.y, wd.x)) * 2.2);
   float streak = vnoise(combed) * 0.6 + vnoise(combed * 2.7 + 3.0) * 0.4;
   float patchN = inoise(p * 0.045 + 7.0);
   float patchN2 = inoise(p * 0.21 - 3.0);
-  vec3 canopy = mix(vec3(0.43, 0.26, 0.11), vec3(0.6, 0.42, 0.22), patchN2 * 0.7 + streak * 0.3);
+  vec3 canopy = mix(vec3(0.42, 0.24, 0.085), vec3(0.6, 0.4, 0.17), patchN2 * 0.7 + streak * 0.3);
   canopy *= mix(0.78, 1.1, patchN) * mix(0.85, 1.1, streak);
   float gust = windGust(p);
   canopy *= 1.0 + gust * 0.25;
@@ -119,11 +197,29 @@ void main() {
   vec3 alb = mix(soil, canopy, far);
   float plumes = smoothstep(0.55, 0.85, vnoise(p * 3.3) * 0.6 + vnoise(p * 9.1) * 0.4) * far;
 
+  // Beyond the hilltop the pampas gives way to dark scrub and pine on the headlands,
+  // with pale rock where the land meets the sea.
+  // Further out: golden meadows on the lower slopes, dark pine woods in the folds and
+  // up the mountains, pale rock on the steeps and where the land meets the sea.
+  float wild = smoothstep(420.0, 900.0, length(p));
+  float scrubN = inoise(p * 0.004 + 3.0) * 0.6 + inoise(p * 0.019) * 0.4;
+  // The coast out toward the sun is wooded and dark against it; inland, meadows.
+  float sunward = smoothstep(-0.1, 0.5, dot(normalize(p), normalize(uSunDisc.xz)));
+  float forest = smoothstep(0.42, 0.6, scrubN + smoothstep(160.0, 420.0, vWorld.y) * 0.4 - smoothstep(20.0, 90.0, vWorld.y) * 0.25 + 0.2 + sunward * 0.45);
+  vec3 meadow = canopy * vec3(0.8, 0.74, 0.62);
+  vec3 woods = mix(vec3(0.035, 0.038, 0.022), vec3(0.08, 0.07, 0.035), scrubN);
+  vec3 scrub = mix(meadow, woods, forest);
+  vec3 rock = vec3(0.16, 0.13, 0.1);
+  scrub = mix(scrub, rock, sat((1.0 - smoothstep(1.5, 9.0, vWorld.y)) * 0.8 + smoothstep(0.5, 0.75, 1.0 - N.y) * 0.6));
+  alb = mix(alb, scrub, wild);
+  plumes *= 1.0 - wild;
+
   float sunVis = vSunVis * charShadow(vShadow);
   float fwd = sat(dot(-V, L));
   float NdL = dot(N, L);
   float diff = mix(sat(NdL * 2.0 + 0.1) * 0.4, sat(NdL * 0.6 + 0.55), far);
-  float trans = (pow(fwd, 4.0) * 1.1 + pow(fwd, 1.6) * 0.25) * far;
+  diff = mix(diff, sat(NdL * 1.1 + 0.05), wild);
+  float trans = (pow(fwd, 4.0) * 1.1 + pow(fwd, 1.6) * 0.25) * far * (1.0 - wild);
   vec3 sun = uSunColor * sunVis;
   vec3 col = alb * sun * (diff + trans * vec3(1.1, 0.85, 0.55));
   col += vec3(0.9, 0.75, 0.55) * plumes * sun * (0.08 + trans * 0.9);
@@ -159,7 +255,7 @@ export class Ground {
 }
 
 // Ridged 1D noise: sharp crests, rounded valleys.
-function ridge(a, freq, seed) {
+function ridgeNoise(a, freq, seed) {
   let h = 0;
   let amp = 0.55;
   let f = freq;
@@ -172,8 +268,10 @@ function ridge(a, freq, seed) {
   return h;
 }
 
-function makeRange(radius, height, freq, seed, sunA) {
-  const segs = 900;
+// Distant land along the horizon, beyond the terrain: a curtain around the camera
+// whose skyline dips low under the sun and rises into mountains to either side.
+function makeRange(radius, height, freq, seed, sunA, low) {
+  const segs = 1100;
   const pos = [];
   const idx = [];
   for (let i = 0; i <= segs; i++) {
@@ -181,13 +279,13 @@ function makeRange(radius, height, freq, seed, sunA) {
     // Walk the noise around a circle so the skyline wraps seamlessly.
     const u = Math.cos(a) * 3 + 10;
     const v = Math.sin(a) * 3 + 10;
-    let h = ridge(u + v * 0.37, freq, seed) * 0.7 + ridge(v - u * 0.21, freq * 1.3, seed + 5) * 0.3;
-    // Keep the sky around the sun clear.
+    let h = ridgeNoise(u + v * 0.37, freq, seed) * 0.7 + ridgeNoise(v - u * 0.21, freq * 1.3, seed + 5) * 0.3;
+    // Bearing from the sun: open sea beneath it, the land stepping up to either side.
     const d = Math.abs(((a - sunA + Math.PI) % (Math.PI * 2) + Math.PI * 2) % (Math.PI * 2) - Math.PI);
-    h *= 0.35 + 0.65 * Math.min(1, d / 0.7);
+    h *= low + (1 - low) * smoothstep(0.15, 1.1, d);
     const x = Math.cos(a) * radius;
     const z = Math.sin(a) * radius;
-    pos.push(x, -60, z, x, h * height, z);
+    pos.push(x, -400, z, x, h * height, z);
   }
   // Wound to face inward: a range is only ever seen from its centre.
   for (let i = 0; i < segs; i++) {
@@ -215,14 +313,13 @@ ${common}
 ${sharedUniforms}
 ${atmosphere}
 uniform vec3 uTint;
-uniform float uHaze;
 uniform float uTop;
 varying vec3 vWorld;
 void main() {
-  vec3 v = normalize(vWorld - cameraPosition);
-  // Mist pools at the foot of each range; the crests read a little darker.
-  float haze = mix(uHaze + (1.0 - uHaze) * 0.6, uHaze, smoothstep(-20.0, uTop, vWorld.y));
-  gl_FragColor = vec4(mix(uTint, hazeColor(v), haze), 1.0);
+  // Crests catch a little of the low sun; the feet sink into the haze.
+  float up = smoothstep(0.0, uTop, vWorld.y);
+  vec3 col = uTint * (0.7 + 0.5 * up);
+  gl_FragColor = vec4(applyFog(col, vWorld), 1.0);
 }
 `;
 
@@ -231,9 +328,9 @@ export class Hills {
     this.group = new THREE.Group();
     const sunA = Math.atan2(-Math.cos(SUN_AZIMUTH), Math.sin(SUN_AZIMUTH));
     const ranges = [
-      { radius: 1500, height: 170, freq: 0.9, seed: 3.1, haze: 0.5, tint: [0.1, 0.11, 0.14] },
-      { radius: 2200, height: 300, freq: 0.7, seed: 8.3, haze: 0.64, tint: [0.12, 0.13, 0.17] },
-      { radius: 3100, height: 480, freq: 0.55, seed: 1.9, haze: 0.76, tint: [0.15, 0.16, 0.2] },
+      { radius: 14000, height: 520, freq: 0.9, seed: 3.1, low: 0.12, tint: [0.035, 0.035, 0.045] },
+      { radius: 19000, height: 800, freq: 0.7, seed: 8.3, low: 0.16, tint: [0.045, 0.045, 0.06] },
+      { radius: 26000, height: 1300, freq: 0.55, seed: 1.9, low: 0.2, tint: [0.06, 0.06, 0.08] },
     ];
     this.materials = [];
     ranges.forEach((r, i) => {
@@ -242,15 +339,14 @@ export class Hills {
           ...shared,
           uCenter: { value: new THREE.Vector2() },
           uTint: { value: new THREE.Color().setRGB(...r.tint) },
-          uHaze: { value: r.haze },
           uTop: { value: r.height * 0.6 },
         },
         vertexShader: rangeVert,
         fragmentShader: rangeFrag,
       });
-      const mesh = new THREE.Mesh(makeRange(r.radius, r.height, r.freq, r.seed, sunA), mat);
+      const mesh = new THREE.Mesh(makeRange(r.radius, r.height, r.freq, r.seed, sunA, r.low), mat);
       mesh.frustumCulled = false;
-      mesh.renderOrder = 7 + i;
+      mesh.renderOrder = 9 + i;
       this.materials.push(mat);
       this.group.add(mesh);
     });

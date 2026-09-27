@@ -76,6 +76,7 @@ export class Cloth {
     this.acc = 0;
     this.time = 0;
     this.ready = false;
+    this.drag = 1.5; // how readily the wind carries it
   }
 
   reset(matrix) {
@@ -148,7 +149,7 @@ export class Cloth {
         const ws = Math.hypot(_w.x, _w.z);
         // The hem ripples like a flag; the higher rows mostly drag along.
         const flap = Math.sin(this.time * (7 + ws * 1.5) - row * 0.8 + (i % this.cols) * 0.4) * ws * 0.12 * row;
-        const drag = 1.5;
+        const drag = this.drag;
         const ax = drag * (_w.x - vx / h) + back.x * flap;
         const ay = -9.8 + drag * 0.35 * (_w.y - vy / h) + flap * 0.3;
         const az = drag * (_w.z - vz / h) + back.z * flap;

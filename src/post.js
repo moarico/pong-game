@@ -102,6 +102,7 @@ void main() {
 const bloomUp = /* glsl */ `
 uniform sampler2D tSrc;
 uniform vec2 uTexel;
+uniform float uScale;
 varying vec2 vUv;
 void main() {
   vec2 d = uTexel;
@@ -110,7 +111,7 @@ void main() {
       + texture(tSrc, vUv + vec2(0.0, -d.y)).rgb + texture(tSrc, vUv + vec2(0.0, d.y)).rgb) * 2.0;
   s += texture(tSrc, vUv + vec2(-d.x, -d.y)).rgb + texture(tSrc, vUv + vec2(d.x, -d.y)).rgb
      + texture(tSrc, vUv + vec2(-d.x, d.y)).rgb + texture(tSrc, vUv + vec2(d.x, d.y)).rgb;
-  gl_FragColor = vec4(s / 16.0, 1.0);
+  gl_FragColor = vec4(s / 16.0 * uScale, 1.0);
 }
 `;
 
@@ -267,12 +268,10 @@ vec3 lensFlare(vec2 uv) {
   vec2 p = (uv - 0.5) * asp;
   vec2 s = (uSunUV - 0.5) * asp;
   vec3 f = vec3(0.0);
-  // Ghost reflections strung along the line through the lens centre.
-  f += vec3(1.0, 0.6, 0.28) * ghost(p, s * -0.24, 0.042) * 0.05;
-  f += vec3(0.6, 0.85, 0.5) * ghost(p, s * -0.52, 0.08) * 0.02;
-  f += vec3(0.85, 0.45, 0.8) * ghost(p, s * -0.8, 0.05) * 0.028;
-  f += vec3(0.35, 0.55, 1.0) * ghost(p, s * -1.18, 0.15) * 0.012;
-  f += vec3(1.0, 0.8, 0.5) * ghost(p, s * 0.45, 0.024) * 0.045;
+  // Faint ghost reflections strung along the line through the lens centre.
+  f += vec3(1.0, 0.6, 0.28) * ghost(p, s * -0.24, 0.042) * 0.02;
+  f += vec3(0.6, 0.85, 0.5) * ghost(p, s * -0.52, 0.08) * 0.008;
+  f += vec3(0.35, 0.55, 1.0) * ghost(p, s * -1.18, 0.15) * 0.006;
   // Starburst and a thin anamorphic streak.
   vec2 d = p - s;
   float r = length(d);
@@ -306,19 +305,27 @@ void main() {
   col += rays;
 
   vec3 ex = texture(tExposure, vec2(0.5)).rgb;
+  // Debug: raw scene light (a quarter of it, no tone curve), exposure in the corner.
+  if (uDebug == 4) {
+    vec3 raw = gl_FragCoord.x < 6.0 && gl_FragCoord.y < 6.0 ? vec3(ex.r * 0.5) : col * 0.25;
+    gl_FragColor = vec4(toSRGB(clamp(raw, 0.0, 1.0)), 1.0);
+    return;
+  }
   float sunVis = ex.g * uSunOn;
   col += lensFlare(uv) * uFlare * sunVis;
   // Veiling glare: staring into the sun lifts the blacks, as a real lens does.
-  col += uSunTint * 0.03 * sunVis;
+  col += uSunTint * 0.012 * sunVis;
 
   col = acesFit(col * ex.r);
 
-  // Grade: warm amber shadows lifted by haze, creamy highlights.
+  // Grade: rich, saturated sunset colour with deep, clean shadows.
   float l = lum(col);
-  col = col + vec3(0.016, 0.011, 0.006) * (1.0 - smoothstep(0.0, 0.3, l));
-  col *= mix(vec3(1.05, 0.98, 0.9), vec3(1.02, 1.0, 0.97), smoothstep(0.05, 0.7, l));
-  col = max(mix(vec3(l), col, 1.2), 0.0);
+  col *= mix(vec3(1.0, 0.98, 1.03), vec3(1.03, 1.0, 0.95), smoothstep(0.05, 0.6, l));
+  col = max(mix(vec3(l), col, 1.22), 0.0);
+  // A gentle S-curve for contrast (in display space, below).
+
   vec3 o = toSRGB(col);
+  o = mix(o, o * o * (3.0 - 2.0 * o), 0.28);
 
   vec2 q = dc * vec2(uAspect, 1.0);
   o *= mix(1.0, 1.0 - smoothstep(0.2, 1.2, length(q)), 0.5);
@@ -352,7 +359,8 @@ export class Post {
         uDecay: { value: 0.96 }, uRes: { value: new THREE.Vector2() },
       }),
       down: mat(bloomDown, { tSrc: { value: null }, uTexel: { value: new THREE.Vector2() }, uKaris: { value: 0 } }),
-      up: mat(bloomUp, { tSrc: { value: null }, uTexel: { value: new THREE.Vector2() } }, {
+      // Each wider level adds a little less: a bright core without a veil over everything.
+      up: mat(bloomUp, { tSrc: { value: null }, uTexel: { value: new THREE.Vector2() }, uScale: { value: 0.7 } }, {
         blending: THREE.CustomBlending,
         blendEquation: THREE.AddEquation,
         blendSrc: THREE.OneFactor,
@@ -366,12 +374,12 @@ export class Post {
       exposure: mat(exposureFrag, {
         tLum: { value: null }, tPrev: { value: null }, tScene: { value: null },
         uSunUV: { value: new THREE.Vector2() }, uSunRadius: { value: 0.02 }, uAspect: { value: 1 },
-        uDt: { value: 0 }, uInit: { value: 1 }, uKey: { value: 0.3 }, uRange: { value: new THREE.Vector2(0.06, 2.0) },
+        uDt: { value: 0 }, uInit: { value: 1 }, uKey: { value: 0.2 }, uRange: { value: new THREE.Vector2(0.06, 2.0) },
       }),
       composite: mat(compositeFrag, {
         tScene: { value: null }, tBloom: { value: null }, tRays: { value: null }, tExposure: { value: null },
         uSunUV: { value: new THREE.Vector2() }, uSunOn: { value: 0 }, uAspect: { value: 1 }, uTime: { value: 0 },
-        uBloom: { value: 0.07 }, uBloomNorm: { value: 1 }, uRays: { value: 0.32 }, uFlare: { value: 9 },
+        uBloom: { value: 0.06 }, uBloomNorm: { value: 1 }, uRays: { value: 0.26 }, uFlare: { value: 4 },
         uSunTint: { value: new THREE.Color().setRGB(1.0, 0.72, 0.42) }, uRes: { value: new THREE.Vector2() }, uDebug: { value: 0 }, tDof: { value: null }, uDofOn: { value: 0 },
       }),
     };

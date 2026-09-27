@@ -2,6 +2,21 @@ import * as THREE from 'three';
 import { DIM, SAYA_DIR } from './figure.js';
 import { terrainHeight } from './terrain.js';
 
+// A damped spring toward target, taken in steps of at most 1/120 s so it stays
+// stable however long the frame (a slow phone, a hitch). Returns [x, v].
+const _sp = [0, 0];
+function springTo(x, v, target, k, c, dt) {
+  const n = Math.max(1, Math.ceil(dt * 120 - 1e-6));
+  const h = dt / n;
+  for (let i = 0; i < n; i++) {
+    v += ((target - x) * k - v * c) * h;
+    x += v * h;
+  }
+  _sp[0] = x;
+  _sp[1] = v;
+  return _sp;
+}
+
 // ---------------------------------------------------------------------------
 // Procedural animation for any figure.
 //
@@ -668,18 +683,14 @@ export class Animator {
     // Secondary motion: hat, scabbard, hair and headband tails.
     // -------------------------------------------------------------------
     const hatTarget = clamp(-this.squashV * 0.05 + this.bob * 0.6 - this.pelvisV * 0.02, -0.12, 0.12);
-    this.hatV += ((hatTarget - this.hatTilt) * 160 - this.hatV * 14) * dt;
-    this.hatTilt += this.hatV * dt;
+    [this.hatTilt, this.hatV] = springTo(this.hatTilt, this.hatV, hatTarget, 160, 14, dt);
     b.hat.rotation.set(0.04 + this.hatTilt, 0, 0);
     const sayaT = -this.pelvisV * 0.4 + Math.sin(TAU * ph) * 0.05 * moveW;
-    this.sayaV += ((sayaT - this.sayaSwing) * 120 - this.sayaV * 9) * dt;
-    this.sayaSwing += this.sayaV * dt;
+    [this.sayaSwing, this.sayaV] = springTo(this.sayaSwing, this.sayaV, sayaT, 120, 9, dt);
     b.saya.rotation.set(this.sayaSwing * 0.5, 0, this.sayaSwing * 0.3);
     const tailT = _v.set(this.lean * 0.6 + this.speed * 0.09 - this.pelvisV * 0.6, 0, -this.bank + this.yawRate * 0.04);
-    this.tailV.x += ((tailT.x - this.tail.x) * 90 - this.tailV.x * 7) * dt;
-    this.tailV.y += ((tailT.z - this.tail.y) * 90 - this.tailV.y * 7) * dt;
-    this.tail.x += this.tailV.x * dt;
-    this.tail.y += this.tailV.y * dt;
+    [this.tail.x, this.tailV.x] = springTo(this.tail.x, this.tailV.x, tailT.x, 90, 7, dt);
+    [this.tail.y, this.tailV.y] = springTo(this.tail.y, this.tailV.y, tailT.z, 90, 7, dt);
     b.tail.rotation.set(clamp(this.tail.x, -0.3, 1.4) + Math.sin(t * 7.3) * 0.03 * this.speed * 0.2, 0, clamp(this.tail.y, -0.6, 0.6));
 
     root.updateMatrixWorld(true);
@@ -702,10 +713,8 @@ export class Animator {
       // Under-damped spring: the cloth overshoots a touch and settles.
       const k = 260;
       const cdamp = 18;
-      h.vx += ((tx - h.x) * k - h.vx * cdamp) * dt;
-      h.vz += ((tz - h.z) * k - h.vz * cdamp) * dt;
-      h.x += h.vx * dt;
-      h.z += h.vz * dt;
+      [h.x, h.vx] = springTo(h.x, h.vx, tx, k, cdamp, dt);
+      [h.z, h.vz] = springTo(h.z, h.vz, tz, k, cdamp, dt);
       if (Math.abs(h.x - tx) > 0.8) h.x = tx;
       bone.rotation.set(-h.x, 0, h.z * (i === 0 ? 1 : -1), 'XZY');
     }
@@ -886,8 +895,7 @@ export class Animator {
     }
     // Pendulum lag on the carried blade.
     const lagT = sw * 0.12 * (1 - g) * (1 - airW);
-    this.swordLagV += ((lagT - this.swordLag) * 110 - this.swordLagV * 11) * dt;
-    this.swordLag += this.swordLagV * dt;
+    [this.swordLag, this.swordLagV] = springTo(this.swordLag, this.swordLagV, lagT, 110, 11, dt);
     _q.setFromAxisAngle(_X, -this.swordLag);
     P.swordQ.multiply(_q);
   }

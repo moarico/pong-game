@@ -4,7 +4,7 @@ import { TRAIL_N } from './config.js';
 import { mulberry32 } from './noise.js';
 
 // Where along the stalk the feathery seed head begins.
-const PLUME_START = 0.75;
+const PLUME_START = 0.62;
 
 // ---------------------------------------------------------------------------
 // Blades
@@ -165,10 +165,10 @@ void main() {
   vSunVis = mix(0.12, 1.0, smoothstep(0.1, 0.9, t));
 
   // Light golden-brown straw, with pale bleached patches and the odd darker stem.
-  vec3 cLight = vec3(0.6, 0.36, 0.14);
-  vec3 cPale = vec3(0.72, 0.5, 0.26);
-  vec3 cDeep = vec3(0.34, 0.18, 0.07);
-  vec3 cOlive = vec3(0.5, 0.36, 0.14);
+  vec3 cLight = vec3(0.24, 0.14, 0.045);
+  vec3 cPale = vec3(0.4, 0.29, 0.13);
+  vec3 cDeep = vec3(0.085, 0.055, 0.022);
+  vec3 cOlive = vec3(0.17, 0.15, 0.06);
   vec3 alb = mix(cLight, cPale, r1 * 0.75 * patchN2);
   alb = mix(alb, cDeep, r3 * r3 * r3 * 0.85);
   alb = mix(alb, cOlive, smoothstep(0.58, 0.92, patchN) * 0.4 * r2);
@@ -201,8 +201,8 @@ void main() {
   vec3 L = uSunDir;
   float t = vT;
 
-  vec3 alb = vAlbedo * mix(0.55, 1.08, smoothstep(0.0, 0.9, t));
-  alb = mix(alb, vec3(0.86, 0.7, 0.46), smoothstep(0.75, 1.0, t) * 0.45);
+  vec3 alb = vAlbedo * mix(0.4, 1.05, smoothstep(0.0, 0.9, t));
+  alb = mix(alb, vec3(0.72, 0.6, 0.4), smoothstep(0.7, 1.0, t) * 0.35);
   // A passing gust flips blades to their paler, shinier side: the wind becomes visible.
   alb *= 1.0 + vGust * 0.32;
 
@@ -211,7 +211,7 @@ void main() {
   float diff = sat(NdL * 0.55 + 0.45);
   // Looking toward the sun, light pours through the thin dry blades.
   float fwd = sat(dot(-V, L));
-  float trans = (pow(fwd, 5.0) * 1.3 + pow(fwd, 1.8) * 0.28) * (0.12 + 0.88 * t * t);
+  float trans = (pow(fwd, 5.0) * 0.8 + pow(fwd, 1.8) * 0.16) * (0.12 + 0.88 * t * t);
   float fres = pow(1.0 - abs(dot(Nf, V)), 3.0);
   float rim = fres * fwd * fwd * (0.3 + 0.9 * t) * 1.5;
   vec3 Hv = normalize(L + V);
@@ -224,7 +224,7 @@ void main() {
   float glint = spark * tw * (pow(fwd, 3.0) * 5.0 + pow(NdH, 30.0) * 4.0);
 
   vec3 sun = uSunColor * sunVis;
-  vec3 col = alb * sun * (diff + trans * vec3(1.05, 0.82, 0.55));
+  vec3 col = alb * sun * (diff + trans * vec3(1.0, 0.8, 0.55));
   col += sun * (rim * vec3(1.0, 0.86, 0.66) + spec + glint);
   col += alb * mix(uAmbGround, uAmbSky, 0.5 + 0.5 * N.y) * mix(0.3, 1.0, t);
   col = applyFog(col, vWorld);
@@ -336,7 +336,7 @@ void main() {
   vec2 B = tl > 1e-4 ? total / tl : vec2(1.0, 0.0);
   a0_ = dot(tilt, B);
   c1_ = dot(curve, B);
-  droop_ = 0.45 + 0.6 * r2 + windAmt * 0.5;
+  droop_ = 0.55 + 0.9 * r2 + windAmt * 0.7;
   float tipA = a0_ + c1_;
   if (abs(tipA) > 1.35) {
     float k = 1.35 / abs(tipA);
@@ -363,8 +363,10 @@ void main() {
   S = sl > 1e-3 ? S / sl : normalize(cross(T, vec3(0.0, 0.0, 1.0)) + 1e-4);
 
   float s = sat((t - PLUME_START) / (1.0 - PLUME_START));
-  float wPlume = uWidth * mix(0.75, 1.25, r2) * pow(sin(PI * pow(s, 0.75)), 0.7) * (1.0 - s * 0.25);
-  float w = mix(0.0065, wPlume, smoothstep(0.0, 0.06, s)) * (1.0 + dist * uLodWidth) * keep;
+  // A slender, feathery head: narrow where it leaves the stem, fullest two thirds up,
+  // tapering to a soft point.
+  float wPlume = uWidth * mix(0.7, 1.3, r2) * pow(sin(PI * pow(s, 0.62)), 0.85) * (1.0 - s * 0.2);
+  float w = mix(0.006, wPlume, smoothstep(0.0, 0.08, s)) * (1.0 + dist * uLodWidth) * keep;
   vec3 pos = spine + S * (side * 0.5 * w);
 
   vWorld = pos;
@@ -397,16 +399,33 @@ void main() {
   float u = vSide;
   float isPlume = step(1e-4, s);
   float alpha = 1.0;
-  vec3 alb = vec3(0.52, 0.34, 0.16);
+  vec3 alb = vec3(0.24, 0.15, 0.06);
+  float glow = 1.0;
   if (isPlume > 0.5) {
-    // Silky seed head: a soft tuft of fine, irregular hairs running up its length.
-    float env = 1.0 - smoothstep(0.15, 1.0, abs(u));
-    float fib = vnoise(vec2(u * 11.0 + vSeed * 3.1, s * 2.5 + vSeed)) * 0.65
-              + vnoise(vec2(u * 27.0 - vSeed, s * 5.0)) * 0.35;
-    float grain = hash12(floor(vec2(u * 40.0, s * 64.0)) + vSeed);
-    alpha = env * (0.3 + 0.7 * smoothstep(0.25, 0.75, fib)) * (0.75 + 0.25 * grain);
-    alpha *= smoothstep(0.0, 0.15, s) * (1.0 - smoothstep(0.75, 1.0, s) * 0.9);
-    alb = mix(vec3(0.58, 0.42, 0.22), vec3(0.78, 0.63, 0.42), smoothstep(0.0, 0.7, s));
+    // A silky seed head like a feather: a stiff spine with tufts of fine hairs
+    // sweeping up and out from it, ragged at the edges, thinning toward the tip.
+    float au = abs(u);
+    float pale = fract(vSeed * 0.618);
+    float q = s * 24.0 - au * 1.6 + step(0.0, u) * 0.5 + vSeed * 0.37;
+    float tuft = floor(q);
+    float fq = fract(q);
+    float h1 = hash12(vec2(tuft, vSeed));
+    float h2 = hash12(vec2(tuft + 17.0, vSeed * 1.7));
+    // Each tuft reaches out its own length; tufts shorten toward the tip.
+    float reach = mix(0.55, 1.0, h1) * (1.0 - 0.45 * smoothstep(0.55, 1.0, s));
+    float thick = 0.62 - 0.3 * au;
+    float fw = fwidth(q);
+    float line = smoothstep(thick + fw, thick - fw, fq);
+    // Too fine to resolve: fall back to the average cover of the tufts.
+    line = mix(line, thick, smoothstep(0.35, 0.9, fw));
+    float edge = 1.0 - smoothstep(reach - 0.12, reach, au);
+    float spine = 1.0 - smoothstep(0.08, 0.16, au);
+    alpha = max(spine, line * edge) * (0.75 + 0.25 * h2);
+    alpha *= smoothstep(0.0, 0.1, s);
+    alb = mix(vec3(0.34, 0.22, 0.1), vec3(0.8, 0.64, 0.42), (0.4 + 0.6 * pale) * mix(0.55, 1.0, h2));
+    alb = mix(alb, vec3(0.3, 0.19, 0.09), spine * 0.7);
+    // Fine hairs out at the edge scatter the most light; the spine hardly any.
+    glow = (0.5 + 0.8 * pale) * (0.35 + 0.9 * smoothstep(0.1, 0.8, au)) * (0.6 + 0.8 * h2);
   }
   if (uA2C < 0.5 && alpha < 0.5) discard;
   if (alpha < 0.06) discard;
@@ -416,12 +435,12 @@ void main() {
   vec3 L = uSunDir;
   float fwd = sat(dot(-V, L));
   // Fine fibres scatter light forward: backlit plumes blaze gold.
-  float trans = (pow(fwd, 3.0) * 2.2 + pow(fwd, 12.0) * 3.5) * mix(0.3, 1.0, isPlume);
+  float trans = (pow(fwd, 3.0) * 0.9 + pow(fwd, 12.0) * 2.0) * mix(0.2, glow, isPlume);
   // Fluffy fibres scatter light every way: a soft, wrapped diffuse.
   float diff = mix(sat(dot(N, L) * 0.55 + 0.45), sat(dot(N, L) * 0.3 + 0.5), isPlume);
   float sunVis = vSunVis * charShadow(vShadow);
   vec3 sun = uSunColor * sunVis;
-  vec3 col = alb * sun * (diff + trans * vec3(1.1, 0.78, 0.45));
+  vec3 col = alb * sun * (diff + trans * vec3(1.05, 0.9, 0.7));
   vec3 Hv = normalize(L + V);
   col += sun * alb * pow(sat(abs(dot(N, Hv))), 18.0) * 0.4 * isPlume;
   col += alb * mix(uAmbGround, uAmbSky, 0.6) * mix(0.7, 1.1, isPlume);
@@ -503,16 +522,16 @@ function scatter(count, tile, seed) {
 }
 
 const BLADE_LAYERS = [
-  { tile: 34, count: 56000, segments: 6, fadeStart: 8.5, fadeEnd: 16.5, width: 0.026, height: 1.05, lodWidth: 0.025, interact: 1, order: 2 },
-  { tile: 92, count: 48000, segments: 4, fadeStart: 27, fadeEnd: 44, width: 0.05, height: 1.05, lodWidth: 0.02, interact: 1, order: 4 },
-  { tile: 320, count: 48000, segments: 2, fadeStart: 95, fadeEnd: 152, width: 0.12, height: 1.05, lodWidth: 0.012, interact: 0, order: 5 },
+  { tile: 34, count: 56000, segments: 6, fadeStart: 8.5, fadeEnd: 16.5, width: 0.02, height: 0.92, lodWidth: 0.025, interact: 1, order: 2 },
+  { tile: 92, count: 48000, segments: 4, fadeStart: 27, fadeEnd: 44, width: 0.05, height: 0.92, lodWidth: 0.02, interact: 1, order: 4 },
+  { tile: 320, count: 48000, segments: 2, fadeStart: 95, fadeEnd: 152, width: 0.12, height: 0.92, lodWidth: 0.012, interact: 0, order: 5 },
 ];
 
 // Seed plumes are what the eye reads as a pampas field, so they get their own dense layers.
 const PLUME_LAYERS = [
-  { tile: 40, count: 15000, stem: 3, plume: 8, fadeStart: 12, fadeEnd: 19.5, width: 0.07, height: 1.38, lodWidth: 0.02, interact: 1, order: 3 },
-  { tile: 104, count: 20000, stem: 2, plume: 5, fadeStart: 30, fadeEnd: 50, width: 0.1, height: 1.38, lodWidth: 0.015, interact: 1, order: 4 },
-  { tile: 280, count: 18000, stem: 1, plume: 3, fadeStart: 85, fadeEnd: 135, width: 0.16, height: 1.38, lodWidth: 0.01, interact: 0, order: 5 },
+  { tile: 40, count: 15000, stem: 3, plume: 9, fadeStart: 12, fadeEnd: 19.5, width: 0.046, height: 1.26, lodWidth: 0.02, interact: 1, order: 3 },
+  { tile: 104, count: 20000, stem: 2, plume: 5, fadeStart: 30, fadeEnd: 50, width: 0.07, height: 1.26, lodWidth: 0.015, interact: 1, order: 4 },
+  { tile: 280, count: 18000, stem: 1, plume: 3, fadeStart: 85, fadeEnd: 135, width: 0.12, height: 1.26, lodWidth: 0.01, interact: 0, order: 5 },
 ];
 
 export class Grass {

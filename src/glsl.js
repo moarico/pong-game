@@ -70,6 +70,7 @@ float inoise5(vec2 p) {
 export const sharedUniforms = /* glsl */ `
 uniform float uTime;
 uniform vec3 uSunDir;
+uniform vec3 uSunDisc;
 uniform vec3 uSunColor;
 uniform vec3 uAmbSky;
 uniform vec3 uAmbGround;
@@ -77,15 +78,29 @@ uniform vec3 uFogColor;
 uniform vec3 uFogSunColor;
 uniform float uFogDensity;
 uniform float uFogFalloff;
+uniform vec2 uMist;
 uniform vec2 uWindDir;
 uniform float uWindStrength;
 uniform vec2 uWindScroll;
 `;
 
+const v2 = (a) => `vec2(${f(a[0])}, ${f(a[1])})`;
+const ridgeA = TERRAIN.ridges.map(([x1, z1, x2, z2]) => `vec4(${f(x1)}, ${f(z1)}, ${f(x2 - x1)}, ${f(z2 - z1)})`);
+const ridgeB = TERRAIN.ridges.map(([, , , , r1, r2, h1, h2]) => `vec4(${f(r1)}, ${f(r2)}, ${f(h1)}, ${f(h2)})`);
+const ridgeInv = TERRAIN.ridges.map(([x1, z1, x2, z2]) => f(1 / ((x2 - x1) ** 2 + (z2 - z1) ** 2)));
+const islands = TERRAIN.islands.map((v) => `vec4(${v.map(f).join(', ')})`);
+
 // Keep in sync with terrainHeight() in terrain.js.
 export const terrain = /* glsl */ `
-float terrainHeight(vec2 p) {
-  vec2 q = (p + vec2(${f(TERRAIN.offset[0])}, ${f(TERRAIN.offset[1])})) * (1.0 / 240.0);
+#define NRIDGE ${TERRAIN.ridges.length}
+#define NISLAND ${TERRAIN.islands.length}
+const vec4 RIDGE_A[NRIDGE] = vec4[NRIDGE](${ridgeA.join(', ')});
+const vec4 RIDGE_B[NRIDGE] = vec4[NRIDGE](${ridgeB.join(', ')});
+const float RIDGE_INV[NRIDGE] = float[NRIDGE](${ridgeInv.join(', ')});
+const vec4 ISLANDS[NISLAND] = vec4[NISLAND](${islands.join(', ')});
+
+float terrainRolling(vec2 p) {
+  vec2 q = (p + ${v2(TERRAIN.offset)}) * (1.0 / 240.0);
   float h = (inoise5(q) - 0.5) * 26.0;
   q = mat2(0.8, 0.6, -0.6, 0.8) * q * 2.3 + vec2(3.1, 1.7);
   h += (inoise5(q) - 0.5) * 9.0;
@@ -93,8 +108,65 @@ float terrainHeight(vec2 p) {
   h += (inoise5(q) - 0.5) * 2.6;
   q = mat2(0.8, 0.6, -0.6, 0.8) * q * 2.5 + vec2(7.7, -2.4);
   h += (inoise5(q) - 0.5) * 0.8;
-  vec2 d = p - vec2(${f(TERRAIN.hero[0])}, ${f(TERRAIN.hero[1])});
-  h += ${f(TERRAIN.heroHeight)} * exp(-dot(d, d) * ${f(1 / (2 * TERRAIN.heroRadius * TERRAIN.heroRadius))});
+  return h;
+}
+
+float terrainSmax(float a, float b, float k) {
+  float h = max(k - abs(a - b), 0.0) / k;
+  return max(a, b) + h * h * k * 0.25;
+}
+
+float terrainMound(float t) {
+  float u = max(1.0 - t * t, 0.0);
+  return u * u;
+}
+
+// The coast beyond the hilltop: the seabed, headlands and islands.
+float terrainCoast(vec2 p, float h, float n) {
+  h = terrainSmax(h, ${f(TERRAIN.seabed)} + n * 0.5, 30.0);
+  float crag = 1.0 - abs(inoise5(p * (1.0 / 640.0) + vec2(19.0, 7.0)) * 2.0 - 1.0);
+  crag = 0.6 + 0.6 * crag + (inoise5(p * (1.0 / 230.0) + vec2(-5.0, 11.0)) - 0.5) * 0.35;
+  for (int i = 0; i < NRIDGE; i++) {
+    vec4 A = RIDGE_A[i];
+    vec4 B = RIDGE_B[i];
+    vec2 q = p - A.xy;
+    float t = clamp(dot(q, A.zw) * RIDGE_INV[i], 0.0, 1.0);
+    float dist = length(q - A.zw * t);
+    float r = mix(B.x, B.y, t);
+    if (dist < r) {
+      float peak = mix(B.z, B.w, t) * crag;
+      h = terrainSmax(h, -120.0 + (peak + 120.0) * terrainMound(dist / r), 40.0);
+    }
+  }
+  for (int i = 0; i < NISLAND; i++) {
+    vec4 I = ISLANDS[i];
+    float dist = length(p - I.xy);
+    if (dist < I.z) h = terrainSmax(h, -120.0 + (I.w * crag + 120.0) * terrainMound(dist / I.z), 40.0);
+  }
+  // Spurs and gullies on the high ground.
+  float rid = 1.0 - abs(inoise5(p * (1.0 / 170.0) + vec2(3.0, -9.0)) * 2.0 - 1.0);
+  h += (rid - 0.55) * 46.0 * smoothstep(90.0, 320.0, h);
+  return h;
+}
+
+float terrainHeight(vec2 p) {
+  float n = terrainRolling(p);
+  vec2 d = p - ${v2(TERRAIN.sunH.map((v) => v * TERRAIN.crest))};
+  float a = dot(d, ${v2(TERRAIN.sunH)});
+  // The hill: a broad dome just ahead of the spawn, rolling over and falling to the sea
+  // on three sides, and running back into the plateau inland.
+  float b = dot(d, ${v2(TERRAIN.right)});
+  float rp = max(length(vec2(a, b * ${f(TERRAIN.across)})) - ${f(TERRAIN.flat)}, 0.0);
+  // The coast curves out on either side, so the bay's arms stay land.
+  float fall = ${f(TERRAIN.slope)} * (sqrt(rp * rp + ${f(TERRAIN.round * TERRAIN.round)}) - ${f(TERRAIN.round)}) * smoothstep(-450.0, -50.0, a - b * b * 0.0004);
+  // Inland the ground climbs gently toward the mountains.
+  float ip = max(-a - 300.0, 0.0);
+  float climb = 0.05 * (sqrt(ip * ip + 40000.0) - 200.0);
+  float r2 = dot(p, p);
+  // Smooth on the hilltop, livelier further out.
+  float detail = 0.3 + 0.7 * smoothstep(150.0, 600.0, sqrt(r2));
+  float h = ${f(TERRAIN.top)} - fall + climb + n * detail;
+  if (r2 > ${f(TERRAIN.near * TERRAIN.near)}) h = terrainCoast(p, h, n);
   return h;
 }
 
@@ -129,24 +201,29 @@ float windGust(vec2 p) {
 `;
 
 export const atmosphere = /* glsl */ `
-// Colour of the air in direction v: cool blue-grey haze away from the sun,
-// molten gold toward it.
+// Colour of the air in direction v: dim, cool grey away from the sun, deepening to
+// orange and then molten gold toward it.
 vec3 hazeColor(vec3 v) {
-  float s = dot(v, uSunDir);
-  vec3 c = mix(uFogColor, uFogSunColor, pow(s * 0.5 + 0.5, 6.0));
-  c += uFogSunColor * 0.45 * pow(sat(s), 24.0);
+  float s = dot(v, uSunDisc);
+  vec3 c = mix(uFogColor, uFogSunColor, pow(s * 0.5 + 0.5, 15.0));
+  c += uFogSunColor * (0.3 * pow(sat(s), 30.0) + 0.9 * pow(sat(s), 160.0));
   return c;
 }
 
-// Exponential height fog: valleys fill with haze, crests stand clearer.
+// Optical depth of an exponential layer (density a at y = 0, falloff k) along the
+// segment from the camera to wp.
+float fogLayer(vec3 d, float dist, float a, float k) {
+  float ky = k * d.y;
+  float t = abs(ky) > 1e-4 ? (1.0 - exp(-ky)) / ky : 1.0;
+  return a * exp(-k * cameraPosition.y) * dist * max(t, 0.0);
+}
+
+// Height fog: a broad haze that thins with altitude, and a low mist over the sea.
 float fogAmount(vec3 wp) {
   vec3 d = wp - cameraPosition;
   float dist = length(d);
-  float k = uFogFalloff;
-  float a = uFogDensity * exp(-k * cameraPosition.y);
-  float ky = k * d.y;
-  float t = abs(ky) > 1e-4 ? (1.0 - exp(-ky)) / ky : 1.0;
-  return 1.0 - exp(-a * dist * max(t, 0.0));
+  float od = fogLayer(d, dist, uFogDensity, uFogFalloff) + fogLayer(d, dist, uMist.x, uMist.y);
+  return 1.0 - exp(-od);
 }
 
 vec3 applyFog(vec3 col, vec3 wp) {
