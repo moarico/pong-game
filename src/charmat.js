@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { common, sharedUniforms, atmosphere, lights } from './glsl.js';
+import { common, sharedUniforms, atmosphere, lights, specAA } from './glsl.js';
 
 // ---------------------------------------------------------------------------
 // One material for a whole character. Every vertex carries its own albedo and
@@ -39,7 +39,7 @@ attribute vec3 aColor;
 attribute vec4 aMat;
 attribute vec2 aPat;
 varying vec3 vWorld;
-varying vec3 vNormal;
+centroid varying vec3 vNormal;
 varying vec2 vUv;
 varying vec3 vColor;
 varying vec4 vMat;
@@ -67,6 +67,7 @@ void main() {
 
 const frag = /* glsl */ `
 ${common}
+${specAA}
 ${sharedUniforms}
 ${atmosphere}
 ${lights}
@@ -75,7 +76,7 @@ uniform vec4 uHat;
 uniform vec4 uFlash;
 uniform vec4 uGlow;
 varying vec3 vWorld;
-varying vec3 vNormal;
+centroid varying vec3 vNormal;
 varying vec2 vUv;
 varying vec3 vColor;
 varying vec4 vMat;
@@ -360,7 +361,7 @@ void main() {
   // GGX specular.
   vec3 Hv = normalize(L + V);
   float NdH = max(dot(N, Hv), 0.0);
-  float a2 = pow(max(rough, 0.05), 4.0);
+  float a2 = specAlpha2(rough, N, 0.05);
   float dd = NdH * NdH * (a2 - 1.0) + 1.0;
   float D = a2 / (PI * dd * dd);
   float F0 = mix(0.04, 1.0, metal);
@@ -368,13 +369,21 @@ void main() {
   float k = (rough + 1.0) * (rough + 1.0) / 8.0;
   float nl = max(NdL, 0.0);
   float G = (NdV / (NdV * (1.0 - k) + k)) * (nl / (nl * (1.0 - k) + k));
-  float spec = D * F * G / (4.0 * NdV + 1e-3);
+  float spec = min(D * F * G / (4.0 * NdV + 1e-3), 14.0);
   vec3 specCol = mix(vec3(1.0), alb, metal);
 
-  // Against the sun a molten edge of light wraps the silhouette.
+  // Facets that turn edge-on within a pixel (the sides of straps, the rims of plates)
+  // would catch the rim and the grazing reflection in single pixels and crawl with
+  // bright dots: keep those for smooth silhouettes.
+  vec3 dnx = dFdx(N);
+  vec3 dny = dFdy(N);
+  float edgeAA = 1.0 - smoothstep(0.03, 0.35, dot(dnx, dnx) + dot(dny, dny));
+
+  // Against the sun a molten edge of light wraps the silhouette (softer in the halls,
+  // whose lights seldom stand right behind a foe).
   float fres = pow(1.0 - NdV, 3.2);
   float back = pow(sat(dot(-V, L)), 1.6);
-  float rim = fres * (0.12 + 1.5 * back) * sat(NdL + 0.6) * rimAmt;
+  float rim = fres * (0.12 + 1.5 * back) * sat(NdL + 0.6) * rimAmt * edgeAA * mix(1.0, 0.5, uArena);
 
   // Tall grass swallows the light around the legs; the brim shades the face.
   float grassOcc = mix(smoothstep(0.1, 1.1, vWorld.y - uGroundY), 1.0, uArena);
@@ -383,7 +392,7 @@ void main() {
   vec3 amb = mix(uAmbGround, uAmbSky, 0.5 + 0.5 * N.y) * mix(0.5, 1.0, grassOcc) * hatOcclusion(vWorld);
 
   vec3 R = reflect(-V, N);
-  vec3 env = envColor(R) * mix(F0, 1.0, pow(1.0 - NdV, 5.0)) * (1.0 - rough) * (1.0 - rough);
+  vec3 env = envColor(R) * mix(F0, 1.0, pow(1.0 - NdV, 5.0) * edgeAA) * (1.0 - rough) * (1.0 - rough);
 
   vec3 col = alb * (1.0 - metal) * (diff * sun + amb);
   col += specCol * spec * sun;
@@ -395,7 +404,7 @@ void main() {
   // Torches, furnaces and lures close by; lightning; an oily sheen on scales and skin.
   if (uArena > 0.5) col += pointLights(vWorld, N, V, alb * (1.0 - metal * 0.7), rough, 0.25) * mix(1.0, 0.75, metal);
   col += alb * uFlashLight * vec3(0.55, 0.65, 1.0) * (0.35 + 0.65 * sat(N.y * 0.5 + 0.5));
-  col += sheen * (vec3(0.03, 0.05, 0.06) * uAmbSky * 6.0) * pow(1.0 - NdV, 2.0);
+  col += sheen * (vec3(0.03, 0.05, 0.06) * uAmbSky * 6.0) * pow(1.0 - NdV, 2.0) * edgeAA;
   col += emit;
   // Struck: a brief flash that blooms around the silhouette.
   col += uFlash.rgb * uFlash.a * uFlash.a * (0.12 + 1.4 * fres);

@@ -246,6 +246,13 @@ export class Sea {
     this.mesh.renderOrder = 8;
   }
 
+  // Use a height map baked elsewhere (red = height, same extent as MAP_SIZE).
+  useMap(texture) {
+    this.map.dispose();
+    this.material.uniforms.uSeabed.value = texture;
+    this.material.uniforms.uMapOk.value = 1;
+  }
+
   // Render the seabed map. Call once, after the renderer exists, if it can draw
   // into half-float targets; without the map the shore is found the slow way.
   bake(renderer) {

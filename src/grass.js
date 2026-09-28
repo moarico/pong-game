@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { common, sharedUniforms, terrain, wind, atmosphere, shadow } from './glsl.js';
+import { landGLSL } from './landmaps.js';
 import { TRAIL_N } from './config.js';
 import { mulberry32 } from './noise.js';
 
@@ -15,6 +16,7 @@ ${common}
 ${sharedUniforms}
 ${terrain}
 ${wind}
+${landGLSL}
 #define TRAIL_N ${TRAIL_N}
 attribute vec2 aOffset;
 attribute vec4 aRand;
@@ -30,6 +32,7 @@ uniform vec2 uCamFwdXZ;
 uniform float uCullCos;
 uniform vec4 uTrail[TRAIL_N];
 uniform vec4 uImpact;
+uniform vec3 uTrailBound;
 uniform mat4 uShadowMatrix;
 varying vec3 vWorld;
 varying vec3 vNormal;
@@ -80,9 +83,19 @@ void main() {
   float r1 = aRand.y;
   float r2 = aRand.z;
   float r3 = aRand.w;
-  float groundY = terrainHeight(root);
-  float patchN = inoise(root * 0.045 + 7.0);
-  float patchN2 = inoise(root * 0.21 - 3.0);
+  float groundY;
+  float patchN;
+  float patchN2;
+  if (uLandOk > 0.5) {
+    vec4 land = grassLand(root);
+    groundY = land.x;
+    patchN = land.y;
+    patchN2 = land.z;
+  } else {
+    groundY = terrainHeight(root);
+    patchN = inoise(root * 0.045 + 7.0);
+    patchN2 = inoise(root * 0.21 - 3.0);
+  }
   // Nothing grows on the beach.
   float dry = smoothstep(3.0, 6.5, groundY + (patchN - 0.5) * 2.0);
   if (dry <= 0.0) {
@@ -115,7 +128,7 @@ void main() {
   vec2 windVec = uWindDir * (windAmt + flutter * (0.04 + 0.13 * ws * (0.35 + gust)))
                + perp * flutter * 0.07 * (0.3 + ws);
 
-  vec2 push = uInteract > 0.5 ? interaction(root) : vec2(0.0);
+  vec2 push = uInteract > 0.5 && distance(root, uTrailBound.xy) < uTrailBound.z ? interaction(root) : vec2(0.0);
 
   float leanAng = fract(r3 * 3.7 + r0 * 1.3) * TAU;
   // Pampas leaves spring up and arch outward under their own length.
@@ -247,6 +260,7 @@ ${common}
 ${sharedUniforms}
 ${terrain}
 ${wind}
+${landGLSL}
 #define TRAIL_N ${TRAIL_N}
 #define PLUME_START ${PLUME_START.toFixed(2)}
 attribute vec2 aOffset;
@@ -263,6 +277,7 @@ uniform vec2 uCamFwdXZ;
 uniform float uCullCos;
 uniform vec4 uTrail[TRAIL_N];
 uniform vec4 uImpact;
+uniform vec3 uTrailBound;
 uniform mat4 uShadowMatrix;
 varying vec3 vWorld;
 varying vec3 vNormal;
@@ -308,15 +323,21 @@ void main() {
   float r3 = aRand.w;
   float rank = fract(r0 * 5.13 + r3 * 2.71);
   float keep = smoothstep(rank * 0.9, rank * 0.9 + 0.1, fade);
-  // Susuki grows in clumps.
-  float clump = inoise(root * 0.085 + 13.0) * 0.7 + inoise(root * 0.3 - 5.0) * 0.3;
-  float present = smoothstep(0.18, 0.42, clump + (r1 - 0.5) * 0.3);
-  if (keep <= 0.0 || present <= 0.01 || (dist > 4.0 && dot(rel, uCamFwdXZ) < uCullCos * dist)) {
+  if (keep <= 0.0 || (dist > 4.0 && dot(rel, uCamFwdXZ) < uCullCos * dist)) {
     gl_Position = vec4(0.0, 0.0, 2.0, 1.0);
     return;
   }
-  float groundY = terrainHeight(root);
-  float patchN = inoise(root * 0.045 + 7.0);
+  // Susuki grows in clumps.
+  vec4 land;
+  if (uLandOk > 0.5) land = grassLand(root);
+  else land = vec4(terrainHeight(root), inoise(root * 0.045 + 7.0), 0.0, inoise(root * 0.085 + 13.0) * 0.7 + inoise(root * 0.3 - 5.0) * 0.3);
+  float present = smoothstep(0.18, 0.42, land.w + (r1 - 0.5) * 0.3);
+  if (present <= 0.01) {
+    gl_Position = vec4(0.0, 0.0, 2.0, 1.0);
+    return;
+  }
+  float groundY = land.x;
+  float patchN = land.y;
   float dry = smoothstep(3.0, 6.5, groundY + (patchN - 0.5) * 2.0);
   if (dry <= 0.0) {
     gl_Position = vec4(0.0, 0.0, 2.0, 1.0);
@@ -336,7 +357,7 @@ void main() {
   vec2 perp = vec2(-uWindDir.y, uWindDir.x);
   vec2 windVec = uWindDir * (windAmt + flutter * (0.05 + 0.16 * ws * (0.35 + gust)))
                + perp * flutter * 0.08 * (0.3 + ws);
-  vec2 push = uInteract > 0.5 ? interaction(root) : vec2(0.0);
+  vec2 push = uInteract > 0.5 && distance(root, uTrailBound.xy) < uTrailBound.z ? interaction(root) : vec2(0.0);
 
   float leanAng = r3 * TAU;
   vec2 lean = vec2(cos(leanAng), sin(leanAng)) * mix(0.03, 0.22, r2);

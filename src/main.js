@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { SUN_DIR, SUN_DISC, LIGHT, QUALITY, QUALITY_ORDER, TRAIL_N } from './config.js';
+import { SUN_DIR, SUN_DISC, LIGHT, QUALITY, QUALITY_ORDER, SCALES, TRAIL_N } from './config.js';
 import { Wind } from './wind.js';
 import { Sky } from './sky.js';
 import { Ground, Hills, terrainHeight } from './terrain.js';
@@ -22,6 +22,8 @@ import { Menu } from './menu.js';
 import { groundHeight } from './ground.js';
 import { StageManager } from './stage.js';
 import { STAGES } from './stages/index.js';
+import { bakeLand, makeGustTexture } from './landmaps.js';
+import { Governor, GpuClock } from './governor.js';
 
 const canvas = document.getElementById('game');
 const veil = document.getElementById('veil');
@@ -94,7 +96,17 @@ const shared = {
   uEnvSky: { value: new THREE.Vector3(0.3, 0.3, 0.35) },
   uEnvGround: { value: new THREE.Vector3(0.1, 0.08, 0.07) },
   uFlashLight: { value: 0 },
+  // Baked land (see landmaps.js) and the gust texture the grass and cloth share.
+  uLandNear: { value: null },
+  uLandFar: { value: null },
+  uLandGrass: { value: null },
+  uLandOk: { value: 0 },
+  uGustTex: { value: makeGustTexture() },
+  // Centre (x, z) and reach of everything pressing the grass down.
+  uTrailBound: { value: new THREE.Vector3(0, 0, 0) },
 };
+// Everything the shaders need to know about the land, worked out once.
+if (hdr) bakeLand(renderer, shared);
 
 let qName = initialQuality();
 let quality = QUALITY[qName];
@@ -109,7 +121,8 @@ const sky = new Sky(shared);
 const ground = new Ground(shared);
 const hills = new Hills(shared);
 const sea = new Sea(shared);
-if (hdr) sea.bake(renderer);
+if (shared.uLandOk.value) sea.useMap(shared.uLandFar.value);
+else if (hdr) sea.bake(renderer);
 const grass = new Grass(shared);
 const motes = new Motes(shared);
 const puffs = new Puffs(shared);
@@ -368,6 +381,8 @@ function startStage(id) {
     combat.fall = null;
     hud.setFallen(false);
     const st = stages.enter(id);
+    drs.sceneChanged();
+    gpuClock.clear();
     state = 'intro';
     introT = 0;
     introSkip = false;
@@ -441,6 +456,8 @@ function quitToTitle() {
     document.body.classList.remove('cinematic');
   }
   victoryT = -1;
+  drs.sceneChanged();
+  gpuClock.clear();
   director.reset(true);
   combat.revive();
   combat.fall = null;
@@ -484,19 +501,62 @@ document.addEventListener('pointerlockchange', () => {
   wasLocked = locked;
 });
 
+// How many samples a multisampled half-float target may have here (0: none).
+function halfFloatSamples() {
+  if (!hdr) return 0;
+  try {
+    const gl = renderer.getContext();
+    const s = gl.getInternalformatParameter(gl.RENDERBUFFER, gl.RGBA16F, gl.SAMPLES);
+    return Math.min(renderer.capabilities.maxSamples || 0, s && s.length ? Math.max(...s) : 0);
+  } catch {
+    return 0;
+  }
+}
+let msaaMax = halfFloatSamples();
+
+// Dynamic resolution (see governor.js): the internal resolution steps between SCALES.
+const levelFor = (sc) => {
+  let i = 0;
+  while (i + 1 < SCALES.length && SCALES[i + 1] <= sc + 1e-6) i++;
+  return i;
+};
+const drs = new Governor();
+const gpuClock = new GpuClock(renderer.getContext());
+const maxLevel = () => levelFor(Math.min(window.devicePixelRatio || 1, quality.maxScale));
+const minLevel = () => Math.min(levelFor(quality.minScale), maxLevel());
+function resetScale() {
+  drs.reset(levelFor(quality.scale), minLevel(), maxLevel());
+  gpuClock.clear();
+}
+
 let appliedKey = '';
+const bufSize = new THREE.Vector2();
 function applyQuality() {
-  const maxSamples = renderer.capabilities.maxSamples || 0;
-  const msaa = hdr ? Math.min(quality.msaa, maxSamples) : 0;
-  const pr = Math.min(window.devicePixelRatio || 1, quality.pixelRatio);
-  renderer.setPixelRatio(pr);
+  const dpr = window.devicePixelRatio || 1;
+  drs.setRange(minLevel(), maxLevel());
+  const scale = Math.min(SCALES[drs.level], dpr);
+  const out = Math.max(scale, Math.min(dpr, quality.out));
+  renderer.setPixelRatio(out);
   renderer.setSize(window.innerWidth, window.innerHeight);
-  const size = renderer.getDrawingBufferSize(new THREE.Vector2());
+  renderer.getDrawingBufferSize(bufSize);
+  const w = Math.max(1, Math.round(window.innerWidth * scale));
+  const h = Math.max(1, Math.round(window.innerHeight * scale));
+  let msaa = Math.min(quality.msaa, msaaMax);
   // Reallocating render targets is costly; skip it when nothing actually changed.
-  const key = `${size.x}x${size.y}/${msaa}/${quality.bloomLevels}`;
-  if (key !== appliedKey) post.setSize(size.x, size.y, msaa, quality.bloomLevels);
-  appliedKey = key;
-  grass.setQuality(quality, msaa);
+  const key = `${w}x${h}/${bufSize.x}x${bufSize.y}/${msaa}/${quality.bloomLevels}`;
+  if (key !== appliedKey) {
+    post.setSize(w, h, msaa, quality.bloomLevels, bufSize.x, bufSize.y);
+    if (msaa && !post.sceneComplete()) {
+      // No multisampled half floats after all: go without.
+      msaaMax = 0;
+      msaa = 0;
+      post.setSize(w, h, 0, quality.bloomLevels, bufSize.x, bufSize.y);
+    }
+    post.init = true;
+  }
+  appliedKey = `${w}x${h}/${bufSize.x}x${bufSize.y}/${msaa}/${quality.bloomLevels}`;
+  const q = drs.grass < 1 ? { ...quality, grass: quality.grass * drs.grass, plumes: quality.plumes * drs.grass } : quality;
+  grass.setQuality(q, msaa);
   motes.setQuality(quality);
   shadow.setSize(quality.shadowSize);
   rig.aspect = window.innerWidth / window.innerHeight;
@@ -505,9 +565,10 @@ function applyQuality() {
 }
 if (!hdr) {
   // Without float render targets the HDR chain would clip; keep it simple and cheap.
-  qName = 'low';
-  quality = QUALITY.low;
+  qName = 'lowest';
+  quality = QUALITY.lowest;
 }
+resetScale();
 applyQuality();
 // Phones fire bursts of resize events as the address bar slides; settle first.
 let resizeTimer = 0;
@@ -527,26 +588,12 @@ const fwd = new THREE.Vector3();
 const center = new THREE.Vector3();
 const casters = [];
 
-// Frame-time watchdog: step quality down (never up) if the device is struggling.
-const perf = { t: 0, frames: 0, sum: 0, downgrades: 0, fps: 0 };
+// Called every live frame with the real time since the last one.
 function watchPerformance(dt) {
-  perf.t += dt;
-  if (perf.t < 3) return; // let shaders warm up first
-  perf.frames++;
-  perf.sum += dt;
-  if (perf.sum >= 2) {
-    const avg = perf.sum / perf.frames;
-    perf.fps = 1 / avg;
-    perf.frames = 0;
-    perf.sum = 0;
-    const idx = QUALITY_ORDER.indexOf(qName);
-    if (avg > 1 / 38 && idx > 0 && perf.downgrades < 3 && !opts.has('lock')) {
-      qName = QUALITY_ORDER[idx - 1];
-      quality = QUALITY[qName];
-      perf.downgrades++;
-      perf.t = 1.5;
-      applyQuality();
-    }
+  if (opts.has('lock') || document.hidden) return;
+  if (drs.update(dt, gpuClock.estimate())) {
+    gpuClock.clear();
+    applyQuality();
   }
 }
 
@@ -762,6 +809,7 @@ function tick(realDt, live, draw = true) {
   post.focus = camera.position.distanceTo(center);
   post.dof = quality.dof * (1 - 0.55 * rig.combat) * (state === 'play' ? 1 : 0.4) * (arena ? 0.35 : 1);
   if (draw) post.render(scene, camera, dt, stages.lightDir);
+  if (live && draw) gpuClock.mark();
 
   combat.endFrame();
   for (const e of enemies) e.endFrame();
@@ -770,7 +818,7 @@ function tick(realDt, live, draw = true) {
   sound.setWind(wind.strength);
 
   if (live) watchPerformance(realDt);
-  if (!fpsEl.hidden && perf.fps) fpsEl.textContent = `${perf.fps.toFixed(0)} fps · ${qName}`;
+  if (!fpsEl.hidden && drs.fps) fpsEl.textContent = `${drs.fps.toFixed(0)} fps · gpu ${drs.gpu == null ? '?' : drs.gpu.toFixed(0) + 'ms'} · ${qName} · ${SCALES[drs.level]}×${post.msaa ? ' · msaa' : ''}${drs.grass < 1 ? ' · grass ' + drs.grass.toFixed(2) : ''}`;
 }
 
 // Controls hint: fades in with the scene, fades out once walking and jumping are tried.
@@ -909,8 +957,11 @@ window.samurai = {
     if (!QUALITY[name]) return;
     qName = name;
     quality = QUALITY[name];
+    resetScale();
     applyQuality();
   },
+  drs,
+  gpuClock,
 };
 
 start();

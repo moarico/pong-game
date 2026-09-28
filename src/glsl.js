@@ -1,6 +1,6 @@
 // Shared GLSL chunks. Terrain and wind noise have exact JavaScript twins in noise.js,
 // terrain.js and wind.js so the player, the cloth and the grass all agree on one world.
-import { TERRAIN } from './config.js';
+import { TERRAIN, GUST } from './config.js';
 
 const f = (x) => (Number.isInteger(x) ? x.toFixed(1) : String(x));
 
@@ -11,6 +11,7 @@ export const common = /* glsl */ `
 #define TAU 6.283185307179586
 
 float sat(float x) { return clamp(x, 0.0, 1.0); }
+
 vec2 sat(vec2 x) { return clamp(x, 0.0, 1.0); }
 vec3 sat(vec3 x) { return clamp(x, 0.0, 1.0); }
 
@@ -64,6 +65,20 @@ float inoise5(vec2 p) {
   float c = latticeHash(i + ivec2(0, 1));
   float d = latticeHash(i + ivec2(1, 1));
   return mix(mix(a, b, u.x), mix(c, d, u.x), u.y);
+}
+`;
+
+// Fragment shaders only (derivatives).
+export const specAA = /* glsl */ `
+// GGX alpha squared for a roughness, widened by how fast the normal N turns across
+// the pixel (specular anti-aliasing): no single pixels flashing white on bumps,
+// rivets and silhouettes.
+float specAlpha2(float rough, vec3 N, float floorRough) {
+  float r = max(rough, floorRough);
+  vec3 dx = dFdx(N);
+  vec3 dy = dFdy(N);
+  float variance = 0.25 * (dot(dx, dx) + dot(dy, dy));
+  return min(r * r * r * r + min(2.0 * variance, 0.18), 1.0);
 }
 `;
 
@@ -219,13 +234,16 @@ float terrainSunVis(vec3 p) {
 }
 `;
 
-// Keep in sync with Wind.gustAt() in wind.js.
+// Keep in sync with Wind.gustAt() in wind.js: both read the same gust texture.
 export const wind = /* glsl */ `
+uniform sampler2D uGustTex;
 float windGust(vec2 p) {
   vec2 q = p - uWindScroll;
   vec2 d = uWindDir;
   vec2 r = vec2(dot(q, d), dot(q, vec2(-d.y, d.x)));
-  float n = inoise(r * vec2(0.060, 0.024)) * 0.62 + inoise(r * vec2(0.15, 0.07) + vec2(17.0, 3.0)) * 0.38;
+  const float k = ${(1 / GUST.cells).toFixed(6)};
+  float n = textureLod(uGustTex, r * vec2(0.060, 0.024) * k, 0.0).r * 0.62
+          + textureLod(uGustTex, (r * vec2(0.15, 0.07) + vec2(17.0, 3.0)) * k, 0.0).r * 0.38;
   return smoothstep(0.26, 0.8, n);
 }
 `;

@@ -12,6 +12,7 @@ export class Trail {
   constructor(shared) {
     this.slots = shared.uTrail.value; // Vector4: x, z, strength, radius
     this.impact = shared.uImpact.value; // Vector4: x, z, age, strength
+    this.bound = shared.uTrailBound.value; // Vector3: centre x, z and reach
     this.points = [];
     this.lastX = null;
     this.lastZ = 0;
@@ -55,6 +56,16 @@ export class Trail {
 
     if (landed) this.ring(pos.x, pos.z, Math.min(1, landSpeed / 9) * 0.9);
     else this.impact.z += dt;
+
+    // How far from the samurai anything is pressing the grass: blades beyond it skip the work.
+    let reach = 0;
+    for (const s of this.slots) {
+      if (s.z <= 0) continue;
+      reach = Math.max(reach, Math.hypot(s.x - pos.x, s.y - pos.z) + s.w * 1.2);
+    }
+    const I = this.impact;
+    if (I.w > 0.01 && I.z < 3) reach = Math.max(reach, Math.hypot(I.x - pos.x, I.y - pos.z) + I.z * 5 + 1.6);
+    this.bound.set(pos.x, pos.z, reach);
   }
 
   // A ring running out through the grass (landings, heavy blows).

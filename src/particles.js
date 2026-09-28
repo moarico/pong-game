@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { common, sharedUniforms, terrain } from './glsl.js';
+import { landGLSL } from './landmaps.js';
 import { mulberry32 } from './noise.js';
 
 // Additive blending that leaves the alpha channel (the light-shaft occlusion mask) alone.
@@ -22,6 +23,7 @@ const moteVert = /* glsl */ `
 ${common}
 ${sharedUniforms}
 ${terrain}
+${landGLSL}
 attribute vec4 aSeed;
 uniform float uBox;
 uniform float uBoxH;
@@ -40,7 +42,7 @@ void main() {
   vec2 c = cameraPosition.xz;
   p.xz = c + mod(p.xz - c + uBox * 0.5, uBox) - uBox * 0.5;
   float hy = aSeed.y * uBoxH + sin(uTime * (0.17 + r * 0.25) + r * 30.0) * 0.4;
-  p.y = terrainHeight(p.xz) + 0.2 + hy;
+  p.y = (landCovers(p.xz) ? landSample(p.xz).x : terrainHeight(p.xz)) + 0.2 + hy;
 
   vec4 mv = viewMatrix * vec4(p, 1.0);
   gl_Position = projectionMatrix * mv;

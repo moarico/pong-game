@@ -106,15 +106,24 @@ export const MOVE = {
   maxFallSpeed: 22,
 };
 
+// Gust noise: a tiling texture of res x res texels over cells x cells lattice cells.
+export const GUST = { res: 128, cells: 32 };
+
 // Grass push slots: the samurai, his footsteps, then foes and the fallen.
 export const TRAIL_N = 16;
 export const TRAIL_STEPS = 8;
 
+// scale: internal pixels per CSS pixel to start at; the dynamic resolution moves it
+// between minScale and maxScale (never above the screen's own pixel ratio). out: the
+// most screen pixels per CSS pixel the finished frame is drawn at (it is scaled up
+// with a sharp filter when the internal resolution is lower). Phones start on low.
 export const QUALITY = {
-  high: { name: 'high', pixelRatio: 1.5, msaa: 4, grass: 1.0, plumes: 1.0, motes: 1.0, bloomLevels: 6, shadowSize: 1024, dof: 1 },
-  medium: { name: 'medium', pixelRatio: 1.15, msaa: 4, grass: 0.6, plumes: 0.65, motes: 0.7, bloomLevels: 6, shadowSize: 1024, dof: 1 },
-  low: { name: 'low', pixelRatio: 0.9, msaa: 0, grass: 0.36, plumes: 0.42, motes: 0.5, bloomLevels: 5, shadowSize: 512, dof: 0 },
+  high: { name: 'high', scale: 1.5, minScale: 0.8, maxScale: 1.5, out: 2, msaa: 4, grass: 1.0, plumes: 1.0, motes: 1.0, bloomLevels: 6, shadowSize: 1024, dof: 1 },
+  medium: { name: 'medium', scale: 1.2, minScale: 0.75, maxScale: 1.45, out: 2, msaa: 4, grass: 0.6, plumes: 0.65, motes: 0.7, bloomLevels: 6, shadowSize: 1024, dof: 1 },
+  low: { name: 'low', scale: 1.3, minScale: 0.8, maxScale: 1.6, out: 2, msaa: 4, grass: 0.45, plumes: 0.5, motes: 0.5, bloomLevels: 5, shadowSize: 1024, dof: 0 },
 };
-// Last resort for weak phones: fewer pixels and less grass.
-QUALITY.lowest = { name: 'lowest', pixelRatio: 0.72, msaa: 0, grass: 0.24, plumes: 0.28, motes: 0.35, bloomLevels: 4, shadowSize: 512, dof: 0 };
+// For weak devices: fewer pixels, no multisampling, less grass.
+QUALITY.lowest = { name: 'lowest', scale: 0.9, minScale: 0.7, maxScale: 1.1, out: 1.5, msaa: 0, grass: 0.28, plumes: 0.32, motes: 0.35, bloomLevels: 4, shadowSize: 512, dof: 0 };
+// The internal resolutions the dynamic scaler steps between.
+export const SCALES = [0.6, 0.7, 0.8, 0.9, 1.0, 1.1, 1.2, 1.3, 1.45, 1.6];
 export const QUALITY_ORDER = ['lowest', 'low', 'medium', 'high'];

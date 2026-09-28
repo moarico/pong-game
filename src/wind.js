@@ -1,5 +1,6 @@
 import { WIND_DIR } from './config.js';
-import { inoise, noise1 } from './noise.js';
+import { noise1 } from './noise.js';
+import { gustSample } from './landmaps.js';
 
 const smoothstep = (a, b, x) => {
   const t = Math.min(Math.max((x - a) / (b - a), 0), 1);
@@ -43,7 +44,7 @@ export class Wind {
     const d = this.dir;
     const rx = qx * d.x + qz * d.y;
     const rz = -qx * d.y + qz * d.x;
-    const n = inoise(rx * 0.06, rz * 0.024) * 0.62 + inoise(rx * 0.15 + 17, rz * 0.07 + 3) * 0.38;
+    const n = gustSample(rx * 0.06, rz * 0.024) * 0.62 + gustSample(rx * 0.15 + 17, rz * 0.07 + 3) * 0.38;
     return smoothstep(0.26, 0.8, n);
   }
 

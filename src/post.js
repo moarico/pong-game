@@ -26,7 +26,7 @@ uniform float uAspect;
 varying vec2 vUv;
 void main() {
   vec4 s = texture(tScene, vUv);
-  vec3 c = min(s.rgb, vec3(60.0)) * (1.0 - s.a);
+  vec3 c = clamp(s.rgb, 0.0, 60.0) * (1.0 - clamp(s.a, 0.0, 1.0));
   vec2 d = (vUv - uSunUV) * vec2(uAspect, 1.0);
   float w = exp(-dot(d, d) * 16.0);
   c *= smoothstep(1.5, 6.0, lum(c)) * w;
@@ -68,7 +68,7 @@ uniform sampler2D tSrc;
 uniform vec2 uTexel;
 uniform float uKaris;
 varying vec2 vUv;
-vec3 tap(vec2 o) { return min(texture(tSrc, vUv + o * uTexel).rgb, vec3(80.0)); }
+vec3 tap(vec2 o) { return clamp(texture(tSrc, vUv + o * uTexel).rgb, 0.0, 80.0); }
 float kw(vec3 c) { return mix(1.0, 1.0 / (1.0 + lum(c) * 0.2), uKaris); }
 void main() {
   vec3 a = tap(vec2(-2.0, 2.0));
@@ -133,7 +133,7 @@ void main() {
   float z = viewZ(texture(tDepth, vUv).r);
   float f = uDof.x;
   float coc = z > f ? (1.0 - f / z) * uDof.y : -min((f / z - 1.0) * uDof.z, uMaxBlur);
-  gl_FragColor = vec4(min(c, vec3(60.0)), coc);
+  gl_FragColor = vec4(clamp(c, 0.0, 60.0), coc);
 }
 `;
 
@@ -242,6 +242,7 @@ uniform float uFlare;
 uniform vec3 uSunTint;
 uniform vec2 uRes;
 uniform int uDebug;
+uniform float uGrain;
 varying vec2 vUv;
 
 // ACES fitted (Stephen Hill).
@@ -291,6 +292,7 @@ void main() {
   col.r = texture(tScene, uv - dc * ca).r;
   col.g = texture(tScene, uv).g;
   col.b = texture(tScene, uv + dc * ca).b;
+  col = clamp(col, 0.0, 1e4);
   if (uDofOn > 0.5) {
     vec4 dof = texture(tDof, uv);
     col = mix(col, dof.rgb, smoothstep(0.35, 1.2, dof.a));
@@ -329,10 +331,52 @@ void main() {
 
   vec2 q = dc * vec2(uAspect, 1.0);
   o *= mix(1.0, 1.0 - smoothstep(0.2, 1.2, length(q)), 0.5);
-  // Fine grain and dither against banding in the sky.
+  // Fine grain and dither against banding in the sky (here, or after upscaling).
   float n = ign(gl_FragCoord.xy + fract(uTime * 7.3) * 113.0);
-  o += (n - 0.5) * (2.0 / 255.0);
+  o += (n - 0.5) * (2.0 / 255.0) * uGrain;
   gl_FragColor = vec4(o, 1.0);
+}
+`;
+
+// The graded frame, rendered at the internal resolution, drawn to the screen at full
+// resolution with a sharp Catmull-Rom filter (clamped to the neighbouring pixels so
+// bright edges cannot ring), then grain and dither at screen resolution.
+const upscaleFrag = /* glsl */ `
+${lumaFn}
+uniform sampler2D tSrc;
+uniform vec2 uSrcSize;
+uniform float uTime;
+varying vec2 vUv;
+void main() {
+  vec2 pos = vUv * uSrcSize;
+  vec2 t1 = floor(pos - 0.5) + 0.5;
+  vec2 f = pos - t1;
+  vec2 w0 = f * (-0.5 + f * (1.0 - 0.5 * f));
+  vec2 w1 = 1.0 + f * f * (-2.5 + 1.5 * f);
+  vec2 w2 = f * (0.5 + f * (2.0 - 1.5 * f));
+  vec2 w3 = f * f * (-0.5 + 0.5 * f);
+  vec2 w12 = w1 + w2;
+  vec2 inv = 1.0 / uSrcSize;
+  vec2 p0 = (t1 - 1.0) * inv;
+  vec2 p3 = (t1 + 2.0) * inv;
+  vec2 p12 = (t1 + w2 / w12) * inv;
+  vec3 c = texture(tSrc, vec2(p12.x, p0.y)).rgb * (w12.x * w0.y)
+         + texture(tSrc, vec2(p0.x, p12.y)).rgb * (w0.x * w12.y)
+         + texture(tSrc, p12).rgb * (w12.x * w12.y)
+         + texture(tSrc, vec2(p3.x, p12.y)).rgb * (w3.x * w12.y)
+         + texture(tSrc, vec2(p12.x, p3.y)).rgb * (w12.x * w3.y);
+  c /= w12.x * w0.y + w0.x * w12.y + w12.x * w12.y + w3.x * w12.y + w12.x * w3.y;
+  // No ringing: stay within the four texels around this point.
+  ivec2 i0 = ivec2(t1 - 0.5);
+  ivec2 lim = ivec2(uSrcSize) - 1;
+  vec3 a = texelFetch(tSrc, clamp(i0, ivec2(0), lim), 0).rgb;
+  vec3 b = texelFetch(tSrc, clamp(i0 + ivec2(1, 0), ivec2(0), lim), 0).rgb;
+  vec3 d = texelFetch(tSrc, clamp(i0 + ivec2(0, 1), ivec2(0), lim), 0).rgb;
+  vec3 e = texelFetch(tSrc, clamp(i0 + ivec2(1, 1), ivec2(0), lim), 0).rgb;
+  c = clamp(c, min(min(a, b), min(d, e)), max(max(a, b), max(d, e)));
+  float n = ign(gl_FragCoord.xy + fract(uTime * 7.3) * 113.0);
+  c += (n - 0.5) * (2.0 / 255.0);
+  gl_FragColor = vec4(c, 1.0);
 }
 `;
 
@@ -381,7 +425,9 @@ export class Post {
         uSunUV: { value: new THREE.Vector2() }, uSunOn: { value: 0 }, uAspect: { value: 1 }, uTime: { value: 0 },
         uBloom: { value: 0.06 }, uBloomNorm: { value: 1 }, uRays: { value: 0.26 }, uFlare: { value: 4 },
         uSunTint: { value: new THREE.Color().setRGB(1.0, 0.72, 0.42) }, uRes: { value: new THREE.Vector2() }, uDebug: { value: 0 }, tDof: { value: null }, uDofOn: { value: 0 },
+        uGrain: { value: 1 },
       }),
+      upscale: mat(upscaleFrag, { tSrc: { value: null }, uSrcSize: { value: new THREE.Vector2() }, uTime: { value: 0 } }),
     };
     this.sunNdc = new THREE.Vector3();
     this.fwd = new THREE.Vector3();
@@ -405,7 +451,8 @@ export class Post {
     });
   }
 
-  setSize(w, h, msaa, bloomLevels) {
+  // w, h: the internal resolution everything renders at. outW, outH: the screen's.
+  setSize(w, h, msaa, bloomLevels, outW = w, outH = h) {
     if (this.targets) {
       for (const t of this.all) t.dispose();
     }
@@ -432,8 +479,24 @@ export class Post {
       this.exposure = [this.rt(1, 1, { minFilter: THREE.NearestFilter, magFilter: THREE.NearestFilter }),
         this.rt(1, 1, { minFilter: THREE.NearestFilter, magFilter: THREE.NearestFilter })];
     }
-    this.targets = { scene, raysA, raysB, bloom, dofA, dofB };
-    this.all = [scene, raysA, raysB, dofA, dofB, ...bloom];
+    // Drawn straight to the screen when the sizes match; otherwise graded into an
+    // 8-bit frame first and scaled up.
+    this.direct = outW === w && outH === h;
+    const ldr = this.direct ? null : new THREE.WebGLRenderTarget(w, h, {
+      type: THREE.UnsignedByteType,
+      minFilter: THREE.LinearFilter,
+      magFilter: THREE.LinearFilter,
+      depthBuffer: false,
+      stencilBuffer: false,
+      generateMipmaps: false,
+    });
+    this.targets = { scene, raysA, raysB, bloom, dofA, dofB, ldr };
+    this.all = [scene, raysA, raysB, dofA, dofB, ...bloom, ...(ldr ? [ldr] : [])];
+    this.msaa = msaa;
+    this.outW = outW;
+    this.outH = outH;
+    this.m.upscale.uniforms.uSrcSize.value.set(w, h);
+    this.m.composite.uniforms.uGrain.value = this.direct ? 1 : 0;
     // Blur sizes are authored for a 540-pixel-tall half-resolution buffer.
     this.dofScale = hh / 540;
     this.w = w;
@@ -552,7 +615,25 @@ export class Post {
     c.uSunOn.value = sunOn;
     c.uAspect.value = aspect;
     c.uTime.value = this.time;
-    this.pass(m.composite, null);
+    if (this.direct) {
+      this.pass(m.composite, null);
+      return;
+    }
+    this.pass(m.composite, T.ldr);
+    m.upscale.uniforms.tSrc.value = T.ldr.texture;
+    m.upscale.uniforms.uTime.value = this.time;
+    this.pass(m.upscale, null);
+  }
+
+  // Can the scene target actually be drawn into? (Multisampled half floats are not
+  // everywhere.) Call after setSize.
+  sceneComplete() {
+    const r = this.renderer;
+    const gl = r.getContext();
+    r.setRenderTarget(this.targets.scene);
+    const ok = gl.checkFramebufferStatus(gl.FRAMEBUFFER) === gl.FRAMEBUFFER_COMPLETE;
+    r.setRenderTarget(null);
+    return ok;
   }
 }
 

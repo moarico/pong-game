@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { common, sharedUniforms, terrain as terrainGLSL, wind as windGLSL, atmosphere, shadow } from './glsl.js';
 import { SUN_AZIMUTH, TERRAIN } from './config.js';
 import { inoise, inoise5 } from './noise.js';
+import { landGLSL } from './landmaps.js';
 
 const T = TERRAIN;
 const [SX, SZ] = T.sunH;
@@ -146,6 +147,7 @@ const groundVert = /* glsl */ `
 ${common}
 ${sharedUniforms}
 ${terrainGLSL}
+${landGLSL}
 uniform vec2 uSnap;
 uniform mat4 uShadowMatrix;
 varying vec3 vWorld;
@@ -154,11 +156,20 @@ varying vec3 vNormal;
 varying float vSunVis;
 void main() {
   vec2 xz = position.xz + uSnap;
-  vec3 w = vec3(xz.x, terrainHeight(xz), xz.y);
+  // Normal and hill shadow per vertex (the grid is dense where it matters), baked
+  // where the maps reach, worked out beyond them.
+  vec4 land;
+  if (landCovers(xz)) {
+    land = landSample(xz);
+  } else {
+    float h = terrainHeight(xz);
+    vec3 n = terrainNormal(xz);
+    land = vec4(h, n.x, n.z, terrainSunVis(vec3(xz.x, h, xz.y) + n * 0.05));
+  }
+  vec3 w = vec3(xz.x, land.x, xz.y);
   vWorld = w;
-  // Normal and hill shadow per vertex: the grid is dense where it matters.
-  vNormal = terrainNormal(xz);
-  vSunVis = terrainSunVis(w + vNormal * 0.05);
+  vNormal = landNormal(land);
+  vSunVis = land.w;
   vShadow = (uShadowMatrix * vec4(w, 1.0)).xyz;
   gl_Position = projectionMatrix * viewMatrix * vec4(w, 1.0);
 }
@@ -169,6 +180,7 @@ ${common}
 ${sharedUniforms}
 ${terrainGLSL}
 ${windGLSL}
+${landGLSL}
 ${atmosphere}
 ${shadow}
 varying vec3 vWorld;
@@ -189,8 +201,16 @@ void main() {
   vec2 wd = uWindDir;
   vec2 combed = vec2(dot(p, wd) * 0.35, dot(p, vec2(-wd.y, wd.x)) * 2.2);
   float streak = vnoise(combed) * 0.6 + vnoise(combed * 2.7 + 3.0) * 0.4;
-  float patchN = inoise(p * 0.045 + 7.0);
-  float patchN2 = inoise(p * 0.21 - 3.0);
+  float patchN;
+  float patchN2;
+  if (uLandOk > 0.5 && max(abs(p.x), abs(p.y)) < LAND_GRASS * 0.49) {
+    vec4 gm = grassLand(p);
+    patchN = gm.y;
+    patchN2 = gm.z;
+  } else {
+    patchN = inoise(p * 0.045 + 7.0);
+    patchN2 = inoise(p * 0.21 - 3.0);
+  }
   vec3 canopy = mix(vec3(0.42, 0.24, 0.085), vec3(0.6, 0.4, 0.17), patchN2 * 0.7 + streak * 0.3);
   canopy *= mix(0.78, 1.1, patchN) * mix(0.85, 1.1, streak);
   float gust = windGust(p);
@@ -203,31 +223,39 @@ void main() {
   // with pale rock where the land meets the sea.
   // Further out: golden meadows on the lower slopes, dark pine woods in the folds and
   // up the mountains, pale rock on the steeps and where the land meets the sea.
+  // (Only the far land and the shore need these; the hilltop skips them.)
   float wild = smoothstep(420.0, 900.0, length(p));
-  float scrubN = inoise(p * 0.004 + 3.0) * 0.6 + inoise(p * 0.019) * 0.4;
-  // The coast out toward the sun is wooded and dark against it; inland, meadows.
-  float sunward = smoothstep(-0.1, 0.5, dot(normalize(p), normalize(uSunDisc.xz)));
-  float forest = smoothstep(0.42, 0.6, scrubN + smoothstep(160.0, 420.0, vWorld.y) * 0.4 - smoothstep(20.0, 90.0, vWorld.y) * 0.25 + 0.2 + sunward * 0.45);
-  vec3 meadow = canopy * vec3(0.8, 0.74, 0.62);
-  vec3 woods = mix(vec3(0.035, 0.038, 0.022), vec3(0.08, 0.07, 0.035), scrubN);
-  vec3 scrub = mix(meadow, woods, forest);
+  bool shore = vWorld.y < 8.0;
+  float scrubN = wild > 0.0 || shore ? inoise(p * 0.004 + 3.0) * 0.6 + inoise(p * 0.019) * 0.4 : 0.5;
   vec3 rock = vec3(0.16, 0.13, 0.1);
-  scrub = mix(scrub, rock, sat((1.0 - smoothstep(1.5, 9.0, vWorld.y)) * 0.8 + smoothstep(0.5, 0.75, 1.0 - N.y) * 0.6));
-  alb = mix(alb, scrub, wild);
+  if (wild > 0.0) {
+    // The coast out toward the sun is wooded and dark against it; inland, meadows.
+    float sunward = smoothstep(-0.1, 0.5, dot(normalize(p), normalize(uSunDisc.xz)));
+    float forest = smoothstep(0.42, 0.6, scrubN + smoothstep(160.0, 420.0, vWorld.y) * 0.4 - smoothstep(20.0, 90.0, vWorld.y) * 0.25 + 0.2 + sunward * 0.45);
+    vec3 meadow = canopy * vec3(0.8, 0.74, 0.62);
+    vec3 woods = mix(vec3(0.035, 0.038, 0.022), vec3(0.08, 0.07, 0.035), scrubN);
+    vec3 scrub = mix(meadow, woods, forest);
+    scrub = mix(scrub, rock, sat((1.0 - smoothstep(1.5, 9.0, vWorld.y)) * 0.8 + smoothstep(0.5, 0.75, 1.0 - N.y) * 0.6));
+    alb = mix(alb, scrub, wild);
+  }
 
   // The shore: a strip of sand darkened where the surf wets it, rock where the land
   // drops steeply into the water, and under the shallows a seabed of sand and weed
   // fading into the dark.
-  float y = vWorld.y + (scrubN - 0.5) * 1.6;
   float steep = smoothstep(0.62, 0.85, 1.0 - N.y);
-  float beach = 1.0 - smoothstep(2.5, 7.0, y);
-  float wet = 1.0 - smoothstep(-0.1, 1.4, y + (vnoise(p * 0.7 + uTime * 0.2) - 0.5) * 0.35);
-  vec3 sand = mix(vec3(0.36, 0.29, 0.2), vec3(0.3, 0.24, 0.17), n);
-  sand = mix(sand, sand * 0.52, wet);
-  vec3 shoreCol = mix(sand, rock * mix(0.8, 1.1, n), steep);
+  float beach = 0.0;
+  float wet = 0.0;
   float under = smoothstep(0.0, -1.5, vWorld.y);
-  shoreCol = mix(shoreCol, mix(vec3(0.2, 0.18, 0.12), vec3(0.06, 0.09, 0.07), smoothstep(-0.5, -5.0, vWorld.y + (patchN - 0.5) * 3.0)), under);
-  alb = mix(alb, shoreCol, beach);
+  if (shore) {
+    float y = vWorld.y + (scrubN - 0.5) * 1.6;
+    beach = 1.0 - smoothstep(2.5, 7.0, y);
+    wet = 1.0 - smoothstep(-0.1, 1.4, y + (vnoise(p * 0.7 + uTime * 0.2) - 0.5) * 0.35);
+    vec3 sand = mix(vec3(0.36, 0.29, 0.2), vec3(0.3, 0.24, 0.17), n);
+    sand = mix(sand, sand * 0.52, wet);
+    vec3 shoreCol = mix(sand, rock * mix(0.8, 1.1, n), steep);
+    shoreCol = mix(shoreCol, mix(vec3(0.2, 0.18, 0.12), vec3(0.06, 0.09, 0.07), smoothstep(-0.5, -5.0, vWorld.y + (patchN - 0.5) * 3.0)), under);
+    alb = mix(alb, shoreCol, beach);
+  }
   float solid = max(wild, beach);
   plumes *= 1.0 - solid;
 

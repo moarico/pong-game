@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { common, sharedUniforms, atmosphere, shadow, lights } from './glsl.js';
+import { common, sharedUniforms, atmosphere, shadow, lights, specAA } from './glsl.js';
 import { MeshBuilder } from './meshbuilder.js';
 
 // ---------------------------------------------------------------------------
@@ -50,7 +50,7 @@ attribute vec4 aMat;
 attribute vec2 aPat;
 uniform mat4 uShadowMatrix;
 varying vec3 vWorld;
-varying vec3 vNormal;
+centroid varying vec3 vNormal;
 varying vec2 vUv;
 varying vec3 vColor;
 varying vec4 vMat;
@@ -79,6 +79,7 @@ void main() {
 
 const frag = /* glsl */ `
 ${common}
+${specAA}
 ${sharedUniforms}
 ${atmosphere}
 ${shadow}
@@ -90,7 +91,7 @@ uniform float uWet;
 uniform vec3 uGrateGlow;
 uniform float uGlowPulse;
 varying vec3 vWorld;
-varying vec3 vNormal;
+centroid varying vec3 vNormal;
 varying vec2 vUv;
 varying vec3 vColor;
 varying vec4 vMat;
@@ -360,7 +361,7 @@ void main() {
 
   vec3 Hv = normalize(L + V);
   float NdH = max(dot(N, Hv), 0.0);
-  float a2 = pow(max(rough, 0.04), 4.0);
+  float a2 = specAlpha2(rough, N, 0.04);
   float dd = NdH * NdH * (a2 - 1.0) + 1.0;
   float D = a2 / (PI * dd * dd);
   float F0 = mix(0.04, 1.0, metal);
@@ -368,12 +369,15 @@ void main() {
   float nl = max(NdL, 0.0);
   float k = (rough + 1.0) * (rough + 1.0) / 8.0;
   float G = (NdV / (NdV * (1.0 - k) + k)) * (nl / (nl * (1.0 - k) + k));
-  float spec = D * F * G / (4.0 * NdV + 1e-3);
+  float spec = min(D * F * G / (4.0 * NdV + 1e-3), 14.0);
   vec3 specCol = mix(vec3(1.0), alb, metal);
 
   vec3 R = reflect(-V, N);
   vec3 env = mix(uEnvGround, uEnvSky, smoothstep(-0.35, 0.45, R.y));
-  float Fr = F0 + (1.0 - F0) * pow(1.0 - NdV, 5.0);
+  vec3 dnx = dFdx(N);
+  vec3 dny = dFdy(N);
+  float edgeAA = 1.0 - smoothstep(0.03, 0.35, dot(dnx, dnx) + dot(dny, dny));
+  float Fr = F0 + (1.0 - F0) * pow(1.0 - NdV, 5.0) * edgeAA;
 
   vec3 col = alb * (1.0 - metal) * (nl * sun + amb * ao);
   col += specCol * spec * sun;
