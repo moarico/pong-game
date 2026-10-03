@@ -17,9 +17,10 @@ const SPIN_A = 0.0003;
 
 // Advances a plain ball state {pos, vel, angVel} by dt. Returns the impact
 // speed of the strongest bounce this step (0 when nothing was hit).
-export function stepBallState(st, dt) {
+export function stepBallState(st, dt, force) {
   const R = BALL.radius;
   st.vel.y -= GRAVITY * dt;
+  if (force) force(st, dt); // game-mode forces (Heatseeker homing)
   st.vel.multiplyScalar(1 - BALL.drag * dt);
   const sp = st.vel.length();
   if (sp > BALL.maxSpeed) st.vel.multiplyScalar(BALL.maxSpeed / sp);
@@ -66,6 +67,9 @@ export class Ball {
     this.prevTouch = null;
     this.lastTouchTime = -10;
     this.frozen = false;
+    this.force = null; // optional (state, dt) => void applied every step and in predictions
+    this.iceTimer = 0;
+    this.attachedTo = null;
   }
 
   reset() {
@@ -76,13 +80,23 @@ export class Ball {
     this.lastTouch = null;
     this.prevTouch = null;
     this.frozen = true;
+    this.iceTimer = 0;
+    this.attachedTo = null;
   }
 
   step(dt) {
+    if (this.attachedTo) return 0; // carried on spikes; the mode moved it already
     this.prevPos.copy(this.pos);
     this.prevQuat.copy(this.quat);
     if (this.frozen) return 0;
-    const impact = stepBallState(this, dt);
+    if (this.iceTimer > 0) {
+      // Rumble freezer: the ball hangs in place until touched or thawed
+      this.iceTimer -= dt;
+      this.vel.set(0, 0, 0);
+      this.angVel.multiplyScalar(0.95);
+      return 0;
+    }
+    const impact = stepBallState(this, dt, this.force);
     // visual spin
     const w = this.angVel.length();
     if (w > 1e-4) {
@@ -115,13 +129,13 @@ export function predictBall(ball, seconds, dt, out) {
   };
   const n = Math.round(seconds / dt);
   out.length = 0;
-  if (ball.frozen) {
-    for (let i = 0; i <= n; i++) out.push({ t: i * dt, pos: st.pos.clone(), vel: new THREE.Vector3() });
+  if (ball.frozen || ball.attachedTo || ball.iceTimer > 0) {
+    for (let i = 0; i <= n; i++) out.push({ t: i * dt, pos: st.pos.clone(), vel: ball.frozen ? new THREE.Vector3() : st.vel.clone() });
     return out;
   }
   for (let i = 0; i <= n; i++) {
     out.push({ t: i * dt, pos: st.pos.clone(), vel: st.vel.clone() });
-    stepBallState(st, dt);
+    stepBallState(st, dt, ball.force);
   }
   return out;
 }

@@ -18,6 +18,8 @@ function sharedAssets() {
     chromeMat: new THREE.MeshStandardMaterial({ color: 0xd8dde4, roughness: 0.12, metalness: 1 }),
     tailMat: new THREE.MeshStandardMaterial({ color: 0x400000, emissive: 0xff1020, emissiveIntensity: 3.5 }),
     headMat: new THREE.MeshStandardMaterial({ color: 0x333333, emissive: 0xfff2d8, emissiveIntensity: 2.2 }),
+    engineMat: new THREE.MeshStandardMaterial({ color: 0xb3121c, roughness: 0.35, metalness: 0.6 }),
+    spikeMat: new THREE.MeshStandardMaterial({ color: 0x2b2f36, roughness: 0.3, metalness: 0.9, emissive: 0x501008, emissiveIntensity: 0.6 }),
   };
   return shared;
 }
@@ -44,8 +46,30 @@ function taper(geo, y0, y1, amount) {
   geo.computeVertexNormals();
 }
 
+function numberTexture(n, teamCss) {
+  const c = document.createElement('canvas');
+  c.width = 256;
+  c.height = 160;
+  const g = c.getContext('2d');
+  g.font = 'italic 900 132px Arial Black, Arial, sans-serif';
+  g.textAlign = 'center';
+  g.textBaseline = 'middle';
+  g.lineJoin = 'round';
+  g.lineWidth = 18;
+  g.strokeStyle = '#101216';
+  g.strokeText(String(n), 128, 84);
+  g.fillStyle = '#f4f6fa';
+  g.fillText(String(n), 128, 84);
+  g.lineWidth = 4;
+  g.strokeStyle = teamCss;
+  g.strokeText(String(n), 128, 84);
+  const t = new THREE.CanvasTexture(c);
+  t.colorSpace = THREE.SRGBColorSpace;
+  return t;
+}
+
 export class CarModel {
-  constructor(team) {
+  constructor(team, number = 0) {
     const A = sharedAssets();
     const tc = TEAM_COLORS[team];
     this.team = team;
@@ -110,7 +134,15 @@ export class CarModel {
     for (const sx of [-1, 1]) add(new RoundedBoxGeometry(10, 4, 3, 2, 1.2), A.headMat, sx * 21, 13, 70.5);
     // rear engine block + exhausts
     add(new RoundedBoxGeometry(46, 16, 10, 2, 3), A.darkMat, 0, 14, -46);
-    add(new RoundedBoxGeometry(34, 10, 14, 2, 3), A.chromeMat, 0, 30, -34);
+    // exposed supercharger on the rear deck: red block, chrome intakes and belt cover
+    add(new RoundedBoxGeometry(30, 9, 16, 2, 2.5), A.engineMat, 0, 32, -33);
+    add(new RoundedBoxGeometry(22, 3, 13, 2, 1), A.chromeMat, 0, 37.5, -33);
+    for (const sx of [-1, 1]) {
+      const intake = add(new THREE.CylinderGeometry(3.4, 4, 8, 14), A.chromeMat, sx * 7, 42, -31);
+      intake.castShadow = false;
+      add(new THREE.CircleGeometry(2.8, 14), A.darkMat, sx * 7, 46.05, -31).rotation.x = -Math.PI / 2;
+    }
+    add(new RoundedBoxGeometry(4, 12, 18, 2, 1.5), A.darkMat, 16, 31, -33);
     const pipe = new THREE.CylinderGeometry(4.2, 4.8, 12, 16);
     pipe.rotateX(Math.PI / 2);
     const pipeHole = new THREE.CircleGeometry(3, 16);
@@ -189,6 +221,54 @@ export class CarModel {
     this.exhaustGlow.rotation.y = Math.PI;
     this.body.add(this.exhaustGlow);
     this.flicker = 0;
+
+    // racing number on both doors (like the reference photos)
+    if (number) {
+      const tex = numberTexture(number, tc.css);
+      const mat = new THREE.MeshStandardMaterial({ map: tex, transparent: true, roughness: 0.35, metalness: 0.2, polygonOffset: true, polygonOffsetFactor: -2 });
+      for (const sx of [-1, 1]) {
+        const plate = new THREE.Mesh(new THREE.PlaneGeometry(26, 15), mat);
+        plate.position.set(sx * 31.2, 15, 8);
+        plate.rotation.y = sx * Math.PI / 2;
+        this.body.add(plate);
+      }
+    }
+
+    this.spikes = null;
+    this.powerOn = false;
+  }
+
+  // Rumble spikes: studs all over the body
+  setSpikes(on) {
+    if (on && !this.spikes) {
+      const A = sharedAssets();
+      this.spikes = new THREE.Group();
+      const geo = new THREE.ConeGeometry(3.2, 13, 6);
+      const spots = [[0, 47, -9], [12, 45, -2], [-12, 45, -2], [12, 45, -16], [-12, 45, -16], [0, 29, 30], [14, 25, 44], [-14, 25, 44],
+        [0, 20, 66], [33, 22, 30], [-33, 22, 30], [33, 22, -14], [-33, 22, -14], [0, 26, -47]];
+      for (const [x, y, z] of spots) {
+        const m = new THREE.Mesh(geo, A.spikeMat);
+        m.position.set(x, y, z);
+        // point outward from the body centre
+        const dir = new THREE.Vector3(x, y - 18, z - 10).normalize();
+        m.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), dir);
+        this.spikes.add(m);
+      }
+      this.body.add(this.spikes);
+    }
+    if (this.spikes) this.spikes.visible = on;
+  }
+
+  // Rumble power hitter: pulsing red glow on the paint
+  setPower(on, time) {
+    if (on) {
+      this.paint.emissive.setRGB(1, 0.08, 0.02);
+      this.paint.emissiveIntensity = 0.5 + Math.sin(time * 14) * 0.25;
+    } else if (this.powerOn) {
+      this.paint.emissive.setRGB(0, 0, 0);
+      this.paint.emissiveIntensity = 1;
+    }
+    this.powerOn = on;
   }
 
   // pos/quat already interpolated (uu, quaternion)

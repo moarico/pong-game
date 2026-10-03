@@ -8,6 +8,9 @@ import { CarModel } from './render/carModel.js';
 import { Effects } from './render/effects.js';
 import { CameraRig } from './render/cameraRig.js';
 import { ballTextures } from './render/textures.js';
+import { createMode, ITEMS, ITEM_KEYS } from './physics/modes.js';
+import { ModeFx } from './render/modeFx.js';
+import { TireMarks } from './render/tireMarks.js';
 
 const BOT_NAMES = ['Atlas', 'Blitz', 'Comet', 'Dash', 'Echo', 'Flare', 'Ghost', 'Havoc', 'Jinx', 'Nova', 'Rex', 'Zippy', 'Vortex', 'Turbo'];
 const REPLAY_SECONDS = 6;
@@ -30,6 +33,13 @@ const _q = new THREE.Quaternion();
 const _bp = new THREE.Vector3();
 const _bq = new THREE.Quaternion();
 
+// which button uses a power-up for this device
+function itemKey(device) {
+  if (!device || device.type === 'any') return 'RB / F';
+  if (device.type === 'pad') return 'RB';
+  return device.layout === 'p2' ? 'H' : 'F';
+}
+
 function shuffle(a) {
   for (let i = a.length - 1; i > 0; i--) {
     const j = Math.floor(Math.random() * (i + 1));
@@ -48,6 +58,7 @@ export class Match {
     this.group = new THREE.Group();
     app.gfx.scene.add(this.group);
     this.effects = new Effects(this.group, app.settings.quality);
+    this.tireMarks = new TireMarks(this.group, app.settings.quality === 'low' ? 900 : 2400, app.settings.quality === 'high' ? 0.075 : 0.02);
     this.ball = ballMesh();
     this.group.add(this.ball);
     if (app.settings.quality === 'low') this.ballBlob = this.addBlob(1.7, 1.7);
@@ -55,13 +66,14 @@ export class Match {
     // players
     this.players = [];
     const names = shuffle(BOT_NAMES.slice());
+    const carNumbers = shuffle([7, 9, 11, 17, 21, 24, 33, 42, 55, 73, 88, 99]);
     for (const team of [0, 1]) {
       const humans = cfg.humans.filter((h) => h.team === team);
       for (let i = 0; i < cfg.teamSize; i++) {
         const h = humans[i];
         const car = this.world.addCar(new Car(team, h ? h.name : names.pop()));
         car.handling = app.settings.handling === 'realistic' ? 'realistic' : 'easy';
-        const model = new CarModel(team);
+        const model = new CarModel(team, carNumbers.pop());
         this.group.add(model.root);
         if (app.settings.quality === 'low') model.blob = this.addBlob(1.6, 2.2);
         const p = { car, model, human: !!h, device: h ? h.device : null, bot: h ? null : new Bot(car, cfg.difficulty), name: car.name };
@@ -69,6 +81,13 @@ export class Match {
       }
     }
     this.humans = this.players.filter((p) => p.human);
+
+    // game mode rules (Soccar has none)
+    this.gameMode = cfg.gameMode || 'soccar';
+    const pool = !cfg.items || cfg.items === 'all' ? ITEM_KEYS : [cfg.items];
+    this.world.mode = createMode(this.world, this.gameMode, pool);
+    this.modeFx = this.world.mode ? new ModeFx(this.group, this.effects, this.world.mode) : null;
+    app.input.rbIsItem = this.gameMode === 'rumble';
 
     // views
     this.views = [];
@@ -166,6 +185,7 @@ export class Match {
       }
     });
     this.app.audio.stopEngines();
+    this.app.input.rbIsItem = false;
   }
 
   // ---------------------------------------------------------------- flow
@@ -187,6 +207,7 @@ export class Match {
       });
     }
     for (const v of this.views) if (v.rig) v.rig.snap();
+    if (this.world.mode) this.world.mode.reset();
     this.state = 'countdown';
     this.stateT = this.attract ? 1.2 : 3;
     this.lastBeep = 4;
@@ -321,6 +342,7 @@ export class Match {
       ci.throttle = c.throttle; ci.pitch = c.pitch; ci.yaw = c.yaw; ci.roll = c.roll;
       ci.jump = c.jump; ci.boost = c.boost; ci.powerslide = c.powerslide;
       ci.steer = this.shapeSteer(p, c, dt);
+      ci.useItem = !!c.itemDown;
     }
 
     // ball prediction for the bots (and shot detection)
@@ -332,7 +354,7 @@ export class Match {
     for (const p of this.players) {
       if (!p.bot) continue;
       p.bot.update(dt, {
-        world: this.world, pred: this.pred, time: this.world.time, kickoff,
+        world: this.world, pred: this.pred, time: this.world.time, kickoff, rumble: this.gameMode === 'rumble' ? this.world.mode : null,
         teammates: this.players.filter((q) => q.car.team === p.car.team).map((q) => q.car),
         opponents: this.players.filter((q) => q.car.team !== p.car.team).map((q) => q.car),
       });
@@ -435,6 +457,12 @@ export class Match {
     return p.steerS;
   }
 
+  clockText() {
+    if (this.unlimited) return '∞';
+    const sec = Math.max(0, this.overtime ? Math.floor(this.clock) : Math.ceil(this.clock));
+    return `${this.overtime ? '+' : ''}${Math.floor(sec / 60)}:${String(sec % 60).padStart(2, '0')}`;
+  }
+
   goalIn(pred) {
     for (const s of pred) {
       if (Math.abs(s.pos.x) < ARENA.goalHalfW && s.pos.y < ARENA.goalH) {
@@ -503,6 +531,32 @@ export class Match {
             const ap = this.humans.find((p) => p.car === e.by);
             if (ap) { app.input.rumble(ap.device, 0.6, 0.6, 200); app.hud.viewCenter(ap.viewIndex, 'DEMOLITION!', 1.5); }
           }
+          break;
+        case 'itemGet':
+          if (hp) { app.audio.itemGet(); app.input.rumble(hp.device, 0.15, 0.3, 90); }
+          break;
+        case 'itemUse':
+          if (!this.attract) app.audio.itemUse(e.item, near(e.car.pos));
+          if (e.item === 'freezer') this.effects.flash(this.ball.position.clone(), 0x9fe0ff, 2.6, 0.35, 2.5);
+          if (e.item === 'curveball') this.effects.ring(this.ball.position.clone(), TEAM_COLORS[e.car.team].light, 5, 0.5);
+          break;
+        case 'itemFail':
+          if (hp) app.hud.viewStatus(hp.viewIndex, e.item === 'boot' ? 'NO OPPONENT IN RANGE' : 'BALL OUT OF RANGE', 1.2);
+          break;
+        case 'hooked':
+          if (!this.attract) app.audio.hook(near(e.point));
+          break;
+        case 'boot':
+          this.effects.flash(e.point.clone().multiplyScalar(S), 0xffd080, 2.2, 0.3, 2.5);
+          this.effects.hit(e.point, 2600);
+          if (!this.attract) {
+            app.audio.bump();
+            app.hud.addFeed(`<b style="color:${TEAM_COLORS[e.by.team].css}">${e.by.name}</b> 👢 <b style="color:${TEAM_COLORS[e.car.team].css}">${e.car.name}</b>`);
+            if (hp) { app.input.rumble(hp.device, 0.9, 0.7, 300); app.hud.viewCenter(hp.viewIndex, 'BOOTED!', 1.4); }
+          }
+          break;
+        case 'heatseekFlip':
+          this.effects.hit(e.point, 2200);
           break;
         case 'boostPickup':
           this.effects.boostPickup(e.pad);
@@ -626,6 +680,9 @@ export class Match {
       p.iquat = (p.iquat || new THREE.Quaternion()).copy(_q);
       p.model.update(c, _p, _q, dt);
       this.placeBlob(p.model.blob, _p, _q, 17);
+      const skid = this.state === 'replay' ? 0 : TireMarks.skid(c);
+      this.tireMarks.update(c, _p, _q, skid);
+      this.effects.dirt(c, _p, _q, skid, dt);
       if (p.model.blob) p.model.blob.visible = p.model.blob.visible && !c.demolished;
       this.effects.carTrail(c, _p, _q, dt);
       carPos.push({ car: c, pos: p.ipos, name: p.name });
@@ -646,6 +703,7 @@ export class Match {
         const c = p.controls || {};
         v.rig.update(dt, p.car, p.ipos, p.iquat, this.ball.visible ? _bp : null, c.lookX || 0, c.lookY || 0);
         app.hud.setBoost(p.viewIndex, p.car.boost);
+        if (this.gameMode === 'rumble') app.hud.setItem(p.viewIndex, this.world.mode.status(p.car), ITEMS, itemKey(p.device));
         app.hud.updatePlates(p.viewIndex, v.camera, carPos, p.car);
       }
       this.humans.forEach((p, i) => {
@@ -656,6 +714,12 @@ export class Match {
       app.hud.setClock(this.clock, this.overtime, this.unlimited);
       app.hud.update(dt);
     }
+    if (this.modeFx) this.modeFx.update(dt, this.players, this.ball, _bp);
+    this.tireMarks.flush();
+    // stadium screens + fire jets during the goal celebration
+    const celebrating = this.state === 'goal';
+    if (celebrating && this.stateT > 1.2) this.effects.pyro(app.stadium.pyroPoints[this.goalOf], this.goalTeam, dt);
+    app.stadium.setScreens(this.scores[0], this.scores[1], this.clockText(), celebrating ? (this.goalTeam === 0 ? 'blue' : 'orange') : null);
     this.effects.update(dt);
     app.stadium.update(dt);
     app.gfx.render();

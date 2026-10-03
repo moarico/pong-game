@@ -14,11 +14,13 @@ A Rocket League–style car soccer game that runs in the browser. It has 3D grap
 
 - **Physics close to the real game.** It uses Rocket League's units and numbers: 2300 uu/s top speed, boost, supersonic, jump and double jump, flips and dodges, air roll, powerslide, and Psyonix-style ball hits. Cars can drive up the curved walls. The ball bounces and spins realistically.
 - **Full soccar arena.** Standard field size with the corner walls and goals. All 34 boost pads are in their real positions: 6 big pads give 100 boost and 28 small pads give 12.
-- **Game modes**
+- **Game modes**: Soccar (standard), **Heatseeker** (after every touch the ball homes in on a goal and curves in on its own) and **Rumble** (power-ups such as grappling hooks and tornadoes). Details are below.
+- **Ways to play**
   - *Play vs CPU*: 1v1, 2v2 or 3v3 against bots with three skill levels (Rookie, Pro, All-Star).
   - *2 Players — Versus*: split screen, Player 1 (blue) vs Player 2 (orange). You can fill the teams with bots for 2v2 or 3v3.
   - *2 Players — Co-op*: split screen, both players on blue against CPU opponents.
 - **Match rules.** Kickoff countdown, 3/5/7-minute or unlimited matches, and a golden-goal overtime. Time runs out only once the ball touches the ground. Goal explosions are followed by an instant replay. Supersonic hits demolish cars. The post-game screen shows stats (score, goals, assists, saves, shots, demos) and an MVP.
+- **Stadium details from the reference photos.** Tyre marks are torn into the grass and dirt flies off the wheels. Cars have racing numbers and exposed superchargers. Big score screens show "GOAL!!" and fire jets go off when someone scores. Flags wave over the stands, chevrons glow on the walls, and searchlights sweep the sky at night.
 - **Realistic visuals.** Night or sunset stadium with a city skyline, a crowd and floodlights. The grass is mowed in stripes. Goals glow and the walls are hex-glass. Lighting is physically based, with shadows and bloom. The ball has glowing panels, and boost flames and smoke trails come in team colours.
 - **HUD in Rocket League style.** Score and clock bar, circular boost meter, name plates, ball cam / car cam.
 - **Sound effects** for the engine, boost, hits, goals and the crowd. All of them are generated in code, so no audio files are needed.
@@ -51,6 +53,25 @@ The game uses the browser's Gamepad API, which works with Xbox One and Xbox Seri
    Mixing devices works: for example one player on an Xbox controller and the other on keyboard & mouse.
 3. Once both players have joined, press **A** or **Start** to kick off. The screen splits top/bottom; you can switch to side-by-side in the setup screen.
 
+## Game modes
+
+Pick one on the match setup screen.
+
+- **Soccar**: standard car soccer.
+- **Heatseeker**: after every touch the ball flies at the other team's goal and curves in on its own. It speeds up a little with each touch. If it hits the wall above or beside the goal, it heads back the other way. Defend by getting a touch on it.
+- **Rumble**: every few seconds each player gets a random power-up, shown above the boost meter. Use it with **RB** on a controller, **F** on keyboard & mouse, or **H** for the arrow-keys player. You can also pick a single power-up type (for example "Grappling Hook only") under **Power-ups**.
+
+| Power-up | What it does |
+| --- | --- |
+| 🪝 Grappling Hook | Fires a hook at the ball and reels your car in to it |
+| 🪠 Plunger | Hooks the ball and pulls it to you |
+| 🌪️ Tornado | Spins a tornado around your car for 5 seconds that lifts and throws the ball and nearby cars |
+| 🌀 Curveball | Bends the ball's path so it curves into the other team's goal |
+| 📌 Spikes | The ball sticks to your car; flip to shoot it off |
+| 👢 Boot | Kicks the nearest opponent into the air |
+| 💥 Power Hitter | Huge hits, and you demolish anyone you touch, for 8 seconds |
+| ❄️ Freezer | Freezes the ball in place until someone touches it |
+
 ## Controls
 
 | Action | Xbox controller | Keyboard & mouse (P1) | Keyboard (P2) |
@@ -64,6 +85,7 @@ The game uses the browser's Gamepad API, which works with Xbox One and Xbox Seri
 | Air roll left / right | **LB / RB** | Q / E | U / O |
 | Ball cam on/off | **Y** | R or Middle mouse | I |
 | Look around | **Right stick** | – | – |
+| Use power-up (Rumble) | **RB** | F | H |
 | Pause | **☰ Menu** | Esc | P |
 
 In single player, both keyboard layouts and any connected controller work together.
@@ -84,7 +106,7 @@ Moves to try:
 npm install        # three.js + esbuild
 npm run build      # bundles src/ into dist/game.js (commit this file so the game runs without a build)
 npm run dev        # live dev server on http://localhost:8080 that rebuilds on save
-npm test           # physics unit tests + a headless bot-vs-bot simulation
+npm test           # physics + game-mode unit tests and a headless bot-vs-bot simulation
 npm run test:browser   # Playwright tests: 2P with simulated Xbox pads, controller + keyboard & mouse, full match flow
 ```
 

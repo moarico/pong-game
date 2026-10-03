@@ -75,11 +75,15 @@ export class Hud {
       const gauge = el('div', 'boost-gauge', box, boostGaugeSVG());
       const label = views.length > 1 ? el('div', 'player-tag', box, v.label) : null;
       if (label) label.style.color = TEAM_COLORS[v.team].css;
+      const item = el('div', 'item-slot hidden', box);
+      item.innerHTML = '<div class="item-icon"></div><div class="item-text"><div class="item-name"></div><div class="item-key"></div></div><div class="item-bar"><div></div></div>';
       const status = el('div', 'view-status', box);
       const center = el('div', 'view-center', box);
       const plates = el('div', 'plates', box);
       return {
         box, gauge, status, center, plates, plateMap: new Map(),
+        item, itemIcon: item.querySelector('.item-icon'), itemName: item.querySelector('.item-name'),
+        itemKey: item.querySelector('.item-key'), itemBar: item.querySelector('.item-bar div'), itemSig: '',
         segs: Array.from(gauge.querySelectorAll('.seg')),
         num: gauge.querySelector('.boost-num'),
         lastBoost: -1, statusTimer: 0, centerTimer: 0,
@@ -122,6 +126,26 @@ export class Hud {
     v.segs.forEach((s, k) => s.classList.toggle('on', k < lit));
     v.gauge.classList.toggle('empty', b === 0);
     v.gauge.classList.toggle('full', b === 100);
+  }
+
+  // Rumble power-up slot: st = {item, active, frac, next}; info = ITEMS table
+  setItem(i, st, info, keyHint) {
+    const v = this.views[i];
+    if (!v) return;
+    if (!st) { v.item.classList.add('hidden'); return; }
+    v.item.classList.remove('hidden');
+    const sig = `${st.item}|${st.active}|${keyHint}|${st.item ? '' : Math.ceil(st.next || 0)}`;
+    if (sig !== v.itemSig) {
+      v.itemSig = sig;
+      const it = st.item ? info[st.item] : null;
+      v.item.classList.toggle('ready', !!st.item && !st.active);
+      v.item.classList.toggle('active', !!st.active);
+      v.item.classList.toggle('empty', !st.item);
+      v.itemIcon.textContent = it ? it.icon : '⏳';
+      v.itemName.textContent = it ? it.name : 'Power-up';
+      v.itemKey.innerHTML = !st.item ? `next in ${Math.ceil(st.next || 0)}s` : st.active ? 'active' : `press <b>${keyHint}</b>`;
+    }
+    v.itemBar.style.transform = `scaleX(${st.active ? st.frac : st.item ? 1 : 0})`;
   }
 
   viewStatus(i, text, time = 1.6) {

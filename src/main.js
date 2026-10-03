@@ -20,7 +20,7 @@ function loadSettings() {
   const d = {
     quality: defaultQuality(), volume: 0.7, rumble: true, ballCam: true, fov: 100, replays: true, showFps: false,
     timeOfDay: 'night', split: 'horizontal', duration: 300, difficulty: 'pro',
-    teamSize_solo: 1, teamSize_versus: 1, teamSize_coop: 2, handling: 'easy',
+    teamSize_solo: 1, teamSize_versus: 1, teamSize_coop: 2, handling: 'easy', gameMode: 'soccar', items: 'all',
   };
   try {
     const s = JSON.parse(localStorage.getItem(SETTINGS_KEY) || '{}');
@@ -99,7 +99,10 @@ class App {
     this.disposeMatch();
     this.paused = false;
     this.hud.show(false);
-    this.match = new Match(this, { mode: 'attract', teamSize: 2, duration: 0, difficulty: 'pro', humans: [] });
+    // the menu background alternates between a normal match and a Rumble match
+    this.attractCount = (this.attractCount || 0) + 1;
+    const gameMode = this.attractCount % 2 === 0 ? 'rumble' : 'soccar';
+    this.match = new Match(this, { mode: 'attract', gameMode, items: 'all', teamSize: 2, duration: 0, difficulty: 'pro', humans: [] });
     this.stadium.bindPads(this.match.world.pads);
     if (showMenu) this.menu.show('main');
   }

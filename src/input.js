@@ -9,18 +9,21 @@ const KEY_LAYOUTS = {
     up: ['KeyW', 'ArrowUp'], down: ['KeyS', 'ArrowDown'], left: ['KeyA', 'ArrowLeft'], right: ['KeyD', 'ArrowRight'],
     jump: ['Space', 'KeyK'], boost: ['ShiftLeft', 'ShiftRight', 'KeyL'], slide: ['ControlLeft', 'KeyC', 'KeyJ'],
     rollL: ['KeyQ', 'KeyU'], rollR: ['KeyE', 'KeyO'], cam: ['KeyR', 'KeyI'], pause: ['Escape', 'KeyP'],
+    item: ['KeyF', 'KeyH'],
     mouse: { boost: 0, jump: 2, cam: 1 },
   },
   p1: {
     up: ['KeyW'], down: ['KeyS'], left: ['KeyA'], right: ['KeyD'],
     jump: ['Space'], boost: ['ShiftLeft'], slide: ['ControlLeft', 'KeyC'],
     rollL: ['KeyQ'], rollR: ['KeyE'], cam: ['KeyR'], pause: ['Escape'],
+    item: ['KeyF'],
     mouse: { boost: 0, jump: 2, cam: 1 },
   },
   p2: {
     up: ['ArrowUp'], down: ['ArrowDown'], left: ['ArrowLeft'], right: ['ArrowRight'],
     jump: ['KeyK', 'Numpad0'], boost: ['KeyL', 'NumpadDecimal'], slide: ['KeyJ', 'Numpad1'],
     rollL: ['KeyU'], rollR: ['KeyO'], cam: ['KeyI', 'Numpad2'], pause: ['KeyP'],
+    item: ['KeyH', 'Numpad3'],
   },
 };
 
@@ -57,6 +60,7 @@ export class Input {
     this.mouse = new Set();
     this.mousePressed = new Set();
     this.gamepadBlocked = false;
+    this.rbIsItem = false;
     this.pads = [];
     this.onActivity = null;
     this.onPadConnect = null;
@@ -186,6 +190,7 @@ export class Input {
       lookX: 0,
       lookY: 0,
       skip: this.anyKeyPressed(L.jump) || mPressed('jump'),
+      itemDown: this.anyKey(L.item),
       digitalSteer: true,
     };
   }
@@ -200,7 +205,9 @@ export class Input {
       steer,
       pitch,
       yaw: steer,
-      roll: st.b.rb - st.b.lb,
+      // in Rumble the right bumper uses the power-up instead of air rolling right
+      roll: (this.rbIsItem ? 0 : st.b.rb) - st.b.lb,
+      itemDown: this.rbIsItem && st.down('rb'),
       jump: st.down('a'),
       boost: st.down('b'),
       powerslide: st.down('x'),
@@ -286,7 +293,7 @@ export class Input {
 }
 
 export function emptyControls() {
-  return { throttle: 0, steer: 0, pitch: 0, yaw: 0, roll: 0, jump: false, boost: false, powerslide: false, ballCam: false, pause: false, lookX: 0, lookY: 0, skip: false };
+  return { throttle: 0, steer: 0, pitch: 0, yaw: 0, roll: 0, jump: false, boost: false, powerslide: false, ballCam: false, pause: false, lookX: 0, lookY: 0, skip: false, itemDown: false };
 }
 
 export function padLabel(id) {

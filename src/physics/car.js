@@ -65,7 +65,7 @@ function curvature(speed) {
 }
 
 export function emptyInput() {
-  return { throttle: 0, steer: 0, pitch: 0, yaw: 0, roll: 0, jump: false, boost: false, powerslide: false };
+  return { throttle: 0, steer: 0, pitch: 0, yaw: 0, roll: 0, jump: false, boost: false, powerslide: false, useItem: false };
 }
 
 let carIds = 0;
@@ -82,6 +82,7 @@ export class Car {
     this.prevPos = new THREE.Vector3();
     this.prevQuat = new THREE.Quaternion();
     this.input = emptyInput();
+    this.hitPower = 1; // Rumble power hitter raises this
     this.handling = 'easy'; // 'easy' (arcade grip, default) or 'realistic' (Rocket League values)
     this.prevJump = false;
     this.boost = BOOST_START;

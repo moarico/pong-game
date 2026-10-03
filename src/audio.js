@@ -224,6 +224,43 @@ export class AudioEngine {
     for (const f of [220, 277, 330]) this.tone({ freq: f, dur: 1.4, gain: 0.12, type: 'sawtooth', attack: 0.04 });
   }
 
+  itemGet() {
+    this.tone({ freq: 660, endFreq: 990, dur: 0.12, gain: 0.08, type: 'triangle' });
+    this.tone({ freq: 990, endFreq: 1320, dur: 0.14, gain: 0.07, type: 'triangle', delay: 0.08 });
+  }
+
+  itemUse(item, vol = 1) {
+    const v = Math.max(0.2, vol);
+    switch (item) {
+      case 'grapple':
+      case 'plunger':
+        this.burst({ dur: 0.25, gain: 0.25 * v, freq: 2500, endFreq: 700, type: 'bandpass', q: 2 });
+        break;
+      case 'tornado':
+        this.burst({ dur: 2.5, gain: 0.35 * v, freq: 300, endFreq: 1400, type: 'bandpass', q: 0.8 });
+        this.burst({ dur: 3, gain: 0.2 * v, freq: 900, endFreq: 400, type: 'bandpass', q: 3, delay: 0.3 });
+        break;
+      case 'freezer':
+        this.tone({ freq: 1800, endFreq: 3200, dur: 0.4, gain: 0.12 * v, type: 'sine' });
+        this.burst({ dur: 0.5, gain: 0.25 * v, freq: 6000, endFreq: 3000, type: 'highpass' });
+        break;
+      case 'curveball':
+        this.tone({ freq: 300, endFreq: 1200, dur: 0.5, gain: 0.15 * v, type: 'sawtooth' });
+        break;
+      case 'power':
+      case 'spikes':
+        this.tone({ freq: 140, endFreq: 420, dur: 0.35, gain: 0.25 * v, type: 'square' });
+        break;
+      default:
+        this.burst({ dur: 0.2, gain: 0.3 * v, freq: 1200, endFreq: 200 });
+    }
+  }
+
+  hook(vol = 1) {
+    this.tone({ freq: 900, endFreq: 500, dur: 0.12, gain: 0.2 * Math.max(0.2, vol), type: 'square' });
+    this.burst({ dur: 0.1, gain: 0.2 * Math.max(0.2, vol), freq: 4000, endFreq: 1500, type: 'highpass' });
+  }
+
   click() { this.tone({ freq: 1400, dur: 0.04, gain: 0.05, type: 'square' }); }
   select() { this.tone({ freq: 900, endFreq: 1400, dur: 0.09, gain: 0.08, type: 'triangle' }); }
 }

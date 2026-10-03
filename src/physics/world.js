@@ -92,7 +92,7 @@ export function collideCarBall(car, ball, time, events) {
     _dir.y *= 0.35;
     _dir.addScaledVector(_f, -0.35 * _dir.dot(_f));
     _dir.normalize();
-    ball.vel.addScaledVector(_dir, dvHit * hitScale(dvHit));
+    ball.vel.addScaledVector(_dir, dvHit * hitScale(dvHit) * (car.hitPower || 1));
     strength = Math.max(strength, dvHit);
   }
   car.lastBallHit = time;
@@ -132,8 +132,9 @@ const _fd = new THREE.Vector3();
 export function canDemolish(atk, vic, dir) {
   if (atk.team === vic.team || atk.demolished) return false;
   atk.forward(_fd);
-  if (_fd.dot(dir) < 0.5) return false; // must hit with the front of the car
   const closing = atk.vel.dot(dir) - vic.vel.dot(dir);
+  if (atk.hitPower > 1) return _fd.dot(dir) > 0.25 && closing > 150; // Rumble power hitter
+  if (_fd.dot(dir) < 0.5) return false; // must hit with the front of the car
   if (atk.supersonic) return closing > 300;
   return atk.boosting && atk.vel.length() > DEMO_BOOST_SPEED && closing > 700;
 }
@@ -209,6 +210,7 @@ export class World {
     for (const [x, z] of BIG_PADS) this.pads.push({ x, z, big: true, active: true, timer: 0 });
     for (const [x, z] of SMALL_PADS) this.pads.push({ x, z, big: false, active: true, timer: 0 });
     this.respawnIndex = 0;
+    this.mode = null; // optional game-mode rules (Heatseeker, Rumble)
   }
 
   addCar(car) {
@@ -231,7 +233,8 @@ export class World {
 
   step(dt) {
     this.time += dt;
-    const { ball, cars } = this;
+    const { ball, cars, mode } = this;
+    if (mode) mode.preStep(dt);
     for (const car of cars) {
       if (car.demolished) {
         car.respawnTimer -= dt;
@@ -241,16 +244,19 @@ export class World {
       }
       car.step(dt);
     }
+    if (mode) mode.preBall(dt);
     const impact = ball.step(dt);
     if (impact > 250) this.events.push({ type: 'bounce', strength: impact, point: ball.pos.clone() });
 
     for (const car of cars) {
+      if (ball.attachedTo === car) continue; // carried on spikes
       if (collideCarBall(car, ball, this.time, this.events)) {
         if (ball.lastTouch !== car) {
           ball.prevTouch = ball.lastTouch;
           ball.lastTouch = car;
         }
         ball.lastTouchTime = this.time;
+        if (mode) mode.onTouch(car);
       }
     }
     for (let i = 0; i < cars.length; i++) {
@@ -276,5 +282,6 @@ export class World {
         }
       }
     }
+    if (mode) mode.postStep(dt);
   }
 }

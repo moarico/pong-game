@@ -1,5 +1,6 @@
 import { TEAM_COLORS } from './config.js';
 import { padLabel } from './input.js';
+import { ITEMS, ITEM_KEYS } from './physics/modes.js';
 
 function el(tag, cls, parent, html) {
   const e = document.createElement(tag);
@@ -28,6 +29,7 @@ const CONTROLS_HTML = `
       <tr><td><span class="btn x">X</span></td><td>Powerslide · Air roll (hold)</td></tr>
       <tr><td><span class="btn y">Y</span></td><td>Ball cam on/off</td></tr>
       <tr><td><span class="btn lb">LB</span> <span class="btn lb">RB</span></td><td>Air roll left / right</td></tr>
+      <tr><td><span class="btn lb">RB</span></td><td>Use power-up (Rumble mode)</td></tr>
       <tr><td><span class="btn stick">R-Stick</span></td><td>Look around</td></tr>
       <tr><td><span class="btn menu">☰</span></td><td>Pause</td></tr>
     </table>
@@ -42,6 +44,7 @@ const CONTROLS_HTML = `
       <tr><td>Powerslide / air roll</td><td>C or Ctrl</td><td>J</td></tr>
       <tr><td>Air roll L / R</td><td>Q / E</td><td>U / O</td></tr>
       <tr><td>Ball cam</td><td>R or Middle mouse</td><td>I</td></tr>
+      <tr><td>Use power-up (Rumble)</td><td>F</td><td>H</td></tr>
       <tr><td>Pause</td><td>Esc</td><td>P</td></tr>
     </table>
     <p class="hint">In single player both key sets work. Flip = jump, then jump again while holding a direction.</p>
@@ -196,6 +199,12 @@ export class Menu {
     const teamSizes = mode === 'coop' ? [{ label: '2 vs 2', value: 2 }, { label: '3 vs 3', value: 3 }] : [{ label: '1 vs 1', value: 1 }, { label: '2 vs 2', value: 2 }, { label: '3 vs 3', value: 3 }];
     const key = 'teamSize_' + mode;
     if (!teamSizes.some((t) => t.value === s[key])) s[key] = teamSizes[0].value;
+    this.option(p, 'Game mode', [
+      { label: 'Soccar', value: 'soccar' },
+      { label: 'Heatseeker (ball homes in)', value: 'heatseeker' },
+      { label: 'Rumble (power-ups)', value: 'rumble' },
+    ], () => s.gameMode, (v) => { s.gameMode = v; });
+    this.option(p, 'Power-ups (Rumble)', [{ label: 'All, random', value: 'all' }].concat(ITEM_KEYS.map((k) => ({ label: `${ITEMS[k].name} only`, value: k }))), () => s.items, (v) => { s.items = v; });
     this.option(p, 'Team size', teamSizes, () => s[key], (v) => { s[key] = v; });
     this.option(p, 'Match length', [{ label: '3 minutes', value: 180 }, { label: '5 minutes', value: 300 }, { label: '7 minutes', value: 420 }, { label: '1 minute', value: 60 }, { label: 'Unlimited', value: 0 }], () => s.duration, (v) => { s.duration = v; });
     this.option(p, 'CPU skill', [{ label: 'Rookie', value: 'rookie' }, { label: 'Pro', value: 'pro' }, { label: 'All-Star', value: 'allstar' }], () => s.difficulty, (v) => { s.difficulty = v; });
@@ -203,7 +212,7 @@ export class Menu {
     if (mode !== 'solo') this.option(p, 'Split screen', [{ label: 'Top / Bottom', value: 'horizontal' }, { label: 'Side by side', value: 'vertical' }], () => s.split, (v) => { s.split = v; });
     const go = () => {
       this.app.saveSettings();
-      if (mode === 'solo') this.app.startMatch({ mode, teamSize: s[key], duration: s.duration, difficulty: s.difficulty, split: s.split, humans: [{ device: { type: 'any' }, team: 0, name: 'You' }] });
+      if (mode === 'solo') this.app.startMatch({ mode, gameMode: s.gameMode, items: s.items, teamSize: s[key], duration: s.duration, difficulty: s.difficulty, split: s.split, humans: [{ device: { type: 'any' }, team: 0, name: 'You' }] });
       else this.show('join', mode);
     };
     this.button(p, mode === 'solo' ? '▶  KICK OFF' : '▶  CONTINUE', go, 'primary');
@@ -252,7 +261,7 @@ export class Menu {
       if (!ready()) return;
       const humans = this.joinSlots.map((d, i) => ({ device: d, team: mode === 'versus' ? i : 0, name: `Player ${i + 1}` }));
       const ts = s['teamSize_' + mode];
-      this.app.startMatch({ mode, teamSize: ts, duration: s.duration, difficulty: s.difficulty, split: s.split, humans });
+      this.app.startMatch({ mode, gameMode: s.gameMode, items: s.items, teamSize: ts, duration: s.duration, difficulty: s.difficulty, split: s.split, humans });
     };
     const startBtn = this.button(p, '▶  START MATCH', start, 'primary');
     this.button(p, '◀  BACK', () => this.show('setup', mode));

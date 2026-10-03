@@ -192,12 +192,59 @@ export class Effects {
         );
       }
     }
+    if (car.boosting && Math.random() < dt * 60 * this.mult) {
+      // hot sparks spitting out of the exhaust (see reference photos)
+      const fl = tc.flame;
+      const cv = _v.copy(car.vel).multiplyScalar(S * 0.3);
+      for (let i = 0; i < 2; i++) {
+        this.glow.emit(_e.x, _e.y, _e.z,
+          cv.x - _f.x * rand(4, 9) + rand(-2.5, 2.5), cv.y + rand(-1, 3), cv.z - _f.z * rand(4, 9) + rand(-2.5, 2.5),
+          rand(0.25, 0.55), rand(0.05, 0.09), 0.02, [fl[0] * 3, fl[1] * 3, fl[2] * 3, 1], [fl[0], fl[1] * 0.6, fl[2] * 0.4, 0], 1.5, 7);
+      }
+    }
     if (car.supersonic) {
       // white streaks from the rear wheels
       for (const sx of [-1, 1]) {
         if (Math.random() > 0.8 * this.mult) continue;
         _e.copy(pos).addScaledVector(_l, sx * 30).addScaledVector(_f, -36).addScaledVector(_u, 5).multiplyScalar(S);
         this.glow.emit(_e.x, _e.y, _e.z, 0, 0, 0, 0.28, 0.12, 0.04, [1.6, 1.7, 1.8, 0.8], [0.8, 0.9, 1.0, 0], 0, 0);
+      }
+    }
+  }
+
+  // turf and dirt thrown up by spinning or sliding tyres (k = skid strength 0..1)
+  dirt(car, pos, quat, k, dt) {
+    if (k <= 0) return;
+    _f.set(0, 0, 1).applyQuaternion(quat);
+    _l.set(1, 0, 0).applyQuaternion(quat);
+    const n = Math.round(dt * 70 * k * this.mult + Math.random());
+    for (let i = 0; i < n; i++) {
+      const w = i % 2 ? 1 : -1;
+      _e.copy(pos).addScaledVector(_l, w * 34).addScaledVector(_f, -36).multiplyScalar(S);
+      const back = rand(2, 6);
+      const grass = Math.random() < 0.45;
+      const col = grass ? [0.12, 0.22, 0.06, 1] : [0.16, 0.11, 0.06, 1];
+      this.smoke.emit(_e.x, 0.12, _e.z,
+        car.vel.x * S * 0.2 - _f.x * back + _l.x * w * rand(0, 2), rand(2.5, 5.5), car.vel.z * S * 0.2 - _f.z * back + _l.z * w * rand(0, 2),
+        rand(0.5, 0.9), rand(0.05, 0.11), rand(0.04, 0.08), col, [col[0], col[1], col[2], 0.7], 0.3, 13, rand(-10, 10));
+    }
+    if (Math.random() < dt * 10 * k * this.mult) {
+      _e.copy(pos).addScaledVector(_f, -40).multiplyScalar(S);
+      this.smoke.emit(_e.x, 0.15, _e.z, -_f.x * 1.5, rand(0.3, 0.9), -_f.z * 1.5, rand(0.7, 1.2), 0.3, rand(1, 1.6),
+        [0.36, 0.33, 0.25, 0.3], [0.3, 0.28, 0.24, 0], 1, -0.2, rand(-1, 1));
+    }
+  }
+
+  // stadium fire jets when someone scores; points in uu
+  pyro(points, team, dt) {
+    const tc = TEAM_COLORS[team];
+    for (const pt of points) {
+      const n = Math.round(dt * 110 * this.mult);
+      for (let i = 0; i < n; i++) {
+        const hot = Math.random() < 0.5;
+        this.glow.emit(pt.x * S + rand(-0.3, 0.3), pt.y * S, pt.z * S + rand(-0.3, 0.3), rand(-0.8, 0.8), rand(14, 22), rand(-0.8, 0.8),
+          rand(0.35, 0.7), rand(0.5, 0.9), rand(1.1, 1.9), hot ? [2.1, 1.0, 0.25, 0.85] : [tc.flame[0] * 1.6, tc.flame[1] * 1.1, tc.flame[2] * 0.9, 0.8],
+          [0.9, 0.18, 0.03, 0], 1.2, 2);
       }
     }
   }

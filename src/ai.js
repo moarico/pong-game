@@ -3,9 +3,9 @@ import { ARENA, BALL, CAR, GRAVITY } from './config.js';
 import { wallDist2D } from './arena.js';
 
 const DIFFICULTY = {
-  rookie: { replan: 0.32, aimError: 650, boost: 0.35, dodge: false, kickoffFlip: false, jumpReach: 200, aerial: false, maxSpeed: 1900, wrongSideCare: 0.4 },
-  pro: { replan: 0.14, aimError: 260, boost: 0.85, dodge: true, kickoffFlip: true, jumpReach: 420, aerial: false, maxSpeed: 2300, wrongSideCare: 0.8 },
-  allstar: { replan: 0.05, aimError: 90, boost: 1, dodge: true, kickoffFlip: true, jumpReach: 1300, aerial: true, maxSpeed: 2300, wrongSideCare: 1 },
+  rookie: { itemDelay: 2.5, replan: 0.32, aimError: 650, boost: 0.35, dodge: false, kickoffFlip: false, jumpReach: 200, aerial: false, maxSpeed: 1900, wrongSideCare: 0.4 },
+  pro: { itemDelay: 1.0, replan: 0.14, aimError: 260, boost: 0.85, dodge: true, kickoffFlip: true, jumpReach: 420, aerial: false, maxSpeed: 2300, wrongSideCare: 0.8 },
+  allstar: { itemDelay: 0.4, replan: 0.05, aimError: 90, boost: 1, dodge: true, kickoffFlip: true, jumpReach: 1300, aerial: true, maxSpeed: 2300, wrongSideCare: 1 },
 };
 
 const _f = new THREE.Vector3();
@@ -86,10 +86,44 @@ export class Bot {
   startSeq(steps) { this.seq = steps; this.seqT = 0; }
 
   // ctx: { world, pred, kickoff, teammates:[car], opponents:[car], time }
+  // Rumble: decide whether to fire the power-up we are holding this frame
+  wantItem(ctx) {
+    const r = ctx.rumble;
+    if (!r) return false;
+    const s = r.st(this.car);
+    if (!s.item || s.active || s.held < this.cfg.itemDelay) return false;
+    const car = this.car;
+    const ball = ctx.world.ball;
+    const as = this.attackSign;
+    const d = car.pos.distanceTo(ball.pos);
+    car.forward(_f);
+    _d.copy(ball.pos).sub(car.pos).normalize();
+    const facing = _d.dot(_f);
+    const ballToOurGoal = ball.vel.z * as < -500;
+    let want = false;
+    switch (s.item) {
+      case 'grapple': want = d > 900 && d < 3800 && facing > 0.6 && ball.pos.y < 1500; break;
+      case 'plunger': want = d > 900 && d < 3800 && (ballToOurGoal || ball.pos.z * as < -2500); break;
+      case 'tornado': want = d < 700; break;
+      case 'curveball': want = d < 4500 && ball.vel.z * as > 300 && ball.pos.z * as > -500; break;
+      case 'spikes':
+      case 'power': want = true; break;
+      case 'boot': want = !!r.nearestOpponent(car, 2200); break;
+      case 'freezer': want = ballToOurGoal && ball.pos.z * as < -1500 && d < 6000; break;
+      default: break;
+    }
+    if (!want && s.held > 12) want = r.inRange(car, s.item);
+    return want;
+  }
+
   update(dt, ctx) {
     const car = this.car;
     const inp = car.input;
     if (car.demolished) return;
+    // tap the power-up button (Rumble uses the press, not the hold)
+    const fire = this.wantItem(ctx);
+    inp.useItem = fire && !this.itemTap;
+    this.itemTap = inp.useItem;
     this.replanT -= dt;
     if (this.replanT <= 0) {
       this.replanT = this.cfg.replan * (0.7 + Math.random() * 0.6);
@@ -356,6 +390,22 @@ export class Bot {
     const speed = car.vel.length();
     const fwdSpeed = car.vel.dot(_f);
     const ball = ctx.world.ball;
+
+    // carrying the ball on spikes: drive at their goal and flip to shoot it off
+    if (ball.attachedTo === car) {
+      _t.set(0, 0, this.attackSign * (HZ - 300));
+      _d.copy(_t).sub(car.pos);
+      _d.addScaledVector(n, -_d.dot(n));
+      const a2 = Math.atan2(_d.dot(_r), _d.dot(_f));
+      inp.throttle = 1;
+      inp.steer = THREE.MathUtils.clamp(a2 * 3, -1, 1);
+      inp.boost = Math.abs(a2) < 0.4 && car.boost > 0;
+      if (_d.length() < 2600 && Math.abs(a2) < 0.3 && ctx.time - this.lastJumpAt > 1.2) {
+        this.lastJumpAt = ctx.time;
+        this.startSeq([{ t: 0, jump: true }, { t: 0.06, jump: false }, { t: 0.09, jump: true, pitch: -1 }, { t: 0.19, jump: false, end: true }]);
+      }
+      return;
+    }
 
     // when close to the ball, steer straight through it toward the aim point
     let tgt = this.target;

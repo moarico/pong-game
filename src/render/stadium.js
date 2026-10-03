@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { ARENA, S, TEAM_COLORS } from '../config.js';
 import { wallOutline } from '../arena.js';
 import * as T from './textures.js';
+import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 
 const { halfX: HX, halfZ: HZ, height: H, rampR: RR, goalHalfW: GW, goalH: GH, goalDepth: GD } = ARENA;
 
@@ -487,6 +488,201 @@ export function buildStadium(renderer, scene, opts) {
   lights.count = li;
   arena.add(lights);
 
+  // ---- big score screens above each end (reference photo 2)
+  const screens = [];
+  {
+    const frameMat = new THREE.MeshStandardMaterial({ color: 0x14171c, roughness: 0.5, metalness: 0.8 });
+    for (const sz of [1, -1]) {
+      const c = document.createElement('canvas');
+      c.width = 1024; c.height = 480;
+      const tex = new THREE.CanvasTexture(c);
+      tex.colorSpace = THREE.SRGBColorSpace;
+      const g = new THREE.Group();
+      const w = 3600, h = 1690;
+      const screen = new THREE.Mesh(new THREE.PlaneGeometry(w, h), new THREE.MeshBasicMaterial({ map: tex, color: new THREE.Color(1.5, 1.5, 1.5), fog: false }));
+      const frame = new THREE.Mesh(new THREE.BoxGeometry(w + 160, h + 160, 120), frameMat);
+      frame.position.z = -70;
+      g.add(frame, screen);
+      for (const sx of [-1, 1]) {
+        const leg = new THREE.Mesh(new THREE.BoxGeometry(120, 2000, 120), frameMat);
+        leg.position.set(sx * w * 0.35, -h / 2 - 1000, -60);
+        g.add(leg);
+      }
+      g.position.set(0, 4300, sz * (HZ + 4000));
+      g.rotation.order = 'YXZ';
+      g.rotation.y = sz > 0 ? Math.PI : 0;
+      g.rotation.x = 0.12; // lean toward the field
+      arena.add(g);
+      screens.push({ c, tex, ctx: c.getContext('2d') });
+    }
+  }
+  let screenState = '';
+  function drawScreens(s0, s1, clock, flash) {
+    const key = `${s0}|${s1}|${clock}|${flash}`;
+    if (key === screenState) return;
+    screenState = key;
+    for (const sc of screens) {
+      const g = sc.ctx;
+      const W = sc.c.width, Hh = sc.c.height;
+      const bg = g.createLinearGradient(0, 0, 0, Hh);
+      bg.addColorStop(0, '#0a1430');
+      bg.addColorStop(1, '#03060f');
+      g.fillStyle = bg;
+      g.fillRect(0, 0, W, Hh);
+      g.textAlign = 'center';
+      g.textBaseline = 'middle';
+      if (flash) {
+        g.fillStyle = flash === 'blue' ? '#2f7bff' : '#ff7a1a';
+        g.fillRect(0, 0, W, Hh);
+        g.fillStyle = '#fff';
+        g.font = 'italic 900 220px Arial Black, Arial, sans-serif';
+        g.fillText('GOAL!!', W / 2, Hh / 2 + 10);
+      } else {
+        g.fillStyle = '#9fc4ff';
+        g.font = 'bold 44px Arial, sans-serif';
+        g.fillText('ROCKET ARENA', W / 2, 52);
+        g.fillStyle = '#1f5fe0';
+        g.fillRect(70, 110, 330, 250);
+        g.fillStyle = '#e8621a';
+        g.fillRect(W - 400, 110, 330, 250);
+        g.fillStyle = '#fff';
+        g.font = 'italic 900 190px Arial Black, Arial, sans-serif';
+        g.fillText(String(s0), 235, 245);
+        g.fillText(String(s1), W - 235, 245);
+        g.font = 'bold 40px Arial, sans-serif';
+        g.fillText('BLUE', 235, 400);
+        g.fillText('ORANGE', W - 235, 400);
+        g.font = 'bold 110px Arial, sans-serif';
+        g.fillText(clock, W / 2, 245);
+      }
+      // scanlines for an LED look
+      g.fillStyle = 'rgba(0,0,0,0.18)';
+      for (let y = 0; y < Hh; y += 4) g.fillRect(0, y, W, 1);
+      sc.tex.needsUpdate = true;
+    }
+  }
+  drawScreens(0, 0, '5:00', null);
+
+  // ---- flags waving along the top of the stands (reference photo 1)
+  const flagTime = { value: 0 };
+  {
+    const designs = [['#1f5fe0', '#ffffff', '#e8621a'], ['#c8102e', '#ffffff', '#003da5'], ['#009246', '#ffffff', '#ce2b37'], ['#000000', '#dd0000', '#ffce00'],
+      ['#ff7a1a', '#ffffff', '#2f7bff'], ['#0055a4', '#ffffff', '#ef4135'], ['#ffcc00', '#00843d', '#00843d'], ['#2f7bff', '#2f7bff', '#ffffff']];
+    const fw = 300, fh = 190;
+    const poleMat = new THREE.MeshStandardMaterial({ color: 0x9aa1aa, metalness: 0.9, roughness: 0.3 });
+    const ring = wallOutline(1100, 2);
+    const poleGeo = new THREE.CylinderGeometry(9, 9, 520, 6);
+    const poles = new THREE.InstancedMesh(poleGeo, poleMat, ring.length);
+    const byDesign = designs.map(() => []);
+    ring.forEach((p, i) => {
+      const x = p.x - p.nx * 5950, z = p.z - p.nz * 5950;
+      m.makeTranslation(x, 4650 + 260, z);
+      poles.setMatrixAt(i, m);
+      const geo = new THREE.PlaneGeometry(fw, fh, 8, 1);
+      geo.translate(fw / 2, 0, 0);
+      geo.rotateY(Math.atan2(p.nx, p.nz)); // face the field, fly along the stands
+      geo.translate(x, 4650 + 420, z);
+      byDesign[i % designs.length].push(geo);
+    });
+    arena.add(poles);
+    designs.forEach((d, i) => {
+      if (!byDesign[i].length) return;
+      const c = document.createElement('canvas');
+      c.width = 96; c.height = 64;
+      const g = c.getContext('2d');
+      const vertical = i % 2 === 0;
+      d.forEach((col, k) => {
+        g.fillStyle = col;
+        if (vertical) g.fillRect(k * 32, 0, 32, 64); else g.fillRect(0, k * 21.4, 96, 21.4);
+      });
+      const tex = new THREE.CanvasTexture(c);
+      tex.colorSpace = THREE.SRGBColorSpace;
+      const mat = new THREE.MeshStandardMaterial({ map: tex, side: THREE.DoubleSide, roughness: 0.9, emissive: 0xffffff, emissiveMap: tex, emissiveIntensity: 0.15 });
+      mat.onBeforeCompile = (sh) => {
+        sh.uniforms.uTime = flagTime;
+        sh.vertexShader = 'uniform float uTime;\n' + sh.vertexShader.replace('#include <begin_vertex>', `#include <begin_vertex>
+          float wave = sin(uTime * 3.0 + position.x * 0.01 + position.z * 0.01 + uv.x * 5.0) * 45.0 * uv.x;
+          transformed.y += wave * 0.6;
+          transformed.x += wave * 0.4;
+          transformed.z += wave * 0.4;`);
+      };
+      const merged = mergeGeometries(byDesign[i]);
+      arena.add(new THREE.Mesh(merged, mat));
+    });
+  }
+  anim.push((dt) => { flagTime.value += dt; });
+
+  // ---- searchlights sweeping the night sky (reference photo 2)
+  if (preset.stars) {
+    const c = document.createElement('canvas');
+    c.width = 4; c.height = 256;
+    const g = c.getContext('2d');
+    const gr = g.createLinearGradient(0, 0, 0, 256);
+    gr.addColorStop(0, 'rgba(255,255,255,0)');
+    gr.addColorStop(0.7, 'rgba(255,255,255,0.35)');
+    gr.addColorStop(1, 'rgba(255,255,255,1)');
+    g.fillStyle = gr;
+    g.fillRect(0, 0, 4, 256);
+    const beamTex = new THREE.CanvasTexture(c);
+    const beamGeo = new THREE.CylinderGeometry(9, 0.8, 420, 24, 1, true);
+    beamGeo.translate(0, 210, 0);
+    const beamMat = new THREE.MeshBasicMaterial({ map: beamTex, color: 0x8fb6ff, transparent: true, opacity: 0.07, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide, fog: false });
+    const beams = [];
+    for (let i = 0; i < 6; i++) {
+      const a = (i / 6) * Math.PI * 2 + 0.3;
+      const beam = new THREE.Mesh(beamGeo, beamMat);
+      beam.position.set(Math.cos(a) * 125, 5, Math.sin(a) * 150);
+      beam.renderOrder = 3;
+      root.add(beam);
+      beams.push({ beam, a, phase: i * 1.7 });
+    }
+    let bt = 0;
+    anim.push((dt) => {
+      bt += dt;
+      for (const b of beams) {
+        b.beam.rotation.set(0, 0, 0);
+        b.beam.rotateY(b.a + Math.sin(bt * 0.25 + b.phase) * 0.6);
+        b.beam.rotateZ(-0.55 - Math.sin(bt * 0.31 + b.phase) * 0.2);
+      }
+    });
+  }
+
+  // ---- glowing chevrons on the lower walls (reference photo 1)
+  {
+    const c = document.createElement('canvas');
+    c.width = 256; c.height = 64;
+    const g = c.getContext('2d');
+    g.fillStyle = '#fff';
+    for (let k = 0; k < 3; k++) {
+      const x = 30 + k * 70;
+      g.beginPath();
+      g.moveTo(x, 8); g.lineTo(x + 34, 32); g.lineTo(x, 56); g.lineTo(x + 18, 56); g.lineTo(x + 52, 32); g.lineTo(x + 18, 8);
+      g.closePath();
+      g.fill();
+    }
+    const tex = new THREE.CanvasTexture(c);
+    tex.wrapS = THREE.RepeatWrapping;
+    const chevProfile = [];
+    for (let k = 0; k <= 3; k++) {
+      const a = 0.42 * (1 - k / 3);
+      chevProfile.push([RR - (RR - 3) * Math.cos(a), RR - (RR - 3) * Math.sin(a)]);
+    }
+    const chev = new THREE.Mesh(
+      stripGeometry(pts, chevProfile, { uLen: 500, vOf: (j) => j / 3, skip: goalCut(GH), colorOf: (x, y, z) => teamTint(z, 2.2) }),
+      new THREE.MeshBasicMaterial({ map: tex, vertexColors: true, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide, fog: false }),
+    );
+    chev.renderOrder = 2;
+    arena.add(chev);
+    anim.push((dt) => { tex.offset.x = (tex.offset.x - dt * 0.25) % 1; });
+  }
+
+  // fire jets behind each goal for celebrations (uu positions)
+  const pyroPoints = { 0: [], 1: [] };
+  for (const team of [0, 1]) {
+    const sz = team === 0 ? -1 : 1;
+    for (const x of [-2700, -1500, 1500, 2700]) pyroPoints[team].push(new THREE.Vector3(x, 520, sz * (HZ - 30)));
+  }
+
   // ---- boost pads
   const pads = [];
   const padBaseMat = new THREE.MeshStandardMaterial({ color: 0x2a2f36, roughness: 0.4, metalness: 0.7 });
@@ -596,6 +792,8 @@ export function buildStadium(renderer, scene, opts) {
     },
     update(dt) { for (const f of anim) f(dt); },
     cheer(amount = 1) { cheer = Math.max(cheer, amount); },
+    pyroPoints,
+    setScreens(s0, s1, clock, flash) { drawScreens(s0, s1, clock, flash); },
     goalFlash(team) {
       const gl = goalLights[team];
       gl.light.intensity = 2500;

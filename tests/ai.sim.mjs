@@ -3,6 +3,7 @@ import { World } from '../src/physics/world.js';
 import { Car } from '../src/physics/car.js';
 import { Bot } from '../src/ai.js';
 import { predictBall } from '../src/physics/ball.js';
+import { createMode } from '../src/physics/modes.js';
 import { DT, KICKOFF_SPOTS } from '../src/config.js';
 
 const diff = process.argv[2] || 'pro';
@@ -14,8 +15,12 @@ for (const team of [0, 1]) for (let i = 0; i < size; i++) {
   const c = w.addCar(new Car(team, `T${team}-${i}`));
   cars.push(c); bots.push(new Bot(c, diff));
 }
+const MODE = process.env.MODE || 'soccar';
+w.mode = createMode(w, MODE);
+const used = {};
 function kickoff() {
   w.ball.reset(); w.ball.frozen = false;
+  if (w.mode) w.mode.reset();
   for (const team of [0, 1]) {
     const mates = cars.filter((c) => c.team === team);
     mates.forEach((c, i) => {
@@ -38,18 +43,20 @@ for (let i = 0; i < n; i++) {
       b.update(DT * 2, {
         world: w, pred, time: w.time,
         kickoff: w.ball.lastTouch === null,
+        rumble: MODE === 'rumble' ? w.mode : null,
         teammates: cars.filter((c) => c.team === b.car.team),
         opponents: cars.filter((c) => c.team !== b.car.team),
       });
     }
   }
   w.step(DT);
-  for (const e of w.events) { if (e.type === 'ballHit') touches++; if (e.type === 'demo') demos++; }
+  for (const e of w.events) { if (e.type === 'ballHit') touches++; if (e.type === 'demo') demos++; if (e.type === 'itemUse') used[e.item] = (used[e.item] || 0) + 1; }
   w.events.length = 0;
   const g = w.ball.goalState();
   if (g >= 0) { score[1 - g]++; kickoff(); }
   if (w.ball.vel.lengthSq() < 1 && w.ball.lastTouch) stuckFrames++;
   for (const c of cars) if (!Number.isFinite(c.pos.x)) throw new Error('NaN car');
 }
+if (MODE !== 'soccar') console.log(MODE, 'items used:', JSON.stringify(used));
 console.log(`${diff} ${size}v${size} ${seconds}s -> score ${score.join('-')}, touches ${touches}, demos ${demos}, ball idle frames ${stuckFrames}`);
 for (const c of cars) console.log(`  ${c.name} pos ${c.pos.toArray().map((v) => v.toFixed(0)).join(',')} onGround ${c.onGround} boost ${c.boost.toFixed(0)}`);
