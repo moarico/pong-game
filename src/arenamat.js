@@ -220,7 +220,9 @@ void main() {
     float e = min(min(f.x, 1.0 - f.x), min(f.y, 1.0 - f.y));
     vec2 rv = fract(g * 6.0) - 0.5;
     float rivet = (1.0 - smoothstep(0.14, 0.24, length(rv))) * step(e, 0.08);
-    float rust = smoothstep(0.58, 0.9, vnoise(vec2(vUv.x * 6.0, vUv.y * 0.9)) * 0.7 + vnoise(vUv * 13.0) * 0.3);
+    // Rust runs down walls in streaks; on floors it lies in patches.
+    vec2 ruv = N.y > 0.7 ? vUv * vec2(1.6, 1.6) : vec2(vUv.x * 6.0, vUv.y * 0.9);
+    float rust = smoothstep(0.62, 0.92, vnoise(ruv) * 0.7 + vnoise(vUv * 13.0) * 0.3) * mix(1.0, 0.6, step(0.7, N.y));
     float seam = 1.0 - smoothstep(0.0, 0.02, e);
     alb *= 0.8 + 0.3 * vnoise(vUv * 30.0);
     alb = mix(alb, vec3(0.16, 0.07, 0.035), rust * 0.6);

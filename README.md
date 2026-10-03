@@ -74,9 +74,9 @@ Any static host works (GitHub Pages, Netlify, `npx serve`). Opening `index.html`
 
 Add these to the URL hash, for example `index.html#fps,medium`:
 
-- `low`, `medium`, `high` start at a fixed quality level. Otherwise desktops start on high, tablets on medium and phones on low, and the game steps down by itself if the frame rate drops.
-- `fps` shows the frame rate and the quality level.
-- `lock` keeps the chosen quality level and turns off automatic downgrades.
+- `low`, `medium`, `high` choose the quality level (grass density, shadows, bloom, depth of field). Otherwise desktops start on high, tablets on medium and phones on low. Within a level the game renders at an internal resolution that adapts to the device: it times the GPU, lowers the resolution only when the GPU is what holds the frame rate back (a phone in Low Power Mode, capped at 30 fps, keeps its sharpness), thins the grass when pixels aren't the problem, and raises the resolution again when there is room. The frame is always drawn to the screen at full resolution with a sharp upscale and, where supported, 4x multisampling.
+- `fps` shows the frame rate, the GPU time, the quality level and the current resolution scale.
+- `lock` keeps the chosen quality level and resolution fixed.
 - `play` skips the title screen.
 - `nopreview` skips rendering the stage select previews at startup.
 
@@ -91,6 +91,7 @@ src/sky.js         sky, clouds and sun disc
 src/sea.js         the bay: sky reflections and the sun's glitter
 src/grass.js       grass blades and susuki plumes
 src/terrain.js     the hilltop, coast, headlands and islands, far mountain ranges (JavaScript twin of the terrain function)
+src/landmaps.js    the land baked once at startup (height, slope, hill shade, grass masks) and the shared gust texture
 src/wind.js        wind field shared by the grass, dust and cloth
 src/particles.js   drifting dust and seed fluff, landing puffs
 src/figure.js      skeletons and sculpted, skinned bodies for the samurai and each kind of enemy
@@ -111,11 +112,13 @@ src/player.js      body physics (the player's and the enemies')
 src/camera.js      third-person camera, fight framing, shake
 src/trail.js       where the grass is being pushed down
 src/shadow.js      sunset shadows of everyone in the fight
-src/post.js        depth of field, light shafts, bloom, exposure, lens flare, tone mapping
+src/post.js        depth of field, light shafts, bloom, exposure, lens flare, tone mapping, sharp upscale
+src/governor.js    dynamic resolution, and a GPU timer built from fences
 src/ground.js      the floor under everyone's feet: the terrain on the hilltop, each hall's own floor and walls
 src/stage.js       stage manager: entering and leaving halls, light and air per hall, shared effects, intros
 src/boss.js        boss base: attack state machine, poise and stagger, phases, hazards, reflectable projectiles
 src/arenamat.js    hall shading (stone, flagstones, brass, iron, timber, rock, crystal, glass, lava, grating, banners) and builders
+src/lightvolume.js each hall's steady light, baked into a 3D volume of colour and direction
 src/vfx.js         sprite particles, floor telegraphs, shockwave rings, lightning
 src/tube.js        tubes rebuilt every frame from a curve (tentacles, the wyrm's body)
 src/stages/        the four halls and their bosses: cathedral + maw, forge + colossus, caves + wyrm, bastion + rider

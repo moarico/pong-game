@@ -75,14 +75,14 @@ export class CavesStage extends Stage {
     this.lighting = {
       sunDir: [-0.2, 0.9, -0.15],
       lightDir: [0.2, 0.95, 0.1],
-      sun: [0.32, 0.42, 0.7],
-      ambSky: [0.05, 0.065, 0.15],
-      ambGround: [0.035, 0.02, 0.06],
-      fog: [0.012, 0.018, 0.045],
-      fogSun: [0.25, 0.4, 0.75],
-      fogDensity: 0.03,
+      sun: [0.09, 0.12, 0.22],
+      ambSky: [0.03, 0.04, 0.095],
+      ambGround: [0.025, 0.015, 0.045],
+      fog: [0.008, 0.012, 0.032],
+      fogSun: [0.22, 0.36, 0.7],
+      fogDensity: 0.016,
       fogFalloff: 0.04,
-      mist: [0.08, 0.9],
+      mist: [0.022, 0.9],
       envSky: [0.25, 0.3, 0.6],
       envGround: [0.08, 0.06, 0.16],
       rays: 0.5,
@@ -160,7 +160,7 @@ export class CavesStage extends Stage {
 
     // --- Floor and the cave dome ----------------------------------------------------
     const floorG = new THREE.CircleGeometry(CAVE_R + 1, 72, 0, Math.PI * 2);
-    B.add(floorG, rock, null, { matrix: place(0, 0, 0, -Math.PI / 2, 0, 0), uvFn: (p) => [p.x, p.y] });
+    B.add(floorG, amat('#3a3646', { pat: APAT.rock, param: 0.6, rough: 0.7 }), null, { matrix: place(0, 0, 0, -Math.PI / 2, 0, 0), uvFn: (p) => [p.x, p.y] });
     floorG.dispose();
     const rings = [];
     for (let j = 0; j <= 26; j++) {

@@ -110,7 +110,8 @@ export class ForgeStage extends Stage {
     add(this.pour.bottom.x, 0.8, this.pour.bottom.z, molten, 1.6, 7);
     add(this.pour.top.x + 1.4, 5.6, this.pour.top.z, molten, 0.9, 6);
     for (const l of this.lanterns) add(l.x, l.y, l.z, [2.2, 1.25, 0.55], 0.75, 7.5);
-    add(0, WALL_H + 3, 0, [0.9, 0.42, 0.16], 1.1, 14);
+    add(0, WALL_H + 3, 0, [0.9, 0.42, 0.16], 2.2, 17);
+    add(0, WALL_H + 6.5, 0, [0.9, 0.42, 0.16], 1.2, 9);
     return { min: [-WALL_R - 1, -1.5, -WALL_R - 1], max: [WALL_R + 1, WALL_H + 9, WALL_R + 1], cell: 0.85, lights, occluders: [] };
   }
 
@@ -147,7 +148,7 @@ export class ForgeStage extends Stage {
     const glow = amat('#ffb070', { pat: APAT.emissive, param: 9, rough: 0.5 });
     const wood = amat('#4a3322', { pat: APAT.wood, param: 0.22 });
     const coal = amat('#141212', { pat: APAT.rock, param: 0.2, rough: 0.9 });
-    const gauge = amat('#e9dfc4', { rough: 0.3 });
+    const gauge = amat('#9a8f72', { rough: 0.45 });
     const glass = amat('#a8c8d0', { rough: 0.05, metal: 0.3 });
 
     // --- Floor: grating over the pit, iron plates, a stone apron by the walls -------------
