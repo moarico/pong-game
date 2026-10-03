@@ -1,0 +1,20 @@
+{
+  "name": "rocket-arena",
+  "version": "1.0.0",
+  "private": true,
+  "description": "A realistic Rocket League-style car soccer game for the browser with local 2-player split screen and Xbox controller support.",
+  "license": "MIT",
+  "scripts": {
+    "build": "esbuild src/main.js --bundle --minify --format=iife --target=es2020 --outfile=dist/game.js",
+    "dev": "esbuild src/main.js --bundle --format=iife --target=es2020 --outfile=dist/game.js --sourcemap --watch --serve=8080 --servedir=.",
+    "start": "npx --yes http-server -p 8080 -c-1 .",
+    "test": "node tests/physics.test.mjs && node tests/ai.sim.mjs pro 1 60",
+    "test:browser": "node tests/browser/twoplayer.cjs && node tests/browser/flow.cjs",
+    "screenshots": "node tests/browser/screenshots.cjs"
+  },
+  "devDependencies": {
+    "esbuild": "^0.28.2",
+    "three": "^0.186.1"
+  },
+  "type": "module"
+}
