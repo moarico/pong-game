@@ -9,7 +9,7 @@
     "dev": "esbuild src/main.js --bundle --format=iife --target=es2020 --outfile=dist/game.js --sourcemap --watch --serve=8080 --servedir=.",
     "start": "npx --yes http-server -p 8080 -c-1 .",
     "test": "node tests/physics.test.mjs && node tests/ai.sim.mjs pro 1 60",
-    "test:browser": "node tests/browser/twoplayer.cjs && node tests/browser/flow.cjs",
+    "test:browser": "node tests/browser/twoplayer.cjs && node tests/browser/mixed.cjs && node tests/browser/flow.cjs",
     "screenshots": "node tests/browser/screenshots.cjs"
   },
   "devDependencies": {

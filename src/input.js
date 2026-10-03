@@ -9,11 +9,13 @@ const KEY_LAYOUTS = {
     up: ['KeyW', 'ArrowUp'], down: ['KeyS', 'ArrowDown'], left: ['KeyA', 'ArrowLeft'], right: ['KeyD', 'ArrowRight'],
     jump: ['Space', 'KeyK'], boost: ['ShiftLeft', 'ShiftRight', 'KeyL'], slide: ['ControlLeft', 'KeyC', 'KeyJ'],
     rollL: ['KeyQ', 'KeyU'], rollR: ['KeyE', 'KeyO'], cam: ['KeyR', 'KeyI'], pause: ['Escape', 'KeyP'],
+    mouse: { boost: 0, jump: 2, cam: 1 },
   },
   p1: {
     up: ['KeyW'], down: ['KeyS'], left: ['KeyA'], right: ['KeyD'],
     jump: ['Space'], boost: ['ShiftLeft'], slide: ['ControlLeft', 'KeyC'],
     rollL: ['KeyQ'], rollR: ['KeyE'], cam: ['KeyR'], pause: ['Escape'],
+    mouse: { boost: 0, jump: 2, cam: 1 },
   },
   p2: {
     up: ['ArrowUp'], down: ['ArrowDown'], left: ['ArrowLeft'], right: ['ArrowRight'],
@@ -52,6 +54,9 @@ export class Input {
   constructor() {
     this.keys = new Set();
     this.keysPressed = new Set();
+    this.mouse = new Set();
+    this.mousePressed = new Set();
+    this.gamepadBlocked = false;
     this.pads = [];
     this.onActivity = null;
     this.onPadConnect = null;
@@ -66,8 +71,22 @@ export class Input {
       if (this.onActivity) this.onActivity();
     });
     window.addEventListener('keyup', (e) => { this.keys.delete(e.code); });
-    window.addEventListener('blur', () => this.keys.clear());
+    window.addEventListener('blur', () => { this.keys.clear(); this.mouse.clear(); });
     window.addEventListener('pointerdown', () => { if (this.onActivity) this.onActivity(); });
+    // mouse buttons drive the keyboard & mouse player; menus still get normal clicks
+    window.addEventListener('mousedown', (e) => {
+      if (!this.mouse.has(e.button)) this.mousePressed.add(e.button);
+      this.mouse.add(e.button);
+      if (e.button === 1) e.preventDefault(); // no auto-scroll on middle click
+    });
+    window.addEventListener('mouseup', (e) => { this.mouse.delete(e.button); });
+    // a release outside the page never sends mouseup; resync from the live button mask
+    window.addEventListener('mousemove', (e) => {
+      if (!(e.buttons & 1)) this.mouse.delete(0);
+      if (!(e.buttons & 2)) this.mouse.delete(2);
+      if (!(e.buttons & 4)) this.mouse.delete(1);
+    });
+    window.addEventListener('contextmenu', (e) => e.preventDefault());
     window.addEventListener('gamepadconnected', (e) => {
       if (this.onPadConnect) this.onPadConnect(e.gamepad, true);
     });
@@ -84,7 +103,13 @@ export class Input {
     this.dt = Math.min(0.1, (now - this.lastFrame) / 1000);
     this.lastFrame = now;
     let list = [];
-    try { list = navigator.getGamepads ? navigator.getGamepads() : []; } catch (e) { list = []; }
+    try {
+      list = navigator.getGamepads ? navigator.getGamepads() : [];
+    } catch (e) {
+      // the page is embedded somewhere that does not allow controller access
+      list = [];
+      this.gamepadBlocked = true;
+    }
     for (const p of this.pads) if (p) p.connected = false;
     for (let i = 0; i < list.length; i++) {
       const gp = list[i];
@@ -130,6 +155,7 @@ export class Input {
   // Clears per-frame key edges; call at the end of every frame.
   endFrame() {
     this.keysPressed.clear();
+    this.mousePressed.clear();
   }
 
   connectedPads() {
@@ -141,22 +167,25 @@ export class Input {
 
   keyboardControls(layoutName) {
     const L = KEY_LAYOUTS[layoutName];
+    const M = L.mouse;
     const up = this.anyKey(L.up) ? 1 : 0, down = this.anyKey(L.down) ? 1 : 0;
     const left = this.anyKey(L.left) ? 1 : 0, right = this.anyKey(L.right) ? 1 : 0;
+    const mDown = (b) => !!M && this.mouse.has(M[b]);
+    const mPressed = (b) => !!M && this.mousePressed.has(M[b]);
     return {
       throttle: up - down,
       steer: right - left,
       pitch: down - up,
       yaw: right - left,
       roll: (this.anyKey(L.rollR) ? 1 : 0) - (this.anyKey(L.rollL) ? 1 : 0),
-      jump: this.anyKey(L.jump),
-      boost: this.anyKey(L.boost),
+      jump: this.anyKey(L.jump) || mDown('jump'),
+      boost: this.anyKey(L.boost) || mDown('boost'),
       powerslide: this.anyKey(L.slide),
-      ballCam: this.anyKeyPressed(L.cam),
+      ballCam: this.anyKeyPressed(L.cam) || mPressed('cam'),
       pause: this.anyKeyPressed(L.pause),
       lookX: 0,
       lookY: 0,
-      skip: this.anyKeyPressed(L.jump),
+      skip: this.anyKeyPressed(L.jump) || mPressed('jump'),
     };
   }
 

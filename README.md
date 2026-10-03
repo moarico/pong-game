@@ -47,21 +47,22 @@ The game uses the browser's Gamepad API, which works with Xbox One and Xbox Seri
 ### Two players
 
 1. Choose **2 PLAYERS — VERSUS** (or **CO-OP vs CPU**) and set the match options.
-2. On the join screen, each player presses **A** on their own controller. Keyboard players press **Space** (WASD layout) or **Enter** (arrow-keys layout). Press **B** to leave.
+2. On the join screen, controller players press **A**. A keyboard & mouse player clicks an empty slot or presses **Space** (WASD + mouse). A second keyboard player can press **Enter** for the arrow keys. Press **B** (controller) or **Backspace** (keyboard) to leave.
+   Mixing devices works: for example one player on an Xbox controller and the other on keyboard & mouse.
 3. Once both players have joined, press **A** or **Start** to kick off. The screen splits top/bottom; you can switch to side-by-side in the setup screen.
 
 ## Controls
 
-| Action | Xbox controller | Keyboard P1 | Keyboard P2 |
+| Action | Xbox controller | Keyboard & mouse (P1) | Keyboard (P2) |
 | --- | --- | --- | --- |
 | Accelerate | **RT** | W | ↑ |
 | Brake / reverse | **LT** | S | ↓ |
 | Steer, and pitch/yaw in the air | **Left stick** | A / D (W / S pitch) | ← / → |
-| Jump; press again to double jump, or flip with a stick direction | **A** | Space | K |
-| Boost | **B** | Left Shift | L |
+| Jump; press again to double jump, or flip with a stick direction | **A** | Space or Right mouse | K |
+| Boost | **B** | Left Shift or Left mouse | L |
 | Powerslide; hold for air roll | **X** | C / Left Ctrl | J |
 | Air roll left / right | **LB / RB** | Q / E | U / O |
-| Ball cam on/off | **Y** | R | I |
+| Ball cam on/off | **Y** | R or Middle mouse | I |
 | Look around | **Right stick** | – | – |
 | Pause | **☰ Menu** | Esc | P |
 
@@ -84,7 +85,7 @@ npm install        # three.js + esbuild
 npm run build      # bundles src/ into dist/game.js (commit this file so the game runs without a build)
 npm run dev        # live dev server on http://localhost:8080 that rebuilds on save
 npm test           # physics unit tests + a headless bot-vs-bot simulation
-npm run test:browser   # Playwright tests: 2P with two simulated Xbox pads, full match flow
+npm run test:browser   # Playwright tests: 2P with simulated Xbox pads, controller + keyboard & mouse, full match flow
 ```
 
 ### Project layout

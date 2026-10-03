@@ -181,6 +181,10 @@ html, body {
 .join-device { font-weight: 800; font-size: 16px; margin-bottom: 8px; }
 .join-team { font-weight: 900; letter-spacing: 3px; margin-bottom: 10px; }
 .join-leave { font-size: 11px; color: rgba(220,232,255,0.55); }
+.join-slot.clickable { cursor: pointer; }
+.join-slot.clickable:hover { border-color: rgba(160,200,255,0.55); background: rgba(255,255,255,0.08); }
+.join-blocked { background: rgba(255,170,40,0.14); border: 1px solid rgba(255,170,40,0.5); border-radius: 6px; padding: 10px 12px; margin-bottom: 12px; font-size: 13px; line-height: 1.5; }
+.footer-hint.warn { color: #ffd59a; }
 .join-status { text-align: center; padding: 10px; border-radius: 6px; background: rgba(255,255,255,0.05); margin-bottom: 4px; color: rgba(220,232,255,0.75); }
 .join-status.ready { background: rgba(20,180,80,0.25); color: #d8ffe4; animation: glow 1.2s ease-in-out infinite alternate; }
 @keyframes glow { from { box-shadow: 0 0 0 rgba(20,200,90,0); } to { box-shadow: 0 0 22px rgba(20,200,90,0.5); } }

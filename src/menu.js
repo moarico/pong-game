@@ -33,15 +33,15 @@ const CONTROLS_HTML = `
     </table>
   </div>
   <div class="ctrl-col">
-    <h3>⌨️ Keyboard</h3>
+    <h3>⌨️🖱️ Keyboard &amp; Mouse</h3>
     <table>
       <tr><th></th><th>Player 1</th><th>Player 2</th></tr>
       <tr><td>Drive / steer</td><td>W A S D</td><td>Arrow keys</td></tr>
-      <tr><td>Jump / flip</td><td>Space</td><td>K</td></tr>
-      <tr><td>Boost</td><td>Left Shift</td><td>L</td></tr>
+      <tr><td>Jump / flip</td><td>Space or Right mouse</td><td>K</td></tr>
+      <tr><td>Boost</td><td>Left Shift or Left mouse</td><td>L</td></tr>
       <tr><td>Powerslide / air roll</td><td>C or Ctrl</td><td>J</td></tr>
       <tr><td>Air roll L / R</td><td>Q / E</td><td>U / O</td></tr>
-      <tr><td>Ball cam</td><td>R</td><td>I</td></tr>
+      <tr><td>Ball cam</td><td>R or Middle mouse</td><td>I</td></tr>
       <tr><td>Pause</td><td>Esc</td><td>P</td></tr>
     </table>
     <p class="hint">In single player both key sets work. Flip = jump, then jump again while holding a direction.</p>
@@ -177,6 +177,10 @@ export class Menu {
   padStatus(foot) {
     const update = () => {
       const pads = this.app.input.connectedPads();
+      if (this.app.input.gamepadBlocked) {
+        foot.innerHTML = '<span class="footer-hint warn">⚠️ Controllers are blocked on this page. Keyboard &amp; mouse work. For controllers, open the game from its own web address.</span>';
+        return;
+      }
       foot.innerHTML = pads.length
         ? pads.map((p, i) => `<span class="pad-chip">🎮 ${padLabel(p.id)} ${i + 1}</span>`).join('') + '<span class="footer-hint">Ⓐ select · Ⓑ back</span>'
         : '<span class="footer-hint">Connect an Xbox controller and press any button · or use mouse / keyboard (Enter to select)</span>';
@@ -210,76 +214,94 @@ export class Menu {
 
   screen_join(mode) {
     const s = this.app.settings;
-    const p = this.panel('PRESS TO JOIN', 'Each player presses <b>A</b> on their own controller');
+    const input = this.app.input;
+    const p = this.panel('PRESS TO JOIN', 'Controller players press <b>Ⓐ</b>. The keyboard &amp; mouse player clicks a slot or presses <b>Space</b>.');
+    const blocked = el('div', 'join-blocked', p);
     const slotsEl = el('div', 'join-slots', p);
     this.joinSlots = [null, null];
+    const sameDev = (a, b) => a && b && a.type === b.type && (a.type === 'pad' ? a.index === b.index : a.layout === b.layout);
+    const devName = (d) => (d.type === 'pad'
+      ? '🎮 ' + padLabel(input.pads[d.index]?.id)
+      : d.layout === 'p1' ? '⌨️🖱️ Keyboard &amp; Mouse' : '⌨️ Keyboard (arrow keys)');
+    const ready = () => !!(this.joinSlots[0] && this.joinSlots[1]);
+    let render = () => {};
+    const join = (dev, pref) => {
+      if (this.joinSlots.some((d) => sameDev(d, dev))) return false;
+      const free = pref >= 0 && !this.joinSlots[pref] ? pref : this.joinSlots.findIndex((d) => !d);
+      if (free < 0) return false;
+      this.joinSlots[free] = dev;
+      this.app.audio.select();
+      if (dev.type === 'pad') input.rumble(dev, 0.5, 0.5, 150);
+      render();
+      return true;
+    };
     const slotEls = [0, 1].map((i) => {
       const team = mode === 'versus' ? i : 0;
       const box = el('div', 'join-slot team' + team, slotsEl);
       el('div', 'join-title', box, `PLAYER ${i + 1}`);
       const body = el('div', 'join-body', box);
+      // clicking an empty slot joins the keyboard & mouse player there
+      box.addEventListener('click', () => {
+        if (this.joinSlots[i]) return;
+        if (!join({ type: 'kb', layout: 'p1' }, i)) join({ type: 'kb', layout: 'p2' }, i);
+      });
       return { box, body, team };
     });
     const status = el('div', 'join-status', p);
-    const render = () => {
-      slotEls.forEach((se, i) => {
-        const d = this.joinSlots[i];
-        se.box.classList.toggle('joined', !!d);
-        if (d) {
-          se.body.innerHTML = `<div class="join-device">${d.type === 'pad' ? '🎮 ' + padLabel(this.app.input.pads[d.index]?.id) : '⌨️ Keyboard (' + (d.layout === 'p1' ? 'WASD' : 'Arrows') + ')'}</div><div class="join-team" style="color:${TEAM_COLORS[se.team].css}">${se.team === 0 ? 'BLUE' : 'ORANGE'} TEAM</div><div class="join-leave">Ⓑ / Backspace to leave</div>`;
-        } else {
-          se.body.innerHTML = `<div class="join-wait">Press <b>Ⓐ</b> on a controller<br><span>or ${i === 0 ? '<b>Space</b> for keyboard (WASD)' : '<b>Enter</b> for keyboard (Arrows)'}</span></div>`;
-        }
-      });
-      const ready = this.joinSlots[0] && this.joinSlots[1];
-      status.innerHTML = ready ? '<b>Ready!</b> Press <b>Ⓐ</b> / <b>☰ Start</b> / <b>Enter</b> to kick off' : 'Waiting for players…';
-      status.classList.toggle('ready', !!ready);
-    };
-    render();
     const start = () => {
+      if (!ready()) return;
       const humans = this.joinSlots.map((d, i) => ({ device: d, team: mode === 'versus' ? i : 0, name: `Player ${i + 1}` }));
       const ts = s['teamSize_' + mode];
       this.app.startMatch({ mode, teamSize: ts, duration: s.duration, difficulty: s.difficulty, split: s.split, humans });
     };
-    const sameDev = (a, b) => a && b && a.type === b.type && (a.type === 'pad' ? a.index === b.index : a.layout === b.layout);
-    const backBtn = this.button(p, '◀  BACK', () => this.show('setup', mode));
-    void backBtn;
+    const startBtn = this.button(p, '▶  START MATCH', start, 'primary');
+    this.button(p, '◀  BACK', () => this.show('setup', mode));
+    render = () => {
+      slotEls.forEach((se, i) => {
+        const d = this.joinSlots[i];
+        se.box.classList.toggle('joined', !!d);
+        se.box.classList.toggle('clickable', !d);
+        if (d) {
+          const leave = d.type === 'pad' ? 'Press Ⓑ to leave' : 'Press Backspace to leave';
+          se.body.innerHTML = `<div class="join-device">${devName(d)}</div><div class="join-team" style="color:${TEAM_COLORS[se.team].css}">${se.team === 0 ? 'BLUE' : 'ORANGE'} TEAM</div><div class="join-leave">${leave}</div>`;
+        } else {
+          se.body.innerHTML = '<div class="join-wait">Press <b>Ⓐ</b> on a controller<br><span><b>Click here</b> or press <b>Space</b> for keyboard &amp; mouse</span></div>';
+        }
+      });
+      status.innerHTML = ready() ? '<b>Ready!</b> Press <b>Ⓐ</b>, <b>Start</b>, <b>Enter</b> or click <b>Start match</b>' : 'Waiting for players…';
+      status.classList.toggle('ready', ready());
+      startBtn.el.classList.toggle('hidden', !ready());
+      blocked.innerHTML = input.gamepadBlocked
+        ? '⚠️ This page is not allowed to read game controllers, so only keyboard &amp; mouse work here. To play with a controller, open the game from its own web address (GitHub Pages) or from the downloaded <b>index.html</b>.'
+        : '';
+      blocked.classList.toggle('hidden', !input.gamepadBlocked);
+    };
+    render();
     this.custom = (nav) => {
-      const input = this.app.input;
-      const ready = this.joinSlots[0] && this.joinSlots[1];
       // controllers
       for (const st of input.connectedPads()) {
         const dev = { type: 'pad', index: st.index };
         const slot = this.joinSlots.findIndex((d) => sameDev(d, dev));
         if (st.pressed('a') || st.pressed('menu')) {
-          if (slot < 0) {
-            const free = this.joinSlots.findIndex((d) => !d);
-            if (free >= 0) { this.joinSlots[free] = dev; this.app.audio.select(); input.rumble(dev, 0.5, 0.5, 150); render(); }
-          } else if (ready) { start(); return true; }
+          if (slot < 0) join(dev, -1);
+          else if (ready()) { start(); return true; }
         }
         if (st.pressed('b')) {
           if (slot >= 0) { this.joinSlots[slot] = null; this.app.audio.click(); render(); } else { this.show('setup', mode); return true; }
         }
       }
-      // keyboard
+      // keyboard: Space joins keyboard & mouse, Enter joins a second keyboard player on the arrow keys
       const kb = (code) => input.keysPressed.has(code);
-      const tryKb = (layout, pref) => {
-        const dev = { type: 'kb', layout };
-        const slot = this.joinSlots.findIndex((d) => sameDev(d, dev));
-        if (slot >= 0) return ready ? (start(), true) : false;
-        let free = this.joinSlots[pref] ? this.joinSlots.findIndex((d) => !d) : pref;
-        if (free >= 0) { this.joinSlots[free] = dev; this.app.audio.select(); render(); }
-        return false;
-      };
-      if (kb('Space') && tryKb('p1', 0)) return true;
-      if ((kb('Enter') || kb('NumpadEnter')) && tryKb('p2', 1)) return true;
+      if (ready() && (kb('Space') || kb('Enter') || kb('NumpadEnter'))) { start(); return true; }
+      if (kb('Space')) join({ type: 'kb', layout: 'p1' }, -1);
+      if (kb('Enter') || kb('NumpadEnter')) join({ type: 'kb', layout: 'p2' }, -1);
       if (kb('Backspace')) {
         for (let i = 1; i >= 0; i--) if (this.joinSlots[i] && this.joinSlots[i].type === 'kb') { this.joinSlots[i] = null; render(); break; }
       }
       if (kb('Escape')) { this.show('setup', mode); return true; }
-      return true; // swallow normal navigation
+      if (input.gamepadBlocked && !this.blockedShown) { this.blockedShown = true; render(); }
+      return true; // swallow normal navigation; buttons still work with the mouse
     };
-    // mouse users: clicking back works through the button
   }
 
   screen_settings() {
