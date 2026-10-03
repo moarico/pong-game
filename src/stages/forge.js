@@ -60,8 +60,8 @@ export class ForgeStage extends Stage {
         for (const [x, z, r] of solids) pushOutCircle(pos, vel, x, z, r + 0.35);
         self.boss?.clampPlayer?.(pos, vel);
       },
-      camera(aim, pos) {
-        cameraInCircle(aim, pos, 0, 0, WALL_R - 1.2, []);
+      camera(aim, pos, soft) {
+        cameraInCircle(aim, pos, 0, 0, WALL_R - 1.2, [], soft);
         pos.y = Math.min(pos.y, WALL_H - 2);
       },
     };
@@ -89,6 +89,29 @@ export class ForgeStage extends Stage {
 
   makeMaterial() {
     return makeArenaMaterial(this.shared, { floorY: 0, grateGlow: [2.4, 0.72, 0.16] });
+  }
+
+  // The steady light of the foundry, baked: the furnace mouth, the pit under the
+  // grating, the molten channels and the crucible's pour, the lanterns on the
+  // catwalk, and the glow that climbs to the sooty roof.
+  bakedLights() {
+    const lights = [];
+    const add = (x, y, z, color, k, range) => lights.push({ pos: [x, y, z], color: color.map((c) => c * k), range });
+    const fire = [2.6, 1.0, 0.3];
+    const molten = [2.4, 0.85, 0.22];
+    add(0, 2.6, -16.2, fire, 3.2, 24);
+    add(-2.2, 1.0, -16.8, fire, 1.2, 9);
+    add(2.2, 1.0, -16.8, fire, 1.2, 9);
+    add(0, -0.4, 0, molten, 2.6, 13);
+    add(0, 3.5, 0, molten, 0.9, 24);
+    for (const c of this.channels) {
+      for (let z = c.z0 + 1.5; z < c.z1; z += 3) add(c.x, 0.25, z, molten, 0.7, 3.8);
+    }
+    add(this.pour.bottom.x, 0.8, this.pour.bottom.z, molten, 1.6, 7);
+    add(this.pour.top.x + 1.4, 5.6, this.pour.top.z, molten, 0.9, 6);
+    for (const l of this.lanterns) add(l.x, l.y, l.z, [2.2, 1.25, 0.55], 0.75, 7.5);
+    add(0, WALL_H + 3, 0, [0.9, 0.42, 0.16], 1.1, 14);
+    return { min: [-WALL_R - 1, -1.5, -WALL_R - 1], max: [WALL_R + 1, WALL_H + 9, WALL_R + 1], cell: 0.85, lights, occluders: [] };
   }
 
   onImpact(x, z, s) {
@@ -297,6 +320,25 @@ export class ForgeStage extends Stage {
           B.add(g, iron, null, {});
           g.dispose();
         }
+      }
+      // Lanterns hung from the catwalk rail: caged lamps glowing amber.
+      this.lanterns = [];
+      const lampGlass = amat('#ffc27a', { pat: APAT.emissive, param: 5, rough: 0.4 });
+      for (let k = 0; k < 8; k++) {
+        const a = (k / 8) * Math.PI * 2 + 0.2;
+        if (Math.abs(Math.sin(a)) < 0.3 && Math.cos(a) < 0) continue; // not in front of the furnace
+        const r = WALL_R - 2.35;
+        const x = Math.sin(a) * r;
+        const z = Math.cos(a) * r;
+        B.box(0.04, 0.7, 0.04, iron, place(x, 7.6 - 0.35, z));
+        B.cylinder(0.16, 0.2, 0.36, lampGlass, place(x, 6.95, z), 8);
+        B.cylinder(0.24, 0.12, 0.14, darkIron, place(x, 7.2, z), 8);
+        B.cylinder(0.12, 0.22, 0.08, darkIron, place(x, 6.73, z), 8);
+        for (let b = 0; b < 4; b++) {
+          const ba = (b / 4) * Math.PI * 2;
+          B.box(0.025, 0.4, 0.025, darkIron, place(x + Math.cos(ba) * 0.19, 6.95, z + Math.sin(ba) * 0.19));
+        }
+        this.lanterns.push(new THREE.Vector3(x, 6.95, z));
       }
     }
 

@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { Stage } from '../stage.js';
 import { ArenaBuilder, amat, APAT, makeArenaMaterial, place, pointedArch } from '../arenamat.js';
 import { common, sharedUniforms, atmosphere, lights } from '../glsl.js';
+import { lightVolumeGLSL } from '../lightvolume.js';
 import { clampRect, pushOutCircle, cameraInCircle } from '../ground.js';
 import { PK, additive } from '../vfx.js';
 import { mulberry32 } from '../noise.js';
@@ -44,6 +45,7 @@ ${common}
 ${sharedUniforms}
 ${atmosphere}
 ${lights}
+${lightVolumeGLSL}
 uniform vec4 uRipples[16]; // x, z, start time, strength
 uniform vec4 uGlowPos[6]; // windows mirrored in the water: xyz, size
 uniform vec3 uGlowCol[6];
@@ -107,7 +109,10 @@ void main() {
   }
   float murk = 1.0 - exp(-max(depth, 0.0) * 1.3);
   vec3 body = mix(vec3(0.02, 0.06, 0.055), vec3(0.002, 0.009, 0.012), smoothstep(0.3, 3.0, depth));
-  body *= uAmbSky * 4.0 + pointLights(vWorld - vec3(0.0, 0.3, 0.0), vec3(0.0, 1.0, 0.0), V, vec3(0.3, 0.5, 0.45), 1.0, 0.5) * 0.25;
+  body *= uAmbSky * 4.0 + pointLights(vWorld - vec3(0.0, 0.3, 0.0), vec3(0.0, 1.0, 0.0), V, vec3(0.3, 0.5, 0.45), 1.0, 0.5) * 0.25
+        + hallLight(vWorld - vec3(0.0, 0.3, 0.0), vec3(0.0, 1.0, 0.0)) * 2.5;
+  // Whatever is lit along the reflected ray shows in the water, softly.
+  refl += hallLight(vWorld + R * 3.0, -R) * 0.35;
   vec3 col = mix(body, refl, F) + refl * 0.03;
   // Scum and floating petals of algae in the still corners.
   float scum = smoothstep(0.62, 0.8, vnoise(p * 0.45) * 0.6 + vnoise(p * 1.7) * 0.4) * 0.35;
@@ -162,8 +167,8 @@ export class CathedralStage extends Stage {
         for (const [x, z, r] of PILLARS) pushOutCircle(pos, vel, x, z, r + 0.35);
         self.boss?.clampPlayer?.(pos, vel);
       },
-      camera(aim, pos) {
-        cameraInCircle(aim, pos, 0, -3, 60, PILLARS.map(([x, z, r]) => [x, z, r + 0.35]));
+      camera(aim, pos, soft) {
+        cameraInCircle(aim, pos, 0, -3, 60, PILLARS.map(([x, z, r]) => [x, z, r + 0.35]), soft);
         pos.x = Math.max(-HALF_W + 0.6, Math.min(HALF_W - 0.6, pos.x));
         pos.z = Math.min(ENTRY_Z - 0.5, pos.z);
         pos.y = Math.min(pos.y, VAULT_TOP - 3);
@@ -598,6 +603,24 @@ export class CathedralStage extends Stage {
     candelabra(-4.6, 17.8);
     candelabra(4.6, 17.8);
     this.candleLights = [new THREE.Vector3(-4.6, 2.9, 17.8), new THREE.Vector3(4.6, 2.9, 17.8)];
+    // Votive candles left on the pillar steps: small warm pools in the green dark.
+    this.votives = [];
+    const votives = (x, y, z, n) => {
+      for (let k = 0; k < n; k++) {
+        const a = rnd() * Math.PI * 2;
+        const r = rnd() * 0.24;
+        const h = 0.07 + rnd() * 0.2;
+        const cx = x + Math.cos(a) * r;
+        const cz = z + Math.sin(a) * r;
+        B.cylinder(0.034, 0.04, h, wax, place(cx, y + h / 2, cz), 7);
+        if (rnd() < 0.75) this.candles.push(new THREE.Vector3(cx, y + h + 0.03, cz));
+      }
+      this.votives.push(new THREE.Vector3(x, y + 0.3, z));
+    };
+    for (const [x, z] of PILLARS) {
+      if (z === 3 || z === -9) continue;
+      votives(x - Math.sign(x) * 1.2, 0.36, z + 0.3, 5 + Math.floor(rnd() * 4));
+    }
     // Hooded saints in the aisles, up to their knees in water.
     const saint = (x, z, rot) => {
       B.box(1.2, 1.2, 1.2, trim, place(x, 0.6, z, 0, rot, 0));
@@ -717,6 +740,35 @@ export class CathedralStage extends Stage {
 
   makeMaterial() {
     return makeArenaMaterial(this.shared, { floorY: 0, waterY: WATER_Y, caustic: [0.25, 0.55, 0.5] });
+  }
+
+  // The steady light of the nave, baked: the rose window, the lancets in the
+  // clerestory and the aisles, candles, and a green glow from the drowned crypt.
+  bakedLights() {
+    const lights = [];
+    const add = (x, y, z, color, k, range) => lights.push({ pos: [x, y, z], color: color.map((c) => c * k), range });
+    const teal = [0.3, 0.95, 0.9];
+    const blue = [0.3, 0.6, 1.0];
+    add(0, 15.5, END_Z + 2.2, teal, 2.2, 26);
+    add(0, 8, END_Z + 3, teal, 1.4, 18);
+    add(0, 2.5, END_Z + 7, teal, 0.9, 14);
+    const zs = [ENTRY_Z, ...PILLAR_Z, ...CRYPT_Z, END_Z];
+    for (let i = 0; i < zs.length - 1; i++) {
+      const mid = (zs[i] + zs[i + 1]) / 2;
+      for (const s of [-1, 1]) {
+        add(s * (PILLAR_X - 1.2), 15.2, mid, blue, 0.55, 10);
+        add(s * (HALF_W - 1.1), 5.4, mid, teal, 0.5, 8.5);
+      }
+    }
+    const warm = [2.4, 1.15, 0.4];
+    for (const c of this.candleLights) add(c.x, c.y, c.z, warm, 0.75, 7);
+    for (const v of this.votives) add(v.x, v.y, v.z, warm, 1.1, 5.2);
+    const ch = this.chandelier.position;
+    add(ch.x, ch.y, ch.z, warm, 0.9, 9);
+    add(0, -4, -17, [0.1, 0.55, 0.42], 1.6, 13);
+    const occluders = PILLARS.map(([x, z, r]) => ({ x, z, r: r + 0.15, y0: -1, y1: SPRING + 1 }));
+    for (const z of CRYPT_Z) for (const s of [-1, 1]) occluders.push({ x: s * PILLAR_X, z, r: 1.1, y0: -5, y1: SPRING + 1 });
+    return { min: [-HALF_W - 1, -8.5, END_Z - 1.5], max: [HALF_W + 1, VAULT_TOP + 0.5, ENTRY_Z + 1.5], cell: 0.8, lights, occluders };
   }
 
   enter(restart = false) {

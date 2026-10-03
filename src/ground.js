@@ -37,8 +37,10 @@ export function clampToArena(pos, vel) {
   floor.clamp(pos, vel);
 }
 
-export function clampCamera(aim, pos) {
-  if (floor.camera) floor.camera(aim, pos);
+// soft: also give obstacles a margin, so the camera starts easing in before a pillar
+// crosses the line of sight rather than jumping when it does.
+export function clampCamera(aim, pos, soft = false) {
+  if (floor.camera) floor.camera(aim, pos, soft);
 }
 
 // A stage installs { height(x, z), clamp(pos, vel), camera(aim, pos) }; null restores the hilltop.
@@ -97,9 +99,28 @@ export function clampRect(pos, vel, x0, x1, z0, z1) {
   }
 }
 
+// Where the segment from (ax, az) along (ux, uz) first enters a circle, as a
+// fraction of the segment (null when it does not).
+function enterCircle(ax, az, ux, uz, px, pz, r) {
+  const A = ux * ux + uz * uz;
+  if (A < 1e-9) return null;
+  const ox = ax - px;
+  const oz = az - pz;
+  const B = 2 * (ox * ux + oz * uz);
+  const C = ox * ox + oz * oz - r * r;
+  if (C < 0) return null; // the subject itself is inside: nothing sensible to do
+  const disc = B * B - 4 * A * C;
+  if (disc < 0) return null;
+  const t = (-B - Math.sqrt(disc)) / (2 * A);
+  return t > 0 && t < 1 ? t : null;
+}
+
+const PILLAR_MARGIN = 1.1;
+
 // The camera may not leave a circle around (cx, cz) nor pass into round pillars:
-// slide it toward its subject until the way is clear.
-export function cameraInCircle(aim, pos, cx, cz, radius, pillars = []) {
+// slide it toward its subject until the way is clear. Soft: a pillar the line of
+// sight is about to cross already draws the camera in, more the closer it passes.
+export function cameraInCircle(aim, pos, cx, cz, radius, pillars = [], soft = false) {
   const dx = pos.x - cx;
   const dz = pos.z - cz;
   const r = Math.hypot(dx, dz);
@@ -123,18 +144,23 @@ export function cameraInCircle(aim, pos, cx, cz, radius, pillars = []) {
   for (const [px, pz, pr] of pillars) {
     const ux = pos.x - aim.x;
     const uz = pos.z - aim.z;
-    const A = ux * ux + uz * uz;
-    if (A < 1e-9) continue;
-    const ax = aim.x - px;
-    const az = aim.z - pz;
-    const B = 2 * (ax * ux + az * uz);
-    const C = ax * ax + az * az - pr * pr;
-    if (C < 0) continue; // the subject itself is inside: nothing sensible to do
-    const disc = B * B - 4 * A * C;
-    if (disc < 0) continue;
-    const t = (-B - Math.sqrt(disc)) / (2 * A);
-    if (t > 0 && t < 1) {
-      const k = Math.max(0.15, t - 0.05);
+    let k = 1;
+    const t = enterCircle(aim.x, aim.z, ux, uz, px, pz, pr);
+    if (t !== null) k = Math.max(0.15, t - 0.05);
+    if (soft) {
+      // How close the line of sight passes the pillar (0 = through its middle).
+      const A = ux * ux + uz * uz;
+      if (A > 1e-9) {
+        const s = Math.max(0, Math.min(1, ((px - aim.x) * ux + (pz - aim.z) * uz) / A));
+        const d = Math.hypot(aim.x + ux * s - px, aim.z + uz * s - pz);
+        const ts = enterCircle(aim.x, aim.z, ux, uz, px, pz, pr + PILLAR_MARGIN);
+        if (ts !== null && d < pr + PILLAR_MARGIN) {
+          const w = Math.min(1, Math.max(0, (pr + PILLAR_MARGIN - d) / PILLAR_MARGIN));
+          k = Math.min(k, 1 + (Math.max(0.15, ts) - 1) * w * w * (3 - 2 * w));
+        }
+      }
+    }
+    if (k < 1) {
       pos.x = aim.x + ux * k;
       pos.z = aim.z + uz * k;
       pos.y = aim.y + (pos.y - aim.y) * k;

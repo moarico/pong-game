@@ -50,6 +50,10 @@ export class CameraRig {
     this.lookIdle = 0;
     this.extraDist = 0;
     this.pitchBias = 0;
+    // How far out the camera may stand (1 = all the way): walls and pillars pull it
+    // in, quickly; it eases back out slowly once they are clear.
+    this.reach = 1;
+    this.want = new THREE.Vector3();
   }
 
   // Screen shake from blows and impacts (amount ~0.2 light .. 1 huge).
@@ -112,7 +116,14 @@ export class CameraRig {
     const offset = this.shoulder * Math.min(1, this.aspect) * (1 - this.combat * 0.3);
     this.aim.copy(this.target).addScaledVector(this.right, offset);
     cam.position.copy(this.aim).addScaledVector(this.look, -this.dist);
-    clampCamera(this.aim, cam.position);
+    this.want.copy(cam.position);
+    clampCamera(this.aim, cam.position, true);
+    const full = this.want.distanceTo(this.aim);
+    const reach = full > 1e-4 ? cam.position.distanceTo(this.aim) / full : 1;
+    this.reach = damp(this.reach, reach, reach < this.reach ? 16 : 2.5, dt);
+    cam.position.lerpVectors(this.aim, this.want, this.reach);
+    // Whatever the easing, never inside a wall or a pillar.
+    clampCamera(this.aim, cam.position, false);
     const minY = groundHeight(cam.position.x, cam.position.z) + 0.45;
     if (cam.position.y < minY) cam.position.y = minY;
     cam.lookAt(this.aim);

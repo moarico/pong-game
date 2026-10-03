@@ -168,6 +168,11 @@ void main() {
   }
   vec3 w = vec3(xz.x, land.x, xz.y);
   vWorld = w;
+  // Far off, sea and seabed lie closer together than the depth buffer can tell
+  // apart and the shallows would flicker: sink the drowned ground a little with
+  // distance (nobody can see the seabed there; its colour comes from vWorld).
+  float camDist = length(xz - cameraPosition.xz);
+  w.y -= smoothstep(0.0, -0.6, w.y) * camDist * 0.0014;
   vNormal = landNormal(land);
   vSunVis = land.w;
   vShadow = (uShadowMatrix * vec4(w, 1.0)).xyz;

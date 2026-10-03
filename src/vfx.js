@@ -497,6 +497,7 @@ export class Shockwaves {
       fragmentShader: ringFrag,
       ...additive,
       side: THREE.DoubleSide,
+      forceSinglePass: true, // additive: both faces in one pass
     });
     this.mesh = new THREE.Mesh(g, this.material);
     this.mesh.frustumCulled = false;
@@ -581,8 +582,15 @@ export class Bolts {
         fragmentShader: boltFrag,
         ...additive,
         side: THREE.DoubleSide,
+        forceSinglePass: true, // additive: both faces in one pass
       });
-      const mesh = new THREE.Mesh(new THREE.BufferGeometry(), mat);
+      // Attributes from the start (a strike fills them in): a shader compiled for a
+      // geometry without positions is a different shader, compiled again mid-fight.
+      const g = new THREE.BufferGeometry();
+      g.setAttribute('position', new THREE.Float32BufferAttribute(new Float32Array(9), 3));
+      g.setAttribute('aSide', new THREE.Float32BufferAttribute(new Float32Array(3), 1));
+      g.setAttribute('aW', new THREE.Float32BufferAttribute(new Float32Array(3), 1));
+      const mesh = new THREE.Mesh(g, mat);
       mesh.frustumCulled = false;
       mesh.renderOrder = 33;
       mesh.visible = false;

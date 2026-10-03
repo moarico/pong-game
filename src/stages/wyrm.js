@@ -815,25 +815,34 @@ export class Wyrm extends Boss {
     this.g.audio?.play(parryable ? 'glint' : 'warn', { pos: p });
   }
 
+  // Built with the hall, so the spikes' instanced shader compiles up front.
+  prepare() {
+    this.makeSpikePool();
+  }
+
+  makeSpikePool() {
+    if (this.spikePool) return;
+    const S = this.stage;
+    const B = new MeshBuilder(null);
+    const pts = [new THREE.Vector2(0.001, -1.6), new THREE.Vector2(0.45, -1.2), new THREE.Vector2(0.5, 0.2), new THREE.Vector2(0.38, 0.9), new THREE.Vector2(0.001, 1.7)];
+    const g = new THREE.LatheGeometry(pts, 6).toNonIndexed();
+    g.computeVertexNormals();
+    B.add(g, mat('#a9dcff', { pat: PAT.crystal, rough: 0.1, rim: 2.4 }), null, {});
+    g.dispose();
+    this.spikePool = new THREE.InstancedMesh(B.build(), this.material, 48);
+    this.spikePool.frustumCulled = false;
+    this.spikePool.count = 48;
+    this.spikes = Array.from({ length: 48 }, () => ({ on: false }));
+    _m.makeScale(0, 0, 0);
+    for (let i = 0; i < 48; i++) this.spikePool.setMatrixAt(i, _m);
+    S.group.add(this.spikePool);
+    this.spikeNext = 0;
+  }
+
   // A crystal spike bursting from the floor (hurts when `hurts`).
   eruptSpike(x, z, hurts = true) {
     const S = this.stage;
-    if (!this.spikePool) {
-      const B = new MeshBuilder(null);
-      const pts = [new THREE.Vector2(0.001, -1.6), new THREE.Vector2(0.45, -1.2), new THREE.Vector2(0.5, 0.2), new THREE.Vector2(0.38, 0.9), new THREE.Vector2(0.001, 1.7)];
-      const g = new THREE.LatheGeometry(pts, 6).toNonIndexed();
-      g.computeVertexNormals();
-      B.add(g, mat('#a9dcff', { pat: PAT.crystal, rough: 0.1, rim: 2.4 }), null, {});
-      g.dispose();
-      this.spikePool = new THREE.InstancedMesh(B.build(), this.material, 48);
-      this.spikePool.frustumCulled = false;
-      this.spikePool.count = 48;
-      this.spikes = Array.from({ length: 48 }, () => ({ on: false }));
-      _m.makeScale(0, 0, 0);
-      for (let i = 0; i < 48; i++) this.spikePool.setMatrixAt(i, _m);
-      S.group.add(this.spikePool);
-      this.spikeNext = 0;
-    }
+    if (!this.spikePool) this.makeSpikePool();
     const k = this.spikeNext;
     this.spikeNext = (k + 1) % 48;
     Object.assign(this.spikes[k], { on: true, x, z, t: 0, tilt: (Math.random() - 0.5) * 0.5, rot: Math.random() * 6, s: 0.8 + Math.random() * 0.5 });

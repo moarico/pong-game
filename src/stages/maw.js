@@ -1084,49 +1084,58 @@ export class Maw extends Boss {
     this.g.audio?.play('whoosh', { pos: from, pitch: 1.4 });
   }
 
+  // Built with the hall (hidden), so the wave's shader compiles up front.
+  prepare() {
+    this.makeWave();
+    this.wave.visible = false;
+  }
+
   // The flood wave: a curling wall of water rolling down the nave.
-  showWave() {
-    if (!this.wave) {
-      const g = new THREE.PlaneGeometry(26, 3, 40, 10);
-      const pos = g.attributes.position;
-      for (let i = 0; i < pos.count; i++) {
-        const x = pos.getX(i);
-        const v = (pos.getY(i) + 1.5) / 3; // 0 foot .. 1 crest
-        const curl = Math.sin(v * Math.PI * 0.9) * 0.9 + v * v * 0.8;
-        pos.setXYZ(i, x, v * 2.6, curl);
-      }
-      g.computeVertexNormals();
-      const m = new THREE.ShaderMaterial({
-        uniforms: { ...this.g.shared },
-        vertexShader: /* glsl */ `
-          varying vec3 vWorld; varying vec3 vN; varying vec2 vUv;
-          void main() { vUv = uv; vec4 w = modelMatrix * vec4(position, 1.0); vWorld = w.xyz; vN = normalize(mat3(modelMatrix) * normal); gl_Position = projectionMatrix * viewMatrix * w; }`,
-        fragmentShader: /* glsl */ `
-          uniform float uTime; uniform vec3 uAmbSky; uniform vec3 uSunColor;
-          varying vec3 vWorld; varying vec3 vN; varying vec2 vUv;
-          float h(vec2 p) { return fract(sin(dot(p, vec2(12.9, 78.2))) * 43758.5); }
-          void main() {
-            vec3 V = normalize(cameraPosition - vWorld);
-            float fres = pow(1.0 - abs(dot(normalize(vN), V)), 3.0);
-            float foam = smoothstep(0.7, 0.95, vUv.y + (h(floor(vUv * vec2(60.0, 8.0) + uTime * 4.0)) - 0.5) * 0.2);
-            vec3 col = mix(vec3(0.02, 0.08, 0.08), vec3(0.1, 0.35, 0.32), vUv.y) + fres * uSunColor * 0.3;
-            col = mix(col, vec3(0.8, 0.95, 0.9) * (uAmbSky * 3.0 + 0.3), foam);
-            gl_FragColor = vec4(col, 0.82 + foam * 0.15);
-          }`,
-        transparent: true,
-        side: THREE.DoubleSide,
-        depthWrite: false,
-        blending: THREE.CustomBlending,
-        blendSrc: THREE.SrcAlphaFactor,
-        blendDst: THREE.OneMinusSrcAlphaFactor,
-        blendSrcAlpha: THREE.ZeroFactor,
-        blendDstAlpha: THREE.OneFactor,
-      });
-      this.wave = new THREE.Mesh(g, m);
-      this.wave.frustumCulled = false;
-      this.wave.renderOrder = 12;
-      this.stage.group.add(this.wave);
+  makeWave() {
+    if (this.wave) return;
+    const g = new THREE.PlaneGeometry(26, 3, 40, 10);
+    const pos = g.attributes.position;
+    for (let i = 0; i < pos.count; i++) {
+      const x = pos.getX(i);
+      const v = (pos.getY(i) + 1.5) / 3; // 0 foot .. 1 crest
+      const curl = Math.sin(v * Math.PI * 0.9) * 0.9 + v * v * 0.8;
+      pos.setXYZ(i, x, v * 2.6, curl);
     }
+    g.computeVertexNormals();
+    const m = new THREE.ShaderMaterial({
+      uniforms: { ...this.g.shared },
+      vertexShader: /* glsl */ `
+        varying vec3 vWorld; varying vec3 vN; varying vec2 vUv;
+        void main() { vUv = uv; vec4 w = modelMatrix * vec4(position, 1.0); vWorld = w.xyz; vN = normalize(mat3(modelMatrix) * normal); gl_Position = projectionMatrix * viewMatrix * w; }`,
+      fragmentShader: /* glsl */ `
+        uniform float uTime; uniform vec3 uAmbSky; uniform vec3 uSunColor;
+        varying vec3 vWorld; varying vec3 vN; varying vec2 vUv;
+        float h(vec2 p) { return fract(sin(dot(p, vec2(12.9, 78.2))) * 43758.5); }
+        void main() {
+          vec3 V = normalize(cameraPosition - vWorld);
+          float fres = pow(1.0 - abs(dot(normalize(vN), V)), 3.0);
+          float foam = smoothstep(0.7, 0.95, vUv.y + (h(floor(vUv * vec2(60.0, 8.0) + uTime * 4.0)) - 0.5) * 0.2);
+          vec3 col = mix(vec3(0.02, 0.08, 0.08), vec3(0.1, 0.35, 0.32), vUv.y) + fres * uSunColor * 0.3;
+          col = mix(col, vec3(0.8, 0.95, 0.9) * (uAmbSky * 3.0 + 0.3), foam);
+          gl_FragColor = vec4(col, 0.82 + foam * 0.15);
+        }`,
+      transparent: true,
+      side: THREE.DoubleSide,
+      depthWrite: false,
+      blending: THREE.CustomBlending,
+      blendSrc: THREE.SrcAlphaFactor,
+      blendDst: THREE.OneMinusSrcAlphaFactor,
+      blendSrcAlpha: THREE.ZeroFactor,
+      blendDstAlpha: THREE.OneFactor,
+    });
+    this.wave = new THREE.Mesh(g, m);
+    this.wave.frustumCulled = false;
+    this.wave.renderOrder = 12;
+    this.stage.group.add(this.wave);
+  }
+
+  showWave() {
+    this.makeWave();
     this.wave.visible = true;
   }
 

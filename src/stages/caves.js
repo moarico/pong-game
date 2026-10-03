@@ -101,8 +101,8 @@ export class CavesStage extends Stage {
         pushOutCircle(pos, vel, PILLAR.x, PILLAR.z, PILLAR_R + 0.35);
         for (const [x, z, r] of self.solids) pushOutCircle(pos, vel, x, z, r + 0.35);
       },
-      camera(aim, pos) {
-        cameraInCircle(aim, pos, 0, 0, CAVE_R - 3, [[PILLAR.x, PILLAR.z, PILLAR_R + 0.4]]);
+      camera(aim, pos, soft) {
+        cameraInCircle(aim, pos, 0, 0, CAVE_R - 3, [[PILLAR.x, PILLAR.z, PILLAR_R + 0.4]], soft);
         pos.y = Math.min(pos.y, CAVE_H - 6);
       },
     };
@@ -252,9 +252,13 @@ export class CavesStage extends Stage {
     }
 
     // --- Crystal clusters -------------------------------------------------------------
+    // Every cluster is remembered: its glow is baked into the rock around it.
+    this.glowSources = [];
     const cluster = (x, y, z, n, size, dirUp = 1, hexes = palette, glow = 1.6) => {
       const hex = hexes[Math.floor(rnd() * hexes.length)];
-      const m = crystal(hex, glow * (0.7 + rnd() * 0.6));
+      const g = glow * (0.7 + rnd() * 0.6);
+      const m = crystal(hex, g);
+      this.glowSources.push({ x, y: y + dirUp * size * 0.35, z, hex, glow: g, size });
       for (let k = 0; k < n; k++) {
         const s = size * (0.35 + rnd() * 0.75);
         const tilt = (rnd() - 0.5) * 1.2;
@@ -414,6 +418,7 @@ export class CavesStage extends Stage {
       transparent: true,
       depthWrite: false,
       side: THREE.DoubleSide,
+      forceSinglePass: true, // additive: both faces in one pass
       blending: THREE.CustomBlending,
       blendSrc: THREE.OneFactor,
       blendDst: THREE.OneFactor,
@@ -466,6 +471,28 @@ export class CavesStage extends Stage {
     // Mist from the waterfall's foot, drops in the shaft of light.
     if (rnd() < dt * 8) fx.smoke.emit(this.fallBase.x + (rnd() - 0.5) * 2, 0.3, this.fallBase.z + (rnd() - 0.5) * 2, { vel: [(rnd() - 0.5) * 0.6, 0.5, (rnd() - 0.5) * 0.6], life: 3, size: [0.6, 2.2], color: [0.5, 0.7, 1.0, 0.18], color1: [0.4, 0.6, 0.9, 0], drag: 1, kind: PK.smoke });
     if (rnd() < dt * 3) fx.smoke.emit(HOLE.x + (rnd() - 0.5) * 3, HOLE.y - 2 - rnd() * 6, HOLE.z + (rnd() - 0.5) * 3, { vel: [0, -0.2, 0], life: 8, size: [2, 4], color: [0.6, 0.7, 0.9, 0.06], color1: [0.5, 0.6, 0.8, 0], drag: 0.2, kind: PK.smoke });
+  }
+
+  // The steady light of the cavern, baked: every crystal cluster glowing on the rock
+  // it grows from, the cold shaft of daylight from the crack in the roof, the pool,
+  // the miners' lanterns. The pillar shades the far side.
+  bakedLights() {
+    const lights = [];
+    const add = (x, y, z, color, k, range) => lights.push({ pos: [x, y, z], color: color.map((c) => c * k), range });
+    const c = new THREE.Color();
+    for (const s of this.glowSources) {
+      c.set(s.hex);
+      add(s.x, s.y, s.z, [c.r, c.g, c.b], 0.75 * s.glow * Math.min(2.2, 0.5 + s.size * 0.45), 3.2 + s.size * 2.4);
+    }
+    const day = [0.75, 0.88, 1.0];
+    for (const [f, k] of [[0.08, 1.3], [0.35, 1.0], [0.62, 0.9], [0.9, 1.1]]) {
+      add(HOLE.x + (0 - HOLE.x) * f * 0.15, HOLE.y - f * HOLE.y + 0.8, HOLE.z, day, k, 8.5);
+    }
+    add(POOL.x, 0.6, POOL.z, [0.2, 0.75, 1.1], 1.8, 9);
+    add(this.fallBase.x, 3, this.fallBase.z, [0.35, 0.7, 1.0], 0.8, 7);
+    for (const l of this.lanterns) add(l.x - 0.3, l.y, l.z, [2.3, 1.2, 0.45], 0.8, 6.5);
+    const occluders = [{ x: PILLAR.x, z: PILLAR.z, r: PILLAR_R * 0.85, y0: -1, y1: CAVE_H + 1 }];
+    return { min: [-CAVE_R - 2, -1, -CAVE_R - 2], max: [CAVE_R + 2, CAVE_H + 2, CAVE_R + 2], cell: 0.85, lights, occluders };
   }
 
   onPhase2() {

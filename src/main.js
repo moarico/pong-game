@@ -104,6 +104,12 @@ const shared = {
   uGustTex: { value: makeGustTexture() },
   // Centre (x, z) and reach of everything pressing the grass down.
   uTrailBound: { value: new THREE.Vector3(0, 0, 0) },
+  // A hall's baked light (see lightvolume.js).
+  uLvA: { value: null },
+  uLvB: { value: null },
+  uLvMin: { value: new THREE.Vector3() },
+  uLvInv: { value: new THREE.Vector3(1, 1, 1) },
+  uLvOn: { value: 0 },
 };
 // Everything the shaders need to know about the land, worked out once.
 if (hdr) bakeLand(renderer, shared);
@@ -375,12 +381,15 @@ function startStage(id) {
   }
   menu.close();
   state = 'loading';
+  // The boss bar and the hall's title own the top of the screen here.
+  hint.classList.add('gone');
   fade(() => {
     director.reset(true);
     combat.revive();
     combat.fall = null;
     hud.setFallen(false);
     const st = stages.enter(id);
+    warmStage(st);
     drs.sceneChanged();
     gpuClock.clear();
     state = 'intro';
@@ -834,6 +843,33 @@ function showHint() {
   setTimeout(check, 500);
 }
 
+// Compile every shader a hall can show, hidden things included (a boss's wave, its
+// spikes, effects that have not happened yet), so none compiles mid-fight.
+function warmStage(st) {
+  const hidden = [];
+  const reveal = (o) => {
+    if (!o.visible) {
+      hidden.push(o);
+      o.visible = true;
+    }
+  };
+  st.group.traverse(reveal);
+  stages.fxGroup.traverse(reveal);
+  for (const o of [trailP.mesh, sparks.mesh, blood.points, glints.points, puffs.points]) reveal(o);
+  const t0 = performance.now();
+  const prev = renderer.getRenderTarget();
+  try {
+    // Into the scene target, as in play (see start()).
+    renderer.setRenderTarget(post.targets.scene);
+    renderer.compile(scene, camera);
+  } catch (err) {
+    console.warn('warm', st.id, err);
+  }
+  renderer.setRenderTarget(prev);
+  for (const o of hidden) o.visible = false;
+  st.warmMs = performance.now() - t0;
+}
+
 // Live renders of each hall for the stage select, taken behind the loading veil.
 async function renderPreviews() {
   const src = renderer.domElement;
@@ -865,6 +901,7 @@ async function renderPreviews() {
       if (id !== 'hilltop') {
         const st = stages.enter(id);
         if (!st) continue;
+        warmStage(st);
         st.boss.previewPose?.();
         const pv = st.preview;
         debugCam = { pos: new THREE.Vector3(...pv.pos), target: new THREE.Vector3(...pv.look), fov: pv.fov };
@@ -891,10 +928,14 @@ async function start() {
   try {
     // Compile every program up front so the first frames do not hitch.
     rig.update(0.016, player, input);
-    // Everything that appears later (effects, foes) is compiled now, not mid-fight.
+    // Everything that appears later (effects, foes) is compiled now, not mid-fight,
+    // and for the target it will really draw into: the colour space is part of a
+    // shader's identity, so compiling for the screen would compile the wrong one.
     const later = [trailP.mesh, ...director.all.map((e) => e.char.root), ...director.all.map((e) => e.trail.mesh)];
     for (const m of later) m.visible = true;
+    renderer.setRenderTarget(post.targets.scene);
     await renderer.compileAsync(scene, camera);
+    renderer.setRenderTarget(null);
     for (const m of later) m.visible = false;
   } catch {
     // Older browsers without parallel compile simply compile on first draw.

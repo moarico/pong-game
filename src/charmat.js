@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { common, sharedUniforms, atmosphere, lights, specAA } from './glsl.js';
+import { lightVolumeGLSL } from './lightvolume.js';
 
 // ---------------------------------------------------------------------------
 // One material for a whole character. Every vertex carries its own albedo and
@@ -68,6 +69,7 @@ void main() {
 const frag = /* glsl */ `
 ${common}
 ${specAA}
+${lightVolumeGLSL}
 ${sharedUniforms}
 ${atmosphere}
 ${lights}
@@ -402,7 +404,12 @@ void main() {
   float thru = pow(sat(dot(-V, L)), 2.5) * (0.35 + 0.65 * sat(-NdL + 0.3));
   col += alb * uSunColor * thru * trans * sunVis;
   // Torches, furnaces and lures close by; lightning; an oily sheen on scales and skin.
-  if (uArena > 0.5) col += pointLights(vWorld, N, V, alb * (1.0 - metal * 0.7), rough, 0.25) * mix(1.0, 0.75, metal);
+  if (uArena > 0.5) {
+    col += pointLights(vWorld, N, V, alb * (1.0 - metal * 0.7), rough, 0.25) * mix(1.0, 0.75, metal);
+    // The hall's steady light, baked (see lightvolume.js).
+    col += alb * (1.0 - metal) * hallLight(vWorld + N * 0.2, N);
+    col += specCol * hallLight(vWorld + N * 0.2, R) * mix(F0, 1.0, pow(1.0 - NdV, 5.0) * edgeAA) * (1.0 - rough) * mix(0.3, 1.0, metal);
+  }
   col += alb * uFlashLight * vec3(0.55, 0.65, 1.0) * (0.35 + 0.65 * sat(N.y * 0.5 + 0.5));
   col += sheen * (vec3(0.03, 0.05, 0.06) * uAmbSky * 6.0) * pow(1.0 - NdV, 2.0) * edgeAA;
   col += emit;

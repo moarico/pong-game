@@ -96,6 +96,7 @@ export class SwordTrail {
       vertexShader: trailVert,
       fragmentShader: trailFrag,
       side: THREE.DoubleSide,
+      forceSinglePass: true, // additive: both faces in one pass
     });
     this.mesh = new THREE.Mesh(g, this.material);
     this.mesh.frustumCulled = false;

@@ -3,6 +3,9 @@ import { SUN_DIR, SUN_DISC, LIGHT } from './config.js';
 import { setFloor } from './ground.js';
 import { Particles, Telegraphs, Shockwaves, Bolts } from './vfx.js';
 import { Hazards, Projectiles } from './boss.js';
+import { LightVolume } from './lightvolume.js';
+
+const HILLTOP_FAR = 60000; // the far mountains stand 26 km off
 
 // ---------------------------------------------------------------------------
 // Stages: the hilltop at dusk, and four arenas each built around one boss.
@@ -138,7 +141,15 @@ export class Stage {
   ensureBuilt(scene) {
     if (this.built) return;
     this.build();
+    // The hall's steady light, baked once (a stage lists it in bakedLights()).
+    const t0 = performance.now();
+    const bl = this.bakedLights?.();
+    if (bl) this.volume = new LightVolume(bl.min, bl.max, bl.cell).bake(bl.lights, bl.occluders);
+    this.bakeMs = performance.now() - t0;
     this.boss = this.makeBoss();
+    // Anything the boss would otherwise build mid-fight is built now, so its first
+    // use costs no shader compile (a stutter on a phone).
+    this.boss.prepare?.();
     this.group.add(this.boss.root);
     this.encounter.enemies = [this.boss];
     this.encounter.all = [this.boss];
@@ -215,10 +226,16 @@ export class StageManager {
     if (this.current && this.current !== st) this.exit();
     st.ensureBuilt(this.scene);
     this.current = st;
+    // A hall is small: a near far plane keeps the depth buffer precise (no flicker
+    // where the water meets the floor or a decal lies on the stone).
+    const cam = this.g.rig.camera;
+    cam.far = st.far ?? 250;
+    cam.updateProjectionMatrix();
     st.group.visible = true;
     this.fxGroup.visible = true;
     for (const o of this.hilltop) o.visible = false;
     this.applyLighting(st.lighting);
+    LightVolume.use(this.shared, st.volume);
     setFloor(st.floor);
     this.clearEffects();
     st.place();
@@ -235,10 +252,14 @@ export class StageManager {
     st.boss.active = false;
     st.boss.alive = false;
     this.current = null;
+    const cam = this.g.rig.camera;
+    cam.far = HILLTOP_FAR;
+    cam.updateProjectionMatrix();
     this.fxGroup.visible = false;
     for (const o of this.hilltop) o.visible = true;
     this.clearEffects();
     setFloor(null);
+    LightVolume.use(this.shared, null);
     this.restoreHilltop();
   }
 

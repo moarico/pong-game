@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { common, sharedUniforms, atmosphere, shadow, lights, specAA } from './glsl.js';
 import { MeshBuilder } from './meshbuilder.js';
+import { lightVolumeGLSL } from './lightvolume.js';
 
 // ---------------------------------------------------------------------------
 // One material for the stonework, iron, brass, timber and glass of the boss
@@ -80,6 +81,7 @@ void main() {
 const frag = /* glsl */ `
 ${common}
 ${specAA}
+${lightVolumeGLSL}
 ${sharedUniforms}
 ${atmosphere}
 ${shadow}
@@ -374,6 +376,10 @@ void main() {
 
   vec3 R = reflect(-V, N);
   vec3 env = mix(uEnvGround, uEnvSky, smoothstep(-0.35, 0.45, R.y));
+  // Lightning shows in everything that shines.
+  env += uFlashLight * vec3(0.55, 0.65, 1.0) * 0.7 * smoothstep(-0.1, 0.5, R.y);
+  // Standing water mirrors the dark sky, not a bright one.
+  env *= mix(1.0, 0.45, puddle);
   vec3 dnx = dFdx(N);
   vec3 dny = dFdy(N);
   float edgeAA = 1.0 - smoothstep(0.03, 0.35, dot(dnx, dnx) + dot(dny, dny));
@@ -383,15 +389,23 @@ void main() {
   col += specCol * spec * sun;
   col += specCol * env * Fr * (1.0 - rough) * (1.0 - rough) * mix(0.35, 1.0, metal) * ao;
   col += pointLights(vWorld, N, V, alb * (1.0 - metal * 0.7), rough, 0.15) * mix(1.0, 0.8, metal);
+  // The hall's own steady light (baked): on matte stone as diffuse light, on polished
+  // metal and wet floors as a blurred reflection of it.
+  col += alb * (1.0 - metal) * hallLight(vWorld + N * 0.3, N) * mix(0.6, 1.0, ao);
+  col += specCol * hallLight(vWorld + N * 0.3, R) * Fr * (1.0 - rough) * mix(0.3, 1.0, metal);
   if (uCaustic.r + uCaustic.g + uCaustic.b > 0.0) {
     float under = 1.0 - smoothstep(uWaterY - 0.05, uWaterY + 0.05, vWorld.y);
     float above = (1.0 - smoothstep(uWaterY, uWaterY + 2.8, vWorld.y)) * (1.0 - under) * (1.0 - smoothstep(0.7, 0.95, N.y));
     float c = caustic(vWorld.xz + vWorld.y * 0.35, uTime);
-    col += uCaustic * c * (under * 1.0 + above * 0.5) * mix(0.6, 1.0, sat(N.y));
+    // They gather where strong light falls on the water and break up elsewhere.
+    float lit = dot(hallLight(vec3(vWorld.x, uWaterY + 0.6, vWorld.z), vec3(0.0, 1.0, 0.0)), vec3(0.3, 0.6, 0.1));
+    float breakup = smoothstep(0.25, 0.75, vnoise(vWorld.xz * 0.35 + uTime * 0.05));
+    col += uCaustic * c * (under * 1.0 + above * 0.5) * mix(0.6, 1.0, sat(N.y)) * (0.12 + 2.4 * lit) * mix(0.3, 1.0, breakup);
   }
   // Lightning floods the upward faces with cold light.
   col += (alb + specCol * (1.0 - rough) * 0.3) * uFlashLight * vec3(0.55, 0.65, 1.0) * (0.25 + 0.75 * sat(N.y * 0.6 + 0.4));
-  col += puddle * env * 0.35;
+  // ...and the fires, lamps and windows around it, as long bright smears.
+  col += puddle * (env * 0.08 + hallLight(vWorld + R * 2.5, -R) * Fr * 1.4);
   col += emit + alb * glow;
   col = applyFog(col, vWorld);
   gl_FragColor = vec4(col, alphaOut);

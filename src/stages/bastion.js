@@ -140,8 +140,8 @@ export class BastionStage extends Stage {
         clampCircle(pos, vel, 0, 0, FLOOR_R);
         for (const [x, z, r] of self.solids) pushOutCircle(pos, vel, x, z, r + 0.35);
       },
-      camera(aim, pos) {
-        cameraInCircle(aim, pos, 0, 0, WALL_R - 2, []);
+      camera(aim, pos, soft) {
+        cameraInCircle(aim, pos, 0, 0, WALL_R - 2, [], soft);
       },
     };
     this.intro = {
@@ -160,6 +160,22 @@ export class BastionStage extends Stage {
     this.strikeT = 4;
     this.pendingThunder = [];
     this.braziers = [];
+  }
+
+  // The steady light of the courtyard, baked: the braziers, the torches on the walls
+  // and the burnt keep's windows. (Moonlight and lightning are live.)
+  bakedLights() {
+    const lights = [];
+    const add = (x, y, z, color, k, range) => lights.push({ pos: [x, y, z], color: color.map((c) => c * k), range });
+    const fire = [2.8, 1.2, 0.35];
+    for (const b of this.braziers) add(b.x, b.y + 0.5, b.z, fire, 1.5, 10);
+    for (const t of this.torches) add(t.x, t.y, t.z, fire, 0.9, 7.5);
+    const kz = -WALL_R - 9 + 6.9;
+    for (const [x, y] of [[-4.5, 8], [0, 8], [4.5, 8], [-4.5, 14], [4.5, 14], [0, 16]]) {
+      if ((x + y) % 3 === 0) continue;
+      add(x, y, kz, fire, 0.6, 6);
+    }
+    return { min: [-WALL_R - 4, -1, -WALL_R - 11], max: [WALL_R + 4, 20, WALL_R + 4], cell: 0.9, lights, occluders: [] };
   }
 
   makeBoss() {
@@ -307,6 +323,26 @@ export class BastionStage extends Stage {
       }
       this.solids.push([x, z, 3.6]);
     });
+    // Torches in iron sconces along the inner face of the walls: pools of firelight
+    // in the rain (the storm puts a few out; these hold).
+    this.torches = [];
+    for (let k = 0; k < NT; k++) {
+      const [x0, z0] = towers[k];
+      const [x1, z1] = towers[(k + 1) % NT];
+      const spots = k === 5 ? [0.3, 0.7] : k === 1 ? [0.25] : [0.5];
+      for (const f of spots) {
+        const mx = x0 + (x1 - x0) * f;
+        const mz = z0 + (z1 - z0) * f;
+        const d = Math.hypot(mx, mz);
+        const x = mx - (mx / d) * 1.45;
+        const z = mz - (mz / d) * 1.45;
+        const a = Math.atan2(-mx, -mz);
+        B.box(0.12, 0.5, 0.35, iron, place(x - Math.sin(a) * 0.12, 3.0, z - Math.cos(a) * 0.12, 0, a, 0));
+        B.cylinder(0.05, 0.035, 0.7, wood, place(x + Math.sin(a) * 0.08, 3.35, z + Math.cos(a) * 0.08, 0.35, a, 0), 6);
+        B.cylinder(0.09, 0.07, 0.16, ember, place(x + Math.sin(a) * 0.2, 3.7, z + Math.cos(a) * 0.2), 8);
+        this.torches.push(new THREE.Vector3(x + Math.sin(a) * 0.2, 3.85, z + Math.cos(a) * 0.2));
+      }
+    }
     // The gatehouse: an arch with the portcullis half raised, a room above.
     if (this.gate) {
       const [gx, gz, ga] = this.gate;
@@ -544,6 +580,10 @@ export class BastionStage extends Stage {
       if (rnd() < dt * 26) this.fire(b.x, b.y, b.z, 0.9);
       if (rnd() < dt * 6) fx.add.emit(b.x, b.y + 0.6, b.z, { vel: [w.dir.x * 2 + (rnd() - 0.5), 1.5, w.dir.y * 2 + (rnd() - 0.5)], life: 1.6, size: [0.04, 0.02], color: [4, 1.5, 0.3, 1], color1: [1, 0.2, 0.02, 0], drag: 0.3, kind: PK.ember });
     });
+    // Torches: smaller flames leaning with the wind.
+    for (const t of this.torches) {
+      if (rnd() < dt * 12) this.fire(t.x, t.y - 0.05, t.z, 0.45);
+    }
     const P = this.g.player.pos;
     let best = [0, 1];
     const d = this.braziers.map((b) => b.distanceToSquared(P));
