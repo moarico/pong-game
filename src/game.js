@@ -444,7 +444,10 @@ export class Match {
           if (e.strength > 350) this.effects.hit(e.point, e.strength);
           if (!this.attract) {
             if (e.strength > 250) app.audio.hit(e.strength * near(e.point));
-            if (hp) app.input.rumble(hp.device, Math.min(1, e.strength / 2500), 0.4, 120);
+            if (hp) {
+              app.input.rumble(hp.device, Math.min(1, e.strength / 2500), 0.4, 120);
+              if (e.strength > 1500) hp.view.rig.addShake(Math.min(0.45, e.strength / 7000));
+            }
             this.onTouch(e.car, hp);
           }
           break;
@@ -508,6 +511,7 @@ export class Match {
     if (now === 1 - car.team && prev !== now) {
       car.stats.shots++;
       car.stats.score += 20;
+      this.app.audio.cheer(0.35);
       if (hp) this.app.hud.viewCenter(hp.viewIndex, 'SHOT ON GOAL', 1.2);
     }
   }

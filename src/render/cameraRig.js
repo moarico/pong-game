@@ -42,21 +42,27 @@ export class CameraRig {
   addShake(a) { this.shake = Math.min(1.5, this.shake + a); }
 
   update(dt, car, carPos, carQuat, ballPos, lookX = 0, lookY = 0) {
-    const k = this.first ? 1 : 1 - Math.exp(-dt * 6);
-    // camera "up": follow the surface while driving on walls
-    const upTarget = car.onGround && car.groundNormal.y > -0.2 ? car.groundNormal : WORLD_UP;
-    this.camUp.lerp(upTarget, this.first ? 1 : 1 - Math.exp(-dt * 3.5)).normalize();
+    // camera "up": roll with the car while it drives on walls (like Rocket League)
+    const onWall = car.onGround && car.groundNormal.y > -0.2;
+    const upTarget = onWall ? car.groundNormal : WORLD_UP;
+    if (this.first) this.camUp.copy(upTarget);
+    else slerpDir(this.camUp, this.camUp, upTarget, 1 - Math.exp(-dt * (onWall ? 9 : 4)));
     const up = this.camUp;
 
-    // desired horizontal direction
+    // desired view direction, measured in the plane of the target "up" so it
+    // stays well defined while the camera rolls onto a wall
     if (this.ballCam && ballPos) {
       _d.copy(ballPos).sub(carPos);
     } else {
       _d.set(0, 0, 1).applyQuaternion(carQuat);
       if (!car.onGround && car.vel.lengthSq() > 500 * 500) _d.lerp(_t.copy(car.vel).normalize(), 0.5);
     }
-    _d.addScaledVector(up, -_d.dot(up));
-    if (_d.lengthSq() < 1) _d.copy(this.dir);
+    _d.addScaledVector(upTarget, -_d.dot(upTarget));
+    if (_d.lengthSq() < 1) {
+      _d.set(0, 0, 1).applyQuaternion(carQuat);
+      _d.addScaledVector(upTarget, -_d.dot(upTarget));
+      if (_d.lengthSq() < 1e-4) _d.copy(this.dir);
+    }
     _d.normalize();
     const dot = this.dir.dot(_d);
     if (this.first) this.dir.copy(_d);
@@ -65,9 +71,11 @@ export class CameraRig {
       _t.crossVectors(up, this.dir).normalize();
       this.dir.addScaledVector(_t, 0.25).normalize();
     } else {
-      slerpDir(this.dir, this.dir, _d, this.ballCam ? 1 - Math.exp(-dt * 7.5) : 1 - Math.exp(-dt * 5.5));
+      slerpDir(this.dir, this.dir, _d, this.ballCam ? 1 - Math.exp(-dt * 7.5) : 1 - Math.exp(-dt * 6));
     }
-    this.dir.addScaledVector(up, -this.dir.dot(up)).normalize();
+    _t.copy(this.dir).addScaledVector(up, -this.dir.dot(up));
+    if (_t.lengthSq() < 1e-3) _t.copy(_d).addScaledVector(up, -_d.dot(up));
+    if (_t.lengthSq() > 1e-6) this.dir.copy(_t).normalize();
 
     // right stick looks around
     this.lookYaw += (lookX * Math.PI * 0.95 - this.lookYaw) * Math.min(1, dt * 10);

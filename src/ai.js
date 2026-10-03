@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { ARENA, BALL, CAR, GRAVITY } from './config.js';
+import { wallDist2D } from './arena.js';
 
 const DIFFICULTY = {
   rookie: { replan: 0.32, aimError: 650, boost: 0.35, dodge: false, kickoffFlip: false, jumpReach: 200, aerial: false, maxSpeed: 1900, wrongSideCare: 0.4 },
@@ -168,8 +169,7 @@ export class Bot {
       if (!ownGoalDanger && s.pos.z * as < -(HZ + R * 0.5) && Math.abs(s.pos.x) < GW + 100) ownGoalDanger = s;
       if (hit) continue;
       if (s.pos.y > reach + R) continue;
-      const aim = this.aimPoint(s.pos, ownGoalDanger || ctx.threatOwn);
-      _a.copy(aim).sub(s.pos).setY(0).normalize();
+      this.shotDir(s.pos, ownGoalDanger || ctx.threatOwn, _a);
       _t.copy(s.pos).addScaledVector(_a, -(R + 70));
       _d.copy(_t).sub(car.pos).setY(0);
       const dist = _d.length();
@@ -248,13 +248,32 @@ export class Bot {
     return _aim.set(THREE.MathUtils.clamp(ballPos.x * 0.25 + this.aimOffset, -GW + 150, GW - 150), 0, as * (HZ + 300));
   }
 
+  // Shot direction from the ball, bent toward our approach direction when the
+  // ideal line would need a long detour (or would put us behind a wall).
+  shotDir(ballPos, danger, out) {
+    const aim = this.aimPoint(ballPos, danger);
+    out.copy(aim).sub(ballPos).setY(0).normalize();
+    _l.copy(ballPos).sub(this.car.pos).setY(0);
+    if (_l.lengthSq() < 1) return out;
+    _l.normalize();
+    const ang = Math.acos(THREE.MathUtils.clamp(out.dot(_l), -1, 1));
+    const f = THREE.MathUtils.clamp((ang - 0.6) / 1.6, 0, 0.75);
+    if (f > 0) out.lerp(_l, f).normalize();
+    return out;
+  }
+
   setHitTarget(hit, danger) {
     const car = this.car;
-    const aim = this.aimPoint(hit.pos, danger);
-    _a.copy(aim).sub(hit.pos).setY(0).normalize();
+    this.shotDir(hit.pos, danger, _a);
     const dist = _t.copy(hit.pos).sub(car.pos).setY(0).length();
-    // approach from behind the ball along the shot line
-    const back = THREE.MathUtils.clamp(dist * 0.45, R + 40, 1200);
+    // approach from behind the ball along the shot line, staying off the walls
+    let back = THREE.MathUtils.clamp(dist * 0.45, R + 40, 1200);
+    while (back > R + 40) {
+      _t.copy(hit.pos).addScaledVector(_a, -back);
+      if (wallDist2D(_t.x, _t.z) < -320 && Math.abs(_t.z) < HZ - 250) break;
+      back -= 80;
+    }
+    back = Math.max(back, R + 40);
     this.target.copy(hit.pos).addScaledVector(_a, -back);
     this.target.y = 0;
     this.clampTarget();
@@ -262,6 +281,11 @@ export class Bot {
     const timeLeft = Math.max(0.05, hit.t);
     const bouncing = hit.pos.y > 180;
     this.desiredSpeed = bouncing ? THREE.MathUtils.clamp(travel / timeLeft, 300, 2300) : 2300;
+    // close to the ball but pointing the wrong way: slow down to turn tighter
+    car.forward(_f);
+    _f.setY(0).normalize();
+    const misalign = Math.acos(THREE.MathUtils.clamp(_f.dot(_a), -1, 1));
+    if (dist < 1100 && misalign > 0.6 && !danger) this.desiredSpeed = Math.min(this.desiredSpeed, 700 + (1100 - Math.min(1100, misalign * 500)));
   }
 
   setRetreatTarget(ballPos) {
@@ -337,8 +361,7 @@ export class Bot {
     let tgt = this.target;
     const ballDist = car.pos.distanceTo(ball.pos);
     if ((this.mode === 'attack' || this.mode === 'save' || this.mode === 'kickoff') && ballDist < 650 && ball.pos.y < 260) {
-      const aim = this.aimPoint(ball.pos, this.mode === 'save');
-      _a.copy(aim).sub(ball.pos).setY(0).normalize();
+      this.shotDir(ball.pos, this.mode === 'save', _a);
       _t.copy(ball.pos).addScaledVector(_a, -(R * 0.6));
       // only if we are roughly behind the ball
       _d.copy(ball.pos).sub(car.pos).setY(0).normalize();

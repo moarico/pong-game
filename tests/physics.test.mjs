@@ -147,3 +147,55 @@ test('turtle recovery', () => {
 
 for (const r of results) console.log(r.join(' | '));
 if (results.some(r => r[0] === 'FAIL')) process.exit(1);
+
+// ---- edge cases (appended)
+const edge = [];
+function edgeTest(name, fn) { try { fn(); edge.push(['ok', name]); } catch (e) { edge.push(['FAIL', name, e.message]); } }
+
+edgeTest('car driving into the goal stops at the back of the net', () => {
+  const w = new World();
+  const car = w.addCar(new Car(0));
+  car.place(0, 3000, 0, 100);
+  car.input.throttle = 1; car.input.boost = true;
+  run(w, 2.5);
+  assert.ok(car.pos.z < ARENA.halfZ + ARENA.goalDepth, 'inside goal ' + car.pos.z);
+  assert.ok(car.pos.z > ARENA.halfZ, 'reached goal ' + car.pos.z);
+  assert.ok(Number.isFinite(car.pos.x + car.pos.y + car.pos.z));
+});
+
+edgeTest('car hitting the goal post bounces off', () => {
+  const w = new World();
+  const car = w.addCar(new Car(0));
+  car.place(ARENA.goalHalfW + 10, 3500, 0, 100);
+  car.input.throttle = 1; car.input.boost = true;
+  run(w, 2);
+  assert.ok(car.pos.z < ARENA.halfZ + 30, 'stopped by the back wall/post ' + car.pos.z);
+});
+
+edgeTest('car driving up the wall onto the ceiling falls back down', () => {
+  const w = new World();
+  const car = w.addCar(new Car(0));
+  car.place(2800, 0, Math.PI / 2, 100);
+  car.input.throttle = 1; car.input.boost = true;
+  let maxY = 0;
+  run(w, 2.2, () => { maxY = Math.max(maxY, car.pos.y); });
+  car.input.boost = false; car.input.throttle = 0;
+  run(w, 5);
+  edge.push(['info', `ceiling run max height ${maxY.toFixed(0)}, final y ${car.pos.y.toFixed(0)} onGround ${car.onGround}`]);
+  assert.ok(maxY > 1500, 'climbed high');
+  assert.ok(car.pos.y < 400, 'came back down');
+});
+
+edgeTest('six cars + ball step cost', () => {
+  const w = new World();
+  for (let i = 0; i < 6; i++) { const c = w.addCar(new Car(i % 2)); c.place(-2000 + i * 800, (i % 2 ? 1 : -1) * 2000, 0, 100); c.input.throttle = 1; c.input.boost = true; c.input.steer = 0.3; }
+  w.ball.frozen = false;
+  const t0 = performance.now();
+  run(w, 10);
+  const ms = (performance.now() - t0) / (10 * 120);
+  edge.push(['info', `world step with 6 cars: ${(ms * 1000).toFixed(0)} µs`]);
+  assert.ok(ms < 1.5, 'step too slow: ' + ms + 'ms');
+});
+
+for (const r of edge) console.log(r.join(' | '));
+if (edge.some((r) => r[0] === 'FAIL')) process.exit(1);

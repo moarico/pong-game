@@ -170,10 +170,17 @@ class App {
         this.match.update(dt);
       }
     }
-    // fps
+    // fps (+ a one-time hint when the chosen graphics level is too heavy)
     this.fpsT += dt; this.fpsN++;
     if (this.fpsT > 0.5) {
-      this.hud.setFps(this.settings.showFps ? `${Math.round(this.fpsN / this.fpsT)} FPS` : '');
+      const fps = this.fpsN / this.fpsT;
+      this.hud.setFps(this.settings.showFps ? `${Math.round(fps)} FPS` : '');
+      const playing = this.match && !this.match.attract && !this.paused;
+      this.slowT = playing && fps < 32 && this.settings.quality !== 'low' ? (this.slowT || 0) + this.fpsT : 0;
+      if (this.slowT > 6 && !this.slowHinted) {
+        this.slowHinted = true;
+        this.toast('Running slowly? Lower Graphics in Settings for a smoother game');
+      }
       this.fpsT = 0; this.fpsN = 0;
     }
     this.input.endFrame();
