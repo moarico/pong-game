@@ -60,6 +60,7 @@ export class Match {
       for (let i = 0; i < cfg.teamSize; i++) {
         const h = humans[i];
         const car = this.world.addCar(new Car(team, h ? h.name : names.pop()));
+        car.handling = app.settings.handling === 'realistic' ? 'realistic' : 'easy';
         const model = new CarModel(team);
         this.group.add(model.root);
         if (app.settings.quality === 'low') model.blob = this.addBlob(1.6, 2.2);
@@ -317,8 +318,9 @@ export class Match {
         app.hud.viewStatus(p.viewIndex, p.view.rig.ballCam ? 'BALL CAM' : 'CAR CAM');
       }
       const ci = p.car.input;
-      ci.throttle = c.throttle; ci.steer = c.steer; ci.pitch = c.pitch; ci.yaw = c.yaw; ci.roll = c.roll;
+      ci.throttle = c.throttle; ci.pitch = c.pitch; ci.yaw = c.yaw; ci.roll = c.roll;
       ci.jump = c.jump; ci.boost = c.boost; ci.powerslide = c.powerslide;
+      ci.steer = this.shapeSteer(p, c, dt);
     }
 
     // ball prediction for the bots (and shot detection)
@@ -417,6 +419,22 @@ export class Match {
     this.renderFrame(dt);
   }
 
+  // Smoother ground steering for people: keys/d-pad ease into full lock instead of
+  // snapping to it, and small stick movements give finer corrections.
+  shapeSteer(p, c, dt) {
+    const raw = c.steer;
+    if (this.app.settings.handling === 'realistic') { p.steerS = raw; return raw; }
+    if (c.digitalSteer) {
+      const cur = p.steerS || 0;
+      const easing = Math.sign(raw) !== Math.sign(cur) || Math.abs(raw) < Math.abs(cur);
+      const rate = easing ? 14 : 6;
+      p.steerS = cur + Math.max(-rate * dt, Math.min(rate * dt, raw - cur));
+    } else {
+      p.steerS = Math.sign(raw) * Math.pow(Math.abs(raw), 1.5);
+    }
+    return p.steerS;
+  }
+
   goalIn(pred) {
     for (const s of pred) {
       if (Math.abs(s.pos.x) < ARENA.goalHalfW && s.pos.y < ARENA.goalH) {
@@ -472,10 +490,14 @@ export class Match {
           }
           break;
         case 'demo':
-          this.effects.explosion(e.point, e.car.team, false);
+          this.effects.demolition(e.point, e.car.team);
           e.by.stats.score += 25;
           if (!this.attract) {
             app.audio.demo();
+            for (const h of this.humans) {
+              const d = h.car.pos.distanceTo(e.point);
+              if (d < 3000 && h.view) h.view.rig.addShake(h.car === e.car || h.car === e.by ? 0.9 : 0.6 * (1 - d / 3000));
+            }
             app.hud.addFeed(`<b style="color:${TEAM_COLORS[e.by.team].css}">${e.by.name}</b> 💥 <b style="color:${TEAM_COLORS[e.car.team].css}">${e.car.name}</b>`);
             if (hp) { app.input.rumble(hp.device, 1, 1, 450); app.hud.viewCenter(hp.viewIndex, 'DEMOLISHED', 2.8); }
             const ap = this.humans.find((p) => p.car === e.by);

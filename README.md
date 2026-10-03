@@ -71,12 +71,12 @@ In single player, both keyboard layouts and any connected controller work togeth
 Moves to try:
 - **Flip:** jump, then press jump again while pushing the stick. Front flips add a big burst of speed.
 - **Wall driving:** drive into a wall at speed and the car rides up the curve.
-- **Demolition:** hit an opponent head-on while supersonic (white trail).
+- **Demolition:** ram an opponent with the front of your car while boosting (above about half speed) or while supersonic, and they explode. They respawn by their goal 3 seconds later. Two boosting cars meeting head-on both explode. Teammates are safe.
 - **Getting unstuck:** if you land on your roof, press jump to flip back onto your wheels.
 
 ## Settings
 
-Graphics quality, default camera, field of view, goal replays, rumble, volume and an FPS counter can be changed in **Settings**. The defaults are **High** on desktop and **Medium** on Xbox. Choose **Low** on slower machines. You can also force a quality level with the URL, e.g. `index.html?quality=low`.
+**Handling** (Easy or Realistic), graphics quality, default camera, field of view, goal replays, rumble, volume and an FPS counter can be changed in **Settings**. *Easy* handling, the default, grips harder, turns tighter at speed, and eases keyboard steering in smoothly. *Realistic* uses Rocket League's exact turning and grip. The defaults are **High** on desktop and **Medium** on Xbox. Choose **Low** on slower machines. You can also force a quality level with the URL, e.g. `index.html?quality=low`.
 
 ## Development
 

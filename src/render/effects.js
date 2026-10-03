@@ -265,6 +265,42 @@ export class Effects {
     this.ring(p, tc.light, big ? 26 : 8, big ? 0.9 : 0.5);
   }
 
+  // car demolition: fireball, burning debris, black smoke, flash and shockwave
+  demolition(point, team) {
+    const tc = TEAM_COLORS[team];
+    const p = _e.copy(point).multiplyScalar(S).clone();
+    p.y += 0.3;
+    const nFire = Math.round(170 * this.mult);
+    for (let i = 0; i < nFire; i++) {
+      _v.set(rand(-1, 1), rand(-0.2, 1), rand(-1, 1)).normalize().multiplyScalar(rand(2, 11));
+      const hot = Math.random() < 0.35;
+      this.glow.emit(p.x, p.y, p.z, _v.x, _v.y, _v.z, rand(0.3, 0.8), rand(0.3, 0.7), rand(0.1, 0.35),
+        hot ? [1.8, 1.3, 0.7, 0.7] : [1.6, 0.6, 0.12, 0.7], [0.8, 0.15, 0.02, 0], 2.5, -1.5);
+    }
+    // team-coloured sparks so you can tell whose car blew up
+    const nSpark = Math.round(60 * this.mult);
+    for (let i = 0; i < nSpark; i++) {
+      _v.set(rand(-1, 1), rand(0, 1.2), rand(-1, 1)).normalize().multiplyScalar(rand(6, 16));
+      this.glow.emit(p.x, p.y, p.z, _v.x, _v.y, _v.z, rand(0.4, 0.8), rand(0.08, 0.16), 0.03,
+        [tc.flame[0] * 3, tc.flame[1] * 3, tc.flame[2] * 3, 1], [tc.flameEnd[0], tc.flameEnd[1], tc.flameEnd[2], 0], 1, 9);
+    }
+    // debris chunks arcing out
+    const nDebris = Math.round(40 * this.mult);
+    for (let i = 0; i < nDebris; i++) {
+      _v.set(rand(-1, 1), rand(0.4, 1.4), rand(-1, 1)).normalize().multiplyScalar(rand(5, 13));
+      this.smoke.emit(p.x, p.y, p.z, _v.x, _v.y, _v.z, rand(0.8, 1.5), rand(0.12, 0.25), rand(0.08, 0.15),
+        [0.05, 0.05, 0.06, 1], [0.05, 0.05, 0.06, 0.8], 0.4, 14, rand(-12, 12));
+    }
+    const nSmoke = Math.round(70 * this.mult);
+    for (let i = 0; i < nSmoke; i++) {
+      _v.set(rand(-1, 1), rand(0.2, 1), rand(-1, 1)).normalize().multiplyScalar(rand(1, 5));
+      this.smoke.emit(p.x, p.y, p.z, _v.x, _v.y, _v.z, rand(1.6, 3), rand(0.8, 1.4), rand(3, 5.5),
+        [0.12, 0.1, 0.1, 0.75], [0.05, 0.05, 0.06, 0], 1.3, -0.8, rand(-1, 1));
+    }
+    this.flash(p, 0xff8a30, 3, 0.25, 2);
+    this.ring(p, 0xffb060, 10, 0.55);
+  }
+
   update(dt) {
     this.glow.update(dt);
     this.smoke.update(dt);

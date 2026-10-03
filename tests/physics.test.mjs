@@ -197,5 +197,59 @@ edgeTest('six cars + ball step cost', () => {
   assert.ok(ms < 1.5, 'step too slow: ' + ms + 'ms');
 });
 
+// ---- handling + boost demolitions
+function turnTest(handling) {
+  const w = new World();
+  const car = w.addCar(new Car(0));
+  car.handling = handling;
+  car.place(0, -3000, 0, 100);
+  car.input.throttle = 1; car.input.boost = true;
+  run(w, 1.4);
+  car.input.boost = false; car.input.steer = 1;
+  const f = new THREE.Vector3();
+  let slipMax = 0;
+  const yaw0 = Math.atan2(car.forward(f).x, f.z);
+  run(w, 0.6, () => {
+    car.forward(f);
+    const v = car.vel.clone().setY(0).normalize();
+    slipMax = Math.max(slipMax, Math.acos(Math.min(1, Math.max(-1, v.dot(f.setY(0).normalize())))));
+  });
+  car.forward(f);
+  const turned = Math.abs(Math.atan2(f.x, f.z) - yaw0);
+  return { turned, slipDeg: (slipMax * 180) / Math.PI, speed: car.vel.length() };
+}
+edgeTest('easy handling turns tighter and slides less than realistic', () => {
+  const easy = turnTest('easy'), real = turnTest('realistic');
+  edge.push(['info', `0.6s full lock at speed: easy turned ${(easy.turned * 57.3).toFixed(0)}deg slip ${easy.slipDeg.toFixed(1)}deg | realistic turned ${(real.turned * 57.3).toFixed(0)}deg slip ${real.slipDeg.toFixed(1)}deg`]);
+  assert.ok(easy.turned > real.turned * 1.15, 'easy should turn more');
+  assert.ok(easy.slipDeg < real.slipDeg, 'easy should slide less');
+});
+
+function ram({ boost, speed, sameTeam = false, headOn = false }) {
+  const w = new World();
+  const a = w.addCar(new Car(0, 'A'));
+  const b = w.addCar(new Car(sameTeam ? 0 : 1, 'B'));
+  a.place(0, -600, 0, 100);
+  b.place(0, 0, headOn ? Math.PI : Math.PI / 2, 100);
+  a.vel.set(0, 0, speed);
+  if (headOn) { b.vel.set(0, 0, -speed); b.input.boost = boost; b.input.throttle = 1; }
+  a.input.boost = boost; a.input.throttle = 1;
+  let demos = [];
+  run(w, 0.6, () => { for (const e of w.events) if (e.type === 'demo') demos.push(e.car.name); w.events.length = 0; });
+  return demos;
+}
+edgeTest('boosting into an opponent demolishes it', () => {
+  assert.deepEqual(ram({ boost: true, speed: 1500 }), ['B']);
+});
+edgeTest('no demolition without boost below supersonic', () => {
+  assert.deepEqual(ram({ boost: false, speed: 1300 }), []);
+});
+edgeTest('no demolition on teammates', () => {
+  assert.deepEqual(ram({ boost: true, speed: 1600, sameTeam: true }), []);
+});
+edgeTest('head-on boosting cars both explode', () => {
+  assert.deepEqual(ram({ boost: true, speed: 1500, headOn: true }).sort(), ['A', 'B']);
+});
+
 for (const r of edge) console.log(r.join(' | '));
 if (edge.some((r) => r[0] === 'FAIL')) process.exit(1);

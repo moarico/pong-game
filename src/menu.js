@@ -308,6 +308,7 @@ export class Menu {
     const s = this.app.settings;
     const p = this.panel('SETTINGS');
     this.option(p, 'Graphics', [{ label: 'High', value: 'high' }, { label: 'Medium', value: 'medium' }, { label: 'Low (fast)', value: 'low' }], () => s.quality, (v) => { s.quality = v; });
+    this.option(p, 'Handling', [{ label: 'Easy (recommended)', value: 'easy' }, { label: 'Realistic (Rocket League)', value: 'realistic' }], () => s.handling, (v) => { s.handling = v; });
     this.option(p, 'Default camera', [{ label: 'Ball cam', value: true }, { label: 'Car cam', value: false }], () => s.ballCam, (v) => { s.ballCam = v; });
     this.option(p, 'Field of view', [90, 95, 100, 105, 110].map((v) => ({ label: v + '°', value: v })), () => s.fov, (v) => { s.fov = v; });
     this.option(p, 'Goal replays', [{ label: 'On', value: true }, { label: 'Off', value: false }], () => s.replays, (v) => { s.replays = v; });

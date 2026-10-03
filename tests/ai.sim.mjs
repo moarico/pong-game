@@ -27,7 +27,7 @@ function kickoff() {
 }
 kickoff();
 const score = [0, 0];
-let touches = 0, pred = [];
+let touches = 0, demos = 0, pred = [];
 let t = 0, frame = 0, stuckFrames = 0;
 const n = Math.round(seconds / DT);
 for (let i = 0; i < n; i++) {
@@ -44,12 +44,12 @@ for (let i = 0; i < n; i++) {
     }
   }
   w.step(DT);
-  for (const e of w.events) if (e.type === 'ballHit') touches++;
+  for (const e of w.events) { if (e.type === 'ballHit') touches++; if (e.type === 'demo') demos++; }
   w.events.length = 0;
   const g = w.ball.goalState();
   if (g >= 0) { score[1 - g]++; kickoff(); }
   if (w.ball.vel.lengthSq() < 1 && w.ball.lastTouch) stuckFrames++;
   for (const c of cars) if (!Number.isFinite(c.pos.x)) throw new Error('NaN car');
 }
-console.log(`${diff} ${size}v${size} ${seconds}s -> score ${score.join('-')}, touches ${touches}, ball idle frames ${stuckFrames}`);
+console.log(`${diff} ${size}v${size} ${seconds}s -> score ${score.join('-')}, touches ${touches}, demos ${demos}, ball idle frames ${stuckFrames}`);
 for (const c of cars) console.log(`  ${c.name} pos ${c.pos.toArray().map((v) => v.toFixed(0)).join(',')} onGround ${c.onGround} boost ${c.boost.toFixed(0)}`);

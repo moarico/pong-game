@@ -125,6 +125,19 @@ function closestSegSeg(p1, d1, p2, d2, hl, outA, outB) {
   outB.set(bx + vx * t, by + vy * t, bz + vz * t);
 }
 
+export const DEMO_BOOST_SPEED = 1100; // min speed for a boosting car to demolish
+const _fd = new THREE.Vector3();
+
+// Can `atk` demolish `vic`? dir is the unit vector from atk toward vic.
+export function canDemolish(atk, vic, dir) {
+  if (atk.team === vic.team || atk.demolished) return false;
+  atk.forward(_fd);
+  if (_fd.dot(dir) < 0.5) return false; // must hit with the front of the car
+  const closing = atk.vel.dot(dir) - vic.vel.dot(dir);
+  if (atk.supersonic) return closing > 300;
+  return atk.boosting && atk.vel.length() > DEMO_BOOST_SPEED && closing > 700;
+}
+
 export function collideCars(a, b, time, events, bumpTimes) {
   if (a.demolished || b.demolished) return;
   a.hitboxCenter(_ca);
@@ -144,21 +157,30 @@ export function collideCars(a, b, time, events, bumpTimes) {
   const vrel = _t.copy(b.vel).sub(a.vel).dot(_n);
   if (vrel >= 0) return;
 
+  // demolitions: ramming an opponent nose-first while boosting (or supersonic) blows it up;
+  // two boosting cars meeting head-on both explode
+  _dir.copy(_n).negate();
+  const aDemo = canDemolish(a, b, _n);
+  const bDemo = canDemolish(b, a, _dir);
+  if (aDemo || bDemo) {
+    for (const [atk, vic] of [[a, b], [b, a]]) {
+      if (atk === a ? !aDemo : !bDemo) continue;
+      const point = vic.pos.clone();
+      vic.demolish();
+      atk.stats.demos++;
+      if (events) events.push({ type: 'demo', car: vic, by: atk, point });
+    }
+    return;
+  }
+
   const key = a.id < b.id ? a.id * 1000 + b.id : b.id * 1000 + a.id;
   const last = bumpTimes.get(key) ?? -10;
   const sa = a.vel.dot(_n), sb = -b.vel.dot(_n);
   const attacker = sa >= sb ? a : b;
   const victim = attacker === a ? b : a;
-  const nn = attacker === a ? _n : _dir.copy(_n).negate();
+  const nn = attacker === a ? _n : _dir;
   attacker.forward(_f);
   const frontHit = _f.dot(nn) > 0.55;
-
-  if (frontHit && attacker.supersonic && attacker.team !== victim.team) {
-    victim.demolish();
-    attacker.stats.demos++;
-    if (events) events.push({ type: 'demo', car: victim, by: attacker, point: victim.pos.clone() });
-    return;
-  }
 
   // equal-mass impulse with a little bounce
   const j = (-(1 + 0.3) * vrel) / 2;

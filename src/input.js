@@ -186,6 +186,7 @@ export class Input {
       lookX: 0,
       lookY: 0,
       skip: this.anyKeyPressed(L.jump) || mPressed('jump'),
+      digitalSteer: true,
     };
   }
 
@@ -208,6 +209,7 @@ export class Input {
       lookX: st.rx,
       lookY: st.ry,
       skip: st.pressed('a'),
+      digitalSteer: Math.abs(st.lx) < 0.01 && Math.abs(dpadX) > 0, // d-pad steering is on/off like keys
     };
   }
 
@@ -224,8 +226,12 @@ export class Input {
     for (const st of this.connectedPads()) {
       const c = this.padControls(st);
       for (const k in c) {
+        if (k === 'digitalSteer') continue;
         if (typeof c[k] === 'boolean') out[k] = out[k] || c[k];
-        else if (Math.abs(c[k]) > Math.abs(out[k])) out[k] = c[k];
+        else if (Math.abs(c[k]) > Math.abs(out[k])) {
+          out[k] = c[k];
+          if (k === 'steer') out.digitalSteer = c.digitalSteer;
+        }
       }
     }
     return out;

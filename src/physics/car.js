@@ -82,6 +82,7 @@ export class Car {
     this.prevPos = new THREE.Vector3();
     this.prevQuat = new THREE.Quaternion();
     this.input = emptyInput();
+    this.handling = 'easy'; // 'easy' (arcade grip, default) or 'realistic' (Rocket League values)
     this.prevJump = false;
     this.boost = BOOST_START;
     this.onGround = false;
@@ -309,18 +310,24 @@ export class Car {
     this.boosting = boosting;
 
     // steering: yaw about the surface normal
+    const easy = this.handling !== 'realistic';
     const vf2 = this.vel.dot(_fwd);
-    let targetYaw = -inp.steer * curvature(vf2) * vf2;
+    let curv = curvature(vf2);
+    // easy handling: tighter turning at speed so high-speed corrections don't feel sluggish
+    if (easy) curv *= 1 + 0.55 * Math.min(1, Math.max(0, (Math.abs(vf2) - 400) / 1600));
+    let targetYaw = -inp.steer * curv * vf2;
     if (inp.powerslide) targetYaw *= 1.35;
-    this.yawRate += (targetYaw - this.yawRate) * (1 - Math.exp(-dt * 18));
+    this.yawRate += (targetYaw - this.yawRate) * (1 - Math.exp(-dt * (easy ? 26 : 18)));
     if (Math.abs(this.yawRate) > 1e-5) {
       _q.setFromAxisAngle(n, this.yawRate * dt);
       this.quat.premultiply(_q).normalize();
+      // easy handling: the tyres carry the velocity round with the car, so it goes where it points
+      if (easy && !inp.powerslide) this.vel.applyQuaternion(_q2.identity().slerp(_q, 0.85));
     }
 
     // lateral tire friction (weaker on walls, much weaker while power sliding)
     const grip = Math.min(1, Math.max(0.3, (GRAVITY * Math.max(0, n.y) + CAR.stickyAccel) / (GRAVITY + CAR.stickyAccel)));
-    const k = (inp.powerslide ? 2.2 : 14) * grip;
+    const k = (inp.powerslide ? 2.2 : easy ? 30 : 14) * grip;
     this.forward(_fwd);
     _fwd.addScaledVector(n, -_fwd.dot(n)).normalize();
     _right.crossVectors(_fwd, n).normalize();
