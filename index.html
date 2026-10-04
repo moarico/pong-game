@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Stormdrop</title>
+  <meta name="description" content="Stormdrop: a browser battle royale with building, looting, bots and a shrinking storm." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700;800&family=Luckiest+Guy&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="css/style.css" />
+  <script type="importmap">
+    { "imports": { "three": "./vendor/three.module.min.js" } }
+  </script>
+</head>
+<body>
+  <canvas id="game"></canvas>
+  <div id="hud" class="hidden"></div>
+  <div id="bigmap" class="hidden"><canvas></canvas><div class="maphint">Tab / M / View to close</div></div>
+  <div id="inventory" class="hidden"></div>
+
+  <div id="screen-title" class="screen"></div>
+  <div id="screen-lobby" class="screen transparent"></div>
+  <div id="screen-locker" class="screen transparent"></div>
+  <div id="screen-settings" class="screen dim"></div>
+  <div id="screen-controls" class="screen dim"></div>
+  <div id="screen-loading" class="screen"></div>
+  <div id="screen-pause" class="screen dim"></div>
+  <div id="screen-end" class="screen dim"></div>
+
+  <noscript>Stormdrop needs JavaScript and WebGL to run.</noscript>
+  <script type="module" src="js/main.js"></script>
+</body>
+</html>

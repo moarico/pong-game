@@ -1,0 +1,11 @@
+{
+  "name": "stormdrop",
+  "version": "1.0.0",
+  "description": "A browser battle royale: drop from the Sky Coach, loot, build and outlast the storm.",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "node server.mjs"
+  },
+  "license": "MIT"
+}
