@@ -298,7 +298,7 @@ export class BuildSystem {
     this.makeColliders(piece);
     this.pieces.set(piece.key, piece);
     this.indexPiece(piece, true);
-    this.game.audio.play('build', new THREE.Vector3((piece.box[0] + piece.box[3]) / 2, piece.box[1], (piece.box[2] + piece.box[5]) / 2));
+    this.game.audio.play('build_' + piece.mat, new THREE.Vector3((piece.box[0] + piece.box[3]) / 2, piece.box[1], (piece.box[2] + piece.box[5]) / 2));
     return piece;
   }
 

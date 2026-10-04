@@ -1,7 +1,7 @@
 import { OUTFITS } from './character.js';
 import { RARITY, TIPS, GAME_TITLE, WEAPONS, HEALS, AMMO_NAMES } from './config.js';
 import { paintArt } from './art.js';
-import { iconFor, itemName } from './items.js';
+import { iconFor, iconUrl, itemName } from './items.js';
 import { PAD } from './input.js';
 import { fmtTime } from './util.js';
 
@@ -117,7 +117,8 @@ export class Menus {
         <tr><td>In build mode</td><td>Left mouse place &middot; G or right mouse edit &middot; T material</td><td>RT place &middot; LT edit &middot; X/B/Y/A wall/floor/ramp/roof &middot; D-pad right material</td></tr>
         <tr><td>Inventory</td><td>I</td><td>D-pad up</td></tr>
         <tr><td>Emote</td><td>B</td><td>D-pad left</td></tr>
-        <tr><td>Switch shoulder</td><td>X</td><td>Right stick click</td></tr>
+        <tr><td>First / third person</td><td>Z</td><td>Settings menu</td></tr>
+        <tr><td>Switch shoulder (third person)</td><td>X</td><td>Right stick click</td></tr>
         <tr><td>Map</td><td>Tab or M</td><td>Select (View)</td></tr>
         <tr><td>Menu</td><td>Esc</td><td>Start (Menu)</td></tr>
       </table></div>`;
@@ -159,6 +160,7 @@ export class Menus {
         <label>Mouse sensitivity <input type="range" min="0.2" max="3" step="0.05" data-k="mouseSens" data-nav><output></output></label>
         <label>Controller look speed <input type="range" min="0.3" max="3" step="0.05" data-k="padSens" data-nav><output></output></label>
         <label>Invert look Y <input type="checkbox" data-k="invertY" data-nav></label>
+        <label>Camera <select data-k="view" data-nav><option value="first">First person</option><option value="third">Third person</option></select></label>
         <label>Field of view <input type="range" min="65" max="100" step="1" data-k="fov" data-nav><output></output></label>
         <label>Volume <input type="range" min="0" max="1" step="0.05" data-k="volume" data-nav><output></output></label>
         <label>Graphics quality <select data-k="quality" data-nav><option value="low">Low</option><option value="medium">Medium</option><option value="high">High</option></select></label>
@@ -336,7 +338,7 @@ export class Menus {
         detail = d.hp ? `+${d.hp} HP (max ${d.cap}) &middot; ${d.time}s` : `+${d.shield} shield (max ${d.cap}) &middot; ${d.time}s`;
       }
       return `<button class="islot ${i === this.invSel ? 'sel' : ''}" data-nav data-i="${i}" style="--rar:${r}">
-        <div class="sicon">${s ? iconFor(s) : ''}</div><div class="iname">${s ? itemName(s) : 'Empty'}</div><div class="idet">${detail}</div></button>`;
+        <div class="sicon">${iconUrl(s) ? `<img src="${iconUrl(s)}" alt="">` : s ? iconFor(s) : ''}</div><div class="iname">${s ? itemName(s) : 'Empty'}</div><div class="idet">${detail}</div></button>`;
     }).join('');
     const ammo = Object.entries(a.ammo).map(([k, v]) => `<div><b>${v}</b><span>${AMMO_NAMES[k]}</span></div>`).join('');
     const mats = Object.entries(a.mats).map(([k, v]) => `<div class="m ${k}"><b>${v}</b><span>${k}</span></div>`).join('');

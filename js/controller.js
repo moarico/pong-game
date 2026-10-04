@@ -6,6 +6,10 @@ import { PIECES } from './building.js';
 
 const _f = new THREE.Vector3(), _r = new THREE.Vector3(), _p = new THREE.Vector3(), _e = new THREE.Vector3(), _q = new THREE.Vector3();
 const PIECE_KEYS = { KeyQ: 'wall', KeyF: 'floor', KeyC: 'ramp', KeyV: 'roof' };
+const DEG = Math.PI / 180;
+const damp = (a, b, rate, dt) => b + (a - b) * Math.exp(-rate * dt);
+const smooth = (t) => (t <= 0 ? 0 : t >= 1 ? 1 : t * t * (3 - 2 * t));
+const rand = (a, b) => a + (b - a) * Math.random();
 
 // Turns keyboard/mouse/gamepad input into the human actor's intent and drives the camera.
 export class PlayerController {
@@ -20,6 +24,36 @@ export class PlayerController {
     this.busYaw = 0;
     this.busPitch = -0.25;
     this.shake = 0;
+    // first-person feel (Zero Hour): view punch and kick springs, eye height, strafe roll
+    this.firstPerson = game.settings.view !== 'third';
+    this.punchP = 0;
+    this.punchV = 0;
+    this.punchY = 0;
+    this.punchVY = 0;
+    this.camY = null;
+    this.roll = 0;
+    this.lookDX = 0;
+    this.lookDY = 0;
+    this.fpActive = false;
+  }
+
+  // Is the camera in the player's head right now? (airborne, bus, vehicle and emotes use the chase camera)
+  get inHead() {
+    const a = this.game.player;
+    return this.firstPerson && a && a.alive && (a.mode === 'ground' || a.mode === 'swim') && !a.emote;
+  }
+
+  // Recoil: the muzzle climbs and the view kicks, then springs settle it.
+  onFire(def) {
+    const a = this.game.player;
+    const rec = def.rec || [1, 0.3];
+    const r = rec[0] * DEG, k = 1 - 0.35 * a.adsT;
+    a.pitch += r * 0.5 * k;
+    a.yaw += rand(-1, 1) * rec[1] * DEG * 0.6 * k;
+    this.punchV += r * 9 * k;
+    this.punchVY += rand(-1, 1) * rec[1] * DEG * 5;
+    const big = def.kind === 'projectile' || def.pellets;
+    this.shake += def.splash ? 0.5 : big ? 0.18 : 0.03;
   }
 
   reset() {
@@ -27,6 +61,15 @@ export class PlayerController {
     this.padSprint = false;
     this.scoped = false;
     this.camDist = CAMERA.back;
+    this.punchP = this.punchV = this.punchY = this.punchVY = 0;
+    this.camY = null;
+  }
+
+  setFirstPerson(on) {
+    this.firstPerson = on;
+    this.game.settings.view = on ? 'first' : 'third';
+    this.game.saveSettings();
+    this.game.hud.toast(on ? 'First-person view' : 'Third-person view');
   }
 
   update(dt) {
@@ -44,6 +87,8 @@ export class PlayerController {
       dyaw -= Math.sign(rx) * rx * rx * ps;
       dpitch -= Math.sign(ry) * ry * ry * ps * 0.75 * (S.invertY ? -1 : 1);
     }
+    this.lookDX = -dyaw;
+    this.lookDY = -dpitch;
     if (a.mode === 'bus') {
       this.busYaw += dyaw;
       this.busPitch = clamp(this.busPitch + dpitch, -1.2, 0.4);
@@ -62,7 +107,8 @@ export class PlayerController {
       g.pause();
       return;
     }
-    if (kp('KeyX') || pp(PAD.RS)) {
+    if (kp('KeyZ')) this.setFirstPerson(!this.firstPerson);
+    if (kp('KeyX') || (pp(PAD.RS) && !this.firstPerson)) {
       this.shoulder *= -1;
       S.shoulder = this.shoulder;
     }
@@ -128,6 +174,12 @@ export class PlayerController {
     const a = this.game.player, cam = this.game.camera;
     cam.getWorldDirection(_f);
     a.eye(_e);
+    if (this.fpActive) {
+      // shots follow where you aim, not the punch and shake of the view
+      a.aimOrigin.copy(_e);
+      a.aimDir.set(-Math.sin(a.yaw) * Math.cos(a.pitch), Math.sin(a.pitch), -Math.cos(a.yaw) * Math.cos(a.pitch));
+      return;
+    }
     if (this.scoped) {
       a.aimOrigin.copy(_e);
     } else {
@@ -143,6 +195,17 @@ export class PlayerController {
     let targetFov = S.fov;
     this.scoped = false;
     a.model.root.visible = a.alive && a.mode !== 'bus';
+    // view springs
+    this.punchV += (-this.punchP * 190 - this.punchV * 24) * dt;
+    this.punchP += this.punchV * dt;
+    this.punchVY += (-this.punchY * 190 - this.punchVY * 24) * dt;
+    this.punchY += this.punchVY * dt;
+    this.fpActive = this.inHead;
+    if (this.fpActive) {
+      this.updateFirstPerson(dt);
+      return;
+    }
+    this.camY = null;
     if (a.mode === 'bus') {
       const c = g.bus.pos;
       const yaw = this.busYaw, pitch = this.busPitch;
@@ -191,7 +254,7 @@ export class PlayerController {
         if (cam.position.y < gy + 0.3) cam.position.y = gy + 0.3;
         if (this.camDist < 0.9) a.model.root.visible = false;
       }
-      cam.rotation.set(pitch, yaw, 0, 'YXZ');
+      cam.rotation.set(pitch + this.punchP, yaw + this.punchY, 0, 'YXZ');
     }
     if (this.shake > 0) {
       this.shake = Math.max(0, this.shake - dt * 2);
@@ -202,6 +265,52 @@ export class PlayerController {
     if (Math.abs(cam.fov - this.fov) > 0.01) {
       cam.fov = this.fov;
       cam.updateProjectionMatrix();
+    }
+  }
+
+  // Zero Hour's first-person camera: eye height eases over steps and crouches, the head bobs with the
+  // stride, landings dip the view, strafing rolls it a hair, and aiming zooms by a fixed factor.
+  updateFirstPerson(dt) {
+    const g = this.game, a = g.player, cam = g.camera, S = g.settings;
+    a.model.root.visible = false;
+    const held = a.held;
+    const def = held && held.kind === 'weapon' ? WEAPONS[held.type] : null;
+    const ty = a.pos.y + a.eyeHeight;
+    if (this.camY === null) this.camY = ty;
+    const d = ty - this.camY;
+    if (Math.abs(d) > 1.2 || !a.onGround || d < 0) this.camY = d < 0 && a.onGround && d > -0.7 ? damp(this.camY, ty, 30, dt) : ty;
+    else this.camY = damp(this.camY, ty, 15, dt);
+    const hs = Math.hypot(a.vel.x, a.vel.z), mv = a.onGround ? Math.min(1, hs / 5) : 0, ads = a.adsT;
+    const bt = a.model.stride * 2.2, by = Math.abs(Math.sin(bt)) * 0.045 * mv * (1 - ads * 0.85), bx = Math.cos(bt) * 0.025 * mv * (1 - ads * 0.85);
+    this.shake = Math.max(0, this.shake - dt * 2.2);
+    const sh = this.shake * this.shake * 0.06, lk = a.landKick || 0;
+    const cy = Math.cos(a.yaw), sy = Math.sin(a.yaw);
+    cam.position.set(a.pos.x + cy * bx, this.camY + by - lk * 0.12, a.pos.z - sy * bx);
+    const strafe = (a.vel.x * cy - a.vel.z * sy) / 6;
+    this.roll = damp(this.roll, -clamp(strafe, -1, 1) * 0.012 * (1 - ads * 0.6), 7, dt);
+    cam.rotation.set(a.pitch + this.punchP + rand(-sh, sh), a.yaw + this.punchY + rand(-sh, sh), Math.cos(bt) * 0.004 * mv + this.roll, 'YXZ');
+    // zoom: one fixed factor for sights, a stronger one for scopes
+    const zoom = def ? (def.scope ? CAMERA.scopeZoom : CAMERA.adsZoom) : 1;
+    const af = lerp(1, zoom, smooth(ads));
+    const vt = (Math.tan((S.fov * DEG) / 2) / af) * (1 + 0.07 * (a.sprinting ? 1 : 0));
+    const f = (2 * Math.atan(vt)) / DEG;
+    this.scoped = !!(def && def.scope && ads > 0.88);
+    this.fov = damp(this.fov, f, 14, dt);
+    if (Math.abs(cam.fov - this.fov) > 0.01) {
+      cam.fov = this.fov;
+      cam.updateProjectionMatrix();
+    }
+    // the gun is drawn by its own camera: keep its field of view tied to the world's
+    const vm = g.viewmodel;
+    if (vm) {
+      const vf = clamp(this.fov * 0.66, 40, 68);
+      if (Math.abs(vm.cam.fov - vf) > 0.01 || vm.cam.aspect !== cam.aspect) {
+        vm.cam.fov = vf;
+        vm.cam.aspect = cam.aspect;
+        vm.cam.updateProjectionMatrix();
+      }
+      vm.lookDX = this.lookDX;
+      vm.lookDY = this.lookDY;
     }
   }
 }

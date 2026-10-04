@@ -33,7 +33,8 @@ Open the page, click **Press to start**, then **Play**. Click the game once if t
 | In build mode | Left mouse place, G or right mouse edit, T material | RT place, LT edit, X/B/Y/A wall/floor/ramp/roof, D-pad right material |
 | Inventory | I | D-pad up |
 | Emote | B | D-pad left |
-| Switch shoulder | X | Right stick click |
+| First / third person | Z (or Settings > Camera) | Settings > Camera |
+| Switch shoulder (third person) | X | Right stick click |
 | Map | Tab or M | Select (View) |
 | Menu | Esc | Start (Menu) |
 
@@ -55,7 +56,9 @@ Open the page, click **Press to start**, then **Play**. Click the game once if t
 **Health and healing.** You have 100 health and 100 shield, and shield takes damage first. Bandages heal +15 HP up to 75. A med kit heals to 100. Mini shields give +25 up to 50, and the Shield Jug gives +50 up to 100. Using an item is interrupted by damage or sprinting.
 
 **Weapons.**
-- Assault rifle, pump shotgun, SMG, pistol, bolt sniper and rocket launcher, with the damage, fire rate, magazine and reload values from the design table.
+- KR-4 Carbine (assault rifle), Mastiff 12 (pump shotgun), Vespa-9 (SMG), X9 Sidearm (pistol), Kodiak .338 (bolt sniper), RPG-9 (rocket launcher) and the Brute M6 LMG, with the damage, fire rate, magazine and reload values from the design table.
+- The gun models, hands, first-person feel and sounds come from Zero Hour: guns are built in parts, so mags drop out and slap back in, pumps rack, bolts cycle, pistol slides lock back, and brass flies out of the port. Recoil climbs the muzzle and kicks the view, and springs settle everything.
+- The pump loads one shell at a time and can fire between shells.
 - Rarity adds 5% damage per tier, and headshots do 1.5x-2x.
 - Spread grows while moving and shrinks while aiming.
 - Rifles are hitscan. The sniper fires a projectile with bullet drop, and rockets do splash and heavy structure damage.
@@ -68,7 +71,9 @@ Open the page, click **Press to start**, then **Play**. Click the game once if t
 - A supply drop falls every 2-3 minutes under a balloon, marked by a red flare.
 - Eliminated players drop everything they carried.
 
-**Camera.** Over the shoulder, 0.7 m right, 0.4 m up and 3 m back. FOV is 80, or 52 when aiming. You can switch shoulders. The sniper scope is first person with a zoom overlay.
+**Camera.** First person by default, with Zero Hour's feel: the eye height eases over steps and crouches, the head bobs with your stride, landings dip the view, strafing rolls it slightly, and the gun lags behind your aim. Aiming zooms by a fixed 1.95x through the gun's own sights (4.2x for the scope). Skydiving, gliding, the bus, vehicles and emotes switch to the chase camera. Third person (Z) is over the shoulder: 0.7 m right, 0.4 m up and 3 m back, with switchable shoulders.
+
+**Sound.** Zero Hour's synthesized sound engine. Each gunshot layers a supersonic crack, muzzle blast, chest thump, the action cycling, wall reflections and a rolling tail, with several variants per gun and a separate distant version. Sounds are positioned in 3D (HRTF), arrive late from far away, and your own shots briefly duck the world. Reloads, pumps and bolts make their sounds in time with the hands. Footsteps change with the surface (grass, stone, wood, metal, sand, water), and bullet impacts, ricochets, near-miss whizzes, brass and explosion debris all have their own sounds. The island has wind, waves, birds, the storm's roar and rushing air while you fall.
 
 **HUD.**
 - Health and shield bars bottom left; hotbar, ammo and materials bottom right.
@@ -88,7 +93,9 @@ Open the page, click **Press to start**, then **Play**. Click the game once if t
 
 **Menus.** Title screen with logo and art. Lobby with Play, Locker, Settings and Controls. The loading screen shows a progress bar, a random tip and key art. You pick your jump from the bus, and the end screen shows your placement (#1 is the victory screen), eliminations, damage and time survived, with Play Again.
 
-**Skins.** Ten original outfits made from six parts each: head, torso, arms, legs, backpack and glider. The locker shows rarity borders, a rotating preview and a glider preview.
+**Characters.** Players are Zero Hour's soldiers: printed camo fabric over rounded body parts, a plate carrier with pouches and a radio, knee pads, boots, and headgear (helmet, cap, beanie, balaclava or shemagh). Faces, beards, glasses and skin tones vary per player.
+
+**Skins.** Ten original outfits, each with its own camo print, gear colors, headgear, backpack and glider. The locker shows rarity borders, a rotating preview and a glider preview.
 
 ## Code map
 
@@ -108,6 +115,6 @@ Open the page, click **Press to start**, then **Play**. Click the game once if t
 | `js/bots.js` | Bot AI |
 | `js/controller.js`, `js/input.js` | Keyboard/mouse/gamepad input and the camera |
 | `js/hud.js`, `js/menus.js`, `js/lobby.js`, `js/art.js` | HUD, menus, locker stage, generated key art |
-| `js/audio.js` | Synthesized WebAudio sound effects |
+| `js/zh/` | Ported from Zero Hour: part models (`parts.js`), guns (`guns.js`), soldiers (`soldier.js`), first-person hands and feel (`viewmodel.js`), synthesized sound (`sound.js`), sprite textures, icons and the sky environment map |
 
 Three.js r186 is vendored in `vendor/` (MIT, see `vendor/THREE-LICENSE.txt`).

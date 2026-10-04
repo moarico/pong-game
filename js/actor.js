@@ -4,7 +4,9 @@ import { CharacterModel } from './character.js';
 import { clamp } from './util.js';
 
 const SWIM_DEPTH = -1.25;
-const AUTO_WEAPONS = new Set(['ar', 'smg', 'pistol']);
+const AUTO_WEAPONS = new Set(['ar', 'smg', 'pistol', 'lmg']);
+const SWITCH_TIME = 0.32;
+const damp = (a, b, rate, dt) => b + (a - b) * Math.exp(-rate * dt);
 let nextId = 1;
 
 // One combatant: the human player and every bot use this class. Controllers fill `intent`.
@@ -56,7 +58,13 @@ export class Actor {
     this.aimOrigin = new THREE.Vector3();
     this.aimDir = new THREE.Vector3(0, 0, -1);
     this.body = { pos: this.pos, radius: PLAYER.radius, height: PLAYER.height, step: PLAYER.stepHeight };
-    this.model = new CharacterModel(outfit);
+    this.lastShotT = -9;
+    this.switchT = 0;
+    this.adsT = 0;
+    this.landKick = 0;
+    this.stepPh = 0;
+    this.reloadShell = false;
+    this.model = new CharacterModel(outfit, isBot ? name : null);
     this.model.root.visible = false;
     game.scene.add(this.model.root);
   }
@@ -111,11 +119,17 @@ export class Actor {
   selectSlot(i) {
     if (i === this.sel && !this.buildMode) return;
     this.buildMode = false;
+    const changed = i !== this.sel;
     this.sel = i;
     this.cancelReload();
     this.cancelHeal();
     this.fireCd = Math.max(this.fireCd, 0.25);
     this.emote = false;
+    if (changed) {
+      this.switchT = SWITCH_TIME;
+      this.adsT = 0;
+      if (!this.isBot) this.game.audio.snd('swap', { vol: 0.5 });
+    }
   }
 
   cycleSlot(d) {
@@ -238,10 +252,12 @@ export class Actor {
     const def = WEAPONS[item.type];
     if (item.ammo >= def.mag || this.ammo[def.ammo] <= 0) return;
     this.reloadItem = item;
-    this.reloadTotal = def.reload * (1 - 0.03 * item.rarity);
+    // Pump shotguns load one shell at a time and can fire between shells.
+    this.reloadShell = !!def.pellets;
+    this.reloadTotal = (this.reloadShell ? def.reload / def.mag : def.reload) * (1 - 0.03 * item.rarity);
     this.reloadT = this.reloadTotal;
     this.cancelHeal();
-    if (!this.isBot) this.game.audio.play('reload', this.pos);
+    if (this.isBot && this.game.isNearPlayer(this.pos, 30)) this.game.audio.play('reload', this.pos);
   }
 
   cancelReload() {
@@ -255,6 +271,16 @@ export class Actor {
     this.reloadT = 0;
     if (!item) return;
     const def = WEAPONS[item.type];
+    if (this.reloadShell) {
+      if (this.ammo[def.ammo] <= 0) return;
+      item.ammo++;
+      this.ammo[def.ammo]--;
+      if (item.ammo < def.mag && this.ammo[def.ammo] > 0) {
+        this.reloadItem = item;
+        this.reloadT = this.reloadTotal;
+      } else if (!this.isBot) this.game.audio.snd('pump', { vol: 0.7 });
+      return;
+    }
     const take = Math.min(def.mag - item.ammo, this.ammo[def.ammo]);
     item.ammo += take;
     this.ammo[def.ammo] -= take;
@@ -262,7 +288,9 @@ export class Actor {
 
   tryFire(item) {
     const def = WEAPONS[item.type];
-    if (this.fireCd > 0 || this.reloadT > 0) return;
+    // a shell reload can be cut short to fire what is already loaded
+    if (this.reloadT > 0 && this.reloadShell && item.ammo > 0 && this.intent.firePressed) this.cancelReload();
+    if (this.fireCd > 0 || this.reloadT > 0 || this.switchT > 0) return;
     if (!AUTO_WEAPONS.has(item.type) && !this.intent.firePressed) return;
     if (item.ammo <= 0) {
       if (this.ammo[def.ammo] > 0) this.startReload();
@@ -271,9 +299,11 @@ export class Actor {
     }
     item.ammo--;
     this.fireCd = 1 / def.rate;
+    this.lastShotT = this.game.time;
     this.game.combat.fire(this, item);
     this.bloom = Math.min(def.bloomMax, this.bloom + def.bloom);
-    this.model.recoil = 1;
+    this.model.fired();
+    if (!this.isBot) this.game.onPlayerFire(def);
     this.emote = false;
     if (item.ammo <= 0 && this.ammo[def.ammo] > 0) this.reloadPending = 0.25;
   }
@@ -295,6 +325,7 @@ export class Actor {
     }
     this.heal = { item, t: 0, total: HEALS[item.type].time };
     this.sprinting = false;
+    if (!this.isBot) this.game.audio.snd(HEALS[item.type].hp ? 'pouch' : 'shield_drink', { vol: 0.6 });
     return true;
   }
 
@@ -333,6 +364,7 @@ export class Actor {
     dealt += h;
     this.cancelHeal();
     this.emote = false;
+    this.model.flinch = 1;
     if (attacker && attacker !== this) {
       this.lastHitBy = attacker;
       this.lastHitTime = this.game.time;
@@ -350,6 +382,8 @@ export class Actor {
   update(dt) {
     if (!this.alive) return;
     this.fireCd = Math.max(0, this.fireCd - dt);
+    this.switchT = Math.max(0, this.switchT - dt);
+    this.landKick = Math.max(0, this.landKick - dt * 4);
     this.swingCd = Math.max(0, this.swingCd - dt);
     this.buildCd = Math.max(0, this.buildCd - dt);
     const def = this.weaponDef();
@@ -359,6 +393,7 @@ export class Actor {
       return;
     }
     this.updateMovement(dt);
+    if (this.mode !== 'ground') this.adsT = 0;
     if (this.mode === 'ground') this.updateActions(dt);
     else if (this.mode === 'swim') {
       this.cancelHeal();
@@ -410,6 +445,7 @@ export class Actor {
         this.mode = 'ground';
         this.vel.y = 0;
         this.onGround = true;
+        this.landKick = 0.8;
         if (!this.isBot) this.game.audio.play('land', this.pos);
       }
       this.clampBoundary();
@@ -425,7 +461,8 @@ export class Actor {
     }
     if (swimming) this.crouching = false;
     this.body.height = this.crouching ? PLAYER.crouchHeight : PLAYER.height;
-    const wantSprint = I.sprint && I.mz > 0.3 && !this.crouching && !this.aiming && !swimming && !this.buildMode;
+    const firing = I.fire && this.held && this.held.kind === 'weapon';
+    const wantSprint = I.sprint && I.mz > 0.3 && !this.crouching && !this.aiming && !swimming && !this.buildMode && !firing;
     this.sprinting = wantSprint;
     if (this.sprinting && this.heal) this.cancelHeal();
     let speed = this.crouching ? PLAYER.crouch : this.sprinting ? PLAYER.sprint : PLAYER.walk;
@@ -453,6 +490,11 @@ export class Actor {
         const dmg = Math.round((-impactVy - PLAYER.fallDamageSpeed) * 7);
         this.takeDamage(dmg, null, { ignoreShield: true, cause: 'fell' });
       }
+      if (!this.onGround && impactVy < -8) {
+        this.landKick = Math.min(1, -impactVy / 16);
+        if (!this.isBot) this.game.audio.snd('land', { vol: 0.7 });
+        else if (this.game.isNearPlayer(this.pos, 25)) this.game.audio.snd('land', { x: this.pos.x, y: this.pos.y, z: this.pos.z, vol: 0.4, ref: 6 });
+      }
       this.vel.y = 0;
       this.onGround = true;
     } else {
@@ -466,6 +508,16 @@ export class Actor {
       this.onGround = false;
     } else if (this.mode === 'swim' && (this.onGround || this.pos.y > SWIM_DEPTH + 0.3)) {
       this.mode = 'ground';
+    }
+    // footsteps
+    const hs = Math.hypot(this.vel.x, this.vel.z);
+    if ((this.onGround || this.mode === 'swim') && hs > 1.2) {
+      this.stepPh += hs * dt;
+      const L = this.mode === 'swim' ? 2.2 : this.sprinting ? 1.9 : 1.45;
+      if (this.stepPh > L) {
+        this.stepPh = 0;
+        this.game.audio.footstep(this);
+      }
     }
     this.clampBoundary();
   }
@@ -504,6 +556,7 @@ export class Actor {
     }
     if (this.buildMode) {
       this.aiming = false;
+      this.adsT = 0;
       if (I.fire && this.buildCd <= 0) {
         if (this.game.build.tryPlace(this)) this.buildCd = 0.12;
         else if (I.firePressed && !this.isBot) this.game.audio.play('deny', this.pos);
@@ -513,6 +566,12 @@ export class Actor {
     }
     const item = this.held;
     this.aiming = !!(I.aim && item && item.kind === 'weapon' && !this.sprinting);
+    {
+      const d = item && item.kind === 'weapon' ? WEAPONS[item.type] : null;
+      const want = d && this.aiming && this.reloadT <= 0 && this.switchT <= 0 ? 1 : 0;
+      this.adsT = damp(this.adsT, want, (1 / Math.max(0.05, d ? d.adsTime || 0.2 : 0.2)) * 2.2, dt);
+      if (this.adsT < 0.002) this.adsT = 0;
+    }
     if (I.reload) this.startReload();
     if (this.sel === -1) {
       if (I.fire && this.swingCd <= 0) {
@@ -530,6 +589,7 @@ export class Actor {
   updateModel(dt) {
     const m = this.model;
     m.root.position.copy(this.pos);
+    if (this.isBot) m.lod(this.pos.distanceTo(this.game.camera.position));
     if (this.mode === 'vehicle' && this.vehicle) {
       m.root.rotation.set(0, this.vehicle.yaw, 0);
     } else {
@@ -556,7 +616,8 @@ export class Actor {
     } else m.setHeld(null);
     m.animate({
       dt, mode: this.mode, speed: Math.hypot(this.vel.x, this.vel.z), crouch: this.crouching,
-      pitch: this.pitch, holding, aiming: this.aiming, emote: this.emote,
+      pitch: this.pitch, holding, aiming: this.aiming, emote: this.emote, sprinting: this.sprinting, onGround: this.onGround,
+      reload: this.reloadT > 0 && this.reloadTotal > 0 ? 1 - this.reloadT / this.reloadTotal : -1, switching: this.switchT / SWITCH_TIME,
     });
   }
 
@@ -576,6 +637,9 @@ export class Actor {
     this.vel.set(0, 0, 0);
     this.heal = null;
     this.reloadT = 0;
+    this.adsT = 0;
+    this.switchT = 0;
+    this.lastShotT = -9;
     this.vehicle = null;
     this.emote = false;
     this.damageTaken = 0;

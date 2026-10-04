@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { WEAPONS, HEALS, RARITY, PLAYER, BUILD } from './config.js';
 import { POIS } from './world/island.js';
-import { iconFor, itemName } from './items.js';
+import { iconFor, iconUrl, itemName } from './items.js';
 import { clamp, fmtTime, angleTo, wrapAngle } from './util.js';
 
 const _v = new THREE.Vector3();
@@ -60,7 +60,8 @@ export class HUD {
     this.ammoEl = el('div', 'ammo', this.right);
     this.hotbar = el('div', 'hotbar', this.right);
     this.slotEls = [];
-    const pick = el('div', 'slot pick', this.hotbar, '<div class="sicon">&#x26CF;</div><div class="skey">H</div>');
+    const pickUrl = iconUrl({ kind: 'heal', type: 'pickaxe' });
+    const pick = el('div', 'slot pick', this.hotbar, `<div class="sicon">${pickUrl ? `<img src="${pickUrl}" alt="">` : '&#x26CF;'}</div><div class="skey">H</div>`);
     this.slotEls.push(pick);
     for (let i = 0; i < 5; i++) this.slotEls.push(el('div', 'slot', this.hotbar, `<div class="sicon"></div><div class="scount"></div><div class="skey">${i + 1}</div>`));
     this.buildbar = el('div', 'buildbar', root);
@@ -226,7 +227,9 @@ export class HUD {
         e.classList.toggle('sel', a.sel === i && !a.buildMode);
         e.style.setProperty('--rar', s ? RARITY[s.rarity].color : 'transparent');
         e.classList.toggle('filled', !!s);
-        e.querySelector('.sicon').textContent = s ? iconFor(s) : '';
+        const url = iconUrl(s), ic = e.querySelector('.sicon');
+        if (url) ic.innerHTML = `<img src="${url}" alt="">`;
+        else ic.textContent = s ? iconFor(s) : '';
         e.querySelector('.scount').textContent = s && s.kind === 'heal' ? s.count : '';
         e.querySelector('.skey').textContent = pad ? '' : i + 1;
         e.title = s ? itemName(s) : '';
@@ -276,6 +279,8 @@ export class HUD {
     // crosshair
     const scoped = g.controller.scoped;
     this.crosshair.classList.toggle('hidden', scoped || a.mode !== 'ground' || !a.alive);
+    // in first person the gun's own sights take over as you aim
+    this.crosshair.style.opacity = g.controller.fpActive ? String(clamp(1 - a.adsT * 1.6, 0, 1)) : '';
     if (!scoped) {
       const spread = a.buildMode || a.sel === -1 ? 0.3 : a.currentSpread();
       const fov = g.camera.fov * (Math.PI / 180);

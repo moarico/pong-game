@@ -7,7 +7,7 @@ export const PAD = {
 
 const GAME_KEYS = new Set([
   'Tab', 'Space', 'ControlLeft', 'ControlRight', 'KeyW', 'KeyA', 'KeyS', 'KeyD', 'KeyQ', 'KeyF', 'KeyC', 'KeyV',
-  'KeyE', 'KeyR', 'KeyG', 'KeyT', 'KeyB', 'KeyH', 'KeyM', 'KeyI', 'KeyX', 'Digit1', 'Digit2', 'Digit3', 'Digit4', 'Digit5',
+  'KeyE', 'KeyR', 'KeyG', 'KeyT', 'KeyB', 'KeyH', 'KeyM', 'KeyI', 'KeyX', 'KeyZ', 'Digit1', 'Digit2', 'Digit3', 'Digit4', 'Digit5',
 ]);
 
 export class Input {

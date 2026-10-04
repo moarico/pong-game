@@ -21,12 +21,15 @@ import { PlayerController } from './controller.js';
 import { HUD } from './hud.js';
 import { Menus } from './menus.js';
 import { LobbyStage } from './lobby.js';
-import { AudioSystem } from './audio.js';
+import { AudioSystem } from './zh/sound.js';
+import { ViewModel } from './zh/viewmodel.js';
+import { fabricMat } from './zh/soldier.js';
+import { skyEnvironment } from './zh/envmap.js';
 
 const SETTINGS_KEY = 'stormdrop-settings-v1';
 const DEFAULTS = {
-  mouseSens: 1, padSens: 1, invertY: false, fov: 80, volume: 0.7, quality: 'medium', players: 25,
-  difficulty: 1, stormSpeed: 1, showFps: false, name: 'You', outfit: 'rookie', shoulder: 1,
+  mouseSens: 1, padSens: 1, invertY: false, fov: 72, volume: 0.7, quality: 'medium', players: 25,
+  difficulty: 1, stormSpeed: 1, showFps: false, name: 'You', outfit: 'recruit', shoulder: 1, view: 'first',
 };
 const tick = () => new Promise((r) => setTimeout(r, 16));
 
@@ -99,6 +102,7 @@ class Game {
     const dpr = window.devicePixelRatio || 1;
     this.renderer.setPixelRatio(Math.min(dpr, S.quality === 'high' ? 2 : S.quality === 'medium' ? 1.25 : 0.85));
     if (this.env) this.env.setQuality(S.quality);
+    if (this.controller) this.controller.firstPerson = S.view !== 'third';
     if (this.menus) this.menus.refreshLobby();
     if (save) this.saveSettings();
   }
@@ -135,6 +139,11 @@ class Game {
     this.mapCanvas = this.terrain.buildMapCanvas(1024, this.structures.footprints);
     await step(0.7, 'Fueling the Sky Coach...');
     this.env = new Environment(this.scene, this.settings.quality);
+    // the sky lights and reflects off guns, gear and fabric
+    this.envTex = skyEnvironment(this.renderer, { sunDir: this.env.sunDir });
+    this.scene.environment = this.envTex;
+    this.viewmodel = new ViewModel(this);
+    this.viewmodel.setEnvironment(this.envTex);
     this.fx = new Effects(this);
     this.combat = new Combat(this);
     this.build = new BuildSystem(this);
@@ -199,6 +208,8 @@ class Game {
     this.actors = [];
     this.player = new Actor(this, { name: S.name || 'You', isBot: false, outfit: outfitById(S.outfit) });
     this.actors.push(this.player);
+    this.viewmodel.setOutfit(this.player.outfit, fabricMat(this.player.outfit));
+    this.viewmodel.hideAll();
     const names = shuffle(BOT_NAMES.slice(), this.rng);
     for (let i = 0; i < S.players - 1; i++) {
       const bot = new Actor(this, { name: names[i % names.length], isBot: true, outfit: this.rng.pick(OUTFITS) });
@@ -248,6 +259,12 @@ class Game {
       a.pitch = -0.6;
       this.audio.play('busJump');
     }
+  }
+
+  // The player's gun went off: recoil the view and flash the gun in hand.
+  onPlayerFire(def) {
+    this.controller.onFire(def);
+    this.viewmodel.fired();
   }
 
   noise(pos, radius, source) {
@@ -371,20 +388,28 @@ class Game {
     this.last = t;
     this.frame = (this.frame || 0) + 1;
     this.input.poll();
+    this.audio.setMenu(this.state !== 'playing');
+    this.audio.frame(dt);
     if (this.state === 'playing') {
       if (this.menus.invOpen) this.menus.updatePad();
       this.updateMatch(dt);
-      this.renderer.render(this.scene, this.camera);
+      this.renderWorld();
     } else {
       this.menus.updatePad();
       if (this.lobby.active) {
         this.lobby.update(dt);
         this.renderer.render(this.lobby.scene, this.lobby.camera);
       } else if ((this.state === 'paused' || this.state === 'end') && this.worldReady) {
-        this.renderer.render(this.scene, this.camera);
+        this.renderWorld();
       }
     }
     this.input.endFrame();
+  }
+
+  renderWorld() {
+    this.renderer.render(this.scene, this.camera);
+    // the gun in your hands is drawn last, by its own camera, so it never clips into walls
+    if (this.controller && this.controller.fpActive && this.player && this.player.alive) this.viewmodel.render(this.renderer);
   }
 
   updateMatch(dt) {
@@ -415,6 +440,10 @@ class Game {
     this.props.update(dt);
     this.structures.update(dt, this.time);
     this.controller.updateCamera(dt);
+    if (this.controller.fpActive) {
+      this.viewmodel.probe(dt, this.camera.position, p.aimDir);
+      this.viewmodel.update(dt, p, this.camera);
+    }
     this.fx.update(dt);
     this.build.updateGhost(p.alive ? p : null);
     this.updateWeakSpot();

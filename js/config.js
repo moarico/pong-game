@@ -46,6 +46,8 @@ export const CAMERA = {
   fov: 80,
   adsFov: 52,
   scopeFov: 16,
+  adsZoom: 1.95, // Zero Hour's fixed zoom for iron and red-dot sights
+  scopeZoom: 4.2,
 };
 
 // Storm: wait, shrink time, damage per second. Radius shrinks to ~50-60% each phase.
@@ -112,44 +114,50 @@ export const RARITY_DAMAGE_STEP = 0.05; // +5% damage per tier above common
 // Common-tier weapon values. falloff: [full damage until, reaches mul at, mul].
 export const WEAPONS = {
   ar: {
-    name: 'Assault Rifle', short: 'AR', damage: 30, headMul: 1.5, rate: 5.5, mag: 30, reload: 2.3,
+    name: 'KR-4 Carbine', short: 'AR', damage: 30, headMul: 1.5, rate: 5.5, mag: 30, reload: 2.3,
     ammo: 'medium', range: 300, falloff: [50, 160, 0.7], spreadHip: 2.4, spreadAds: 0.45,
     bloom: 0.45, bloomMax: 3.5, moveSpread: 1.6, structure: 30, rarities: [0, 4], kind: 'hitscan',
-    recoil: 0.9, slot: 'rifle',
+    recoil: 0.9, rec: [0.62, 0.28], adsTime: 0.18, slot: 'rifle',
   },
   shotgun: {
-    name: 'Pump Shotgun', short: 'PUMP', damage: 90, headDamage: 200, pellets: 10, rate: 0.7, mag: 5,
+    name: 'Mastiff 12 Pump', short: 'PUMP', damage: 90, headDamage: 200, pellets: 10, rate: 0.7, mag: 5,
     reload: 5, ammo: 'shells', range: 55, falloff: [8, 45, 0.15], spreadHip: 6, spreadAds: 4.2,
     bloom: 0, bloomMax: 0, moveSpread: 1, structure: 70, rarities: [0, 4], kind: 'pellets',
-    recoil: 4, slot: 'shotgun',
+    recoil: 4, rec: [3.2, 0.9], adsTime: 0.18, slot: 'shotgun',
   },
   smg: {
-    name: 'SMG', short: 'SMG', damage: 17, headMul: 1.5, rate: 12, mag: 30, reload: 2,
+    name: 'Vespa-9 SMG', short: 'SMG', damage: 17, headMul: 1.5, rate: 12, mag: 30, reload: 2,
     ammo: 'light', range: 130, falloff: [20, 70, 0.6], spreadHip: 3.4, spreadAds: 2,
     bloom: 0.25, bloomMax: 3, moveSpread: 1.2, structure: 17, rarities: [0, 3], kind: 'hitscan',
-    recoil: 0.5, slot: 'smg',
+    recoil: 0.5, rec: [0.5, 0.36], adsTime: 0.14, slot: 'smg',
   },
   pistol: {
-    name: 'Pistol', short: 'PSTL', damage: 24, headMul: 1.75, rate: 6.5, mag: 16, reload: 1.5,
+    name: 'X9 Sidearm', short: 'PSTL', damage: 24, headMul: 1.75, rate: 6.5, mag: 16, reload: 1.5,
     ammo: 'light', range: 160, falloff: [30, 100, 0.65], spreadHip: 2, spreadAds: 0.8,
     bloom: 0.5, bloomMax: 3, moveSpread: 1.2, structure: 24, rarities: [0, 2], kind: 'hitscan',
-    recoil: 1.2, slot: 'pistol',
+    recoil: 1.2, rec: [1.35, 0.3], adsTime: 0.12, slot: 'pistol',
   },
   sniper: {
-    name: 'Bolt Sniper', short: 'SNPR', damage: 105, headDamage: 157, rate: 0.3, mag: 1, reload: 3,
+    name: 'Kodiak .338 Sniper', short: 'SNPR', damage: 105, headDamage: 157, rate: 0.3, mag: 1, reload: 3,
     ammo: 'heavy', range: 1200, spreadHip: 7, spreadAds: 0, bloom: 0, bloomMax: 0, moveSpread: 2,
     structure: 105, rarities: [2, 4], kind: 'projectile', speed: 380, gravity: 9.8,
-    recoil: 6, slot: 'sniper', scope: true,
+    recoil: 6, rec: [3.6, 0.8], adsTime: 0.26, slot: 'sniper', scope: true,
   },
   rocket: {
-    name: 'Rocket Launcher', short: 'RKT', damage: 110, rate: 0.75, mag: 1, reload: 4,
+    name: 'RPG-9 Launcher', short: 'RKT', damage: 110, rate: 0.75, mag: 1, reload: 4,
     ammo: 'rockets', range: 400, spreadHip: 1.5, spreadAds: 0.3, bloom: 0, bloomMax: 0,
     moveSpread: 1, structure: 450, rarities: [3, 4], kind: 'projectile', speed: 55, gravity: 0,
-    splash: 4.5, recoil: 5, slot: 'rocket',
+    splash: 4.5, recoil: 5, rec: [5, 0.6], adsTime: 0.22, slot: 'rocket',
+  },
+  lmg: {
+    name: 'Brute M6 LMG', short: 'LMG', damage: 24, headMul: 1.5, rate: 8, mag: 100, reload: 5,
+    ammo: 'medium', range: 260, falloff: [40, 140, 0.7], spreadHip: 3.3, spreadAds: 0.7,
+    bloom: 0.3, bloomMax: 3.2, moveSpread: 1.8, structure: 24, rarities: [1, 3], kind: 'hitscan',
+    recoil: 0.8, rec: [0.58, 0.42], adsTime: 0.26, slot: 'lmg',
   },
 };
 
-export const WEAPON_SPAWN_WEIGHTS = { ar: 30, shotgun: 24, smg: 18, pistol: 14, sniper: 8, rocket: 4 };
+export const WEAPON_SPAWN_WEIGHTS = { ar: 28, shotgun: 24, smg: 17, pistol: 13, lmg: 6, sniper: 8, rocket: 4 };
 
 // Rarity odds by loot quality [common, uncommon, rare, epic, legendary].
 export const RARITY_ODDS = {

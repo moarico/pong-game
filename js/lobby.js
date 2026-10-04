@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { CharacterModel, OUTFITS } from './character.js';
 import { RARITY } from './config.js';
+import { skyEnvironment } from './zh/envmap.js';
 
 // The 3D stage behind the lobby and locker menus: the equipped outfit on a pedestal.
 export class LobbyStage {
@@ -21,6 +22,7 @@ export class LobbyStage {
     const tex = new THREE.CanvasTexture(bg);
     tex.colorSpace = THREE.SRGBColorSpace;
     this.scene.background = tex;
+    this.scene.environment = skyEnvironment(game.renderer, { top: 0x2563c9, horizon: 0xa8d0ff, ground: 0x1b3f8f, sun: 8, sunDir: new THREE.Vector3(0.4, 0.7, 0.6) });
     this.scene.add(new THREE.HemisphereLight(0xcfe6ff, 0x31408a, 1.6));
     const key = new THREE.DirectionalLight(0xffffff, 2.2);
     key.position.set(2, 4, 3);

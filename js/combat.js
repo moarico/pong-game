@@ -96,8 +96,41 @@ export class Combat {
   }
 
   muzzlePos(actor, out) {
+    const g = this.game;
+    // In first person the shot leaves the gun you see: just right of and below the eye.
+    if (actor === g.player && g.controller.firstPerson && actor.mode === 'ground') {
+      const cy = Math.cos(actor.yaw), sy = Math.sin(actor.yaw);
+      actor.eye(out).addScaledVector(actor.aimDir, 0.7);
+      out.x += cy * 0.13;
+      out.z -= sy * 0.13;
+      out.y -= 0.14;
+      return out;
+    }
     if (actor.model.root.visible && actor.mode === 'ground') return actor.model.muzzle(out);
     return actor.eye(out);
+  }
+
+  // What a ray hit is made of, for impact sounds.
+  surfaceOf(hit) {
+    if (hit.actor) return hit.actor.shield > 0 ? 'shield' : 'flesh';
+    if (hit.terrain) return hit.point.y < 2 ? 'sand' : 'dirt';
+    const o = hit.collider && hit.collider.owner;
+    if (!o) return 'stone';
+    if (o.kind === 'build') return o.mat === 'wood' ? 'wood' : o.mat === 'metal' ? 'metal' : 'stone';
+    if (o.kind === 'tree') return 'wood';
+    if (o.kind === 'vehicle' || o.kind === 'metal') return 'metal';
+    return 'stone';
+  }
+
+  // Rounds passing close to the player's head crack past them.
+  nearMiss(shooter, o, d, len) {
+    const p = this.game.player;
+    if (!p || !p.alive || shooter === p) return;
+    const hx = p.pos.x - o.x, hy = p.pos.y + p.eyeHeight - o.y, hz = p.pos.z - o.z;
+    const t = hx * d.x + hy * d.y + hz * d.z;
+    if (t < 2 || t > len + 1) return;
+    const px = hx - d.x * t, py = hy - d.y * t, pz = hz - d.z * t, dist = Math.sqrt(px * px + py * py + pz * pz);
+    if (dist < 1.6 && dist > 0.2) this.game.audio.whiz(1.6 - dist);
   }
 
   fire(actor, item) {
@@ -118,12 +151,13 @@ export class Combat {
         this.spreadDir(actor.aimDir, spread, dir);
         const hit = this.trace(actor, o, dir, def.range);
         const end = hit ? hit.point : _p.copy(o).addScaledVector(dir, Math.min(def.range, 160));
+        if (i === 0) this.nearMiss(actor, o, dir, hit ? hit.t : def.range);
         if (pellets === 1 || i % 3 === 0) g.fx.tracer(muzzle, end, def.kind === 'pellets' ? '#ffd27a' : '#fff0b0');
         if (hit) this.applyHit(actor, item, def, hit, per * falloffMul(def, hit.t), perHead * falloffMul(def, hit.t), def.structure / pellets, dir);
       }
     }
     g.fx.muzzle(muzzle);
-    g.audio.play('shot-' + item.type, actor.pos);
+    g.audio.gunshot(actor, item.type);
     g.noise(actor.pos, def.kind === 'pellets' ? 70 : 110, actor);
   }
 
@@ -161,6 +195,8 @@ export class Combat {
       const hadShield = target.shield > 0;
       this.damageActor(target, amount, shooter, def.name, hit.head, hit.point, hadShield);
       g.fx.impact(hit.point, null, hadShield ? 'shield' : 'actor');
+      if (target === g.player || g.isNearPlayer(hit.point, 40)) g.audio.impact(hit.point, hadShield ? 'shield' : 'flesh');
+      if (hadShield && target.shield <= 0 && shooter === g.player) g.audio.play('shieldbreak');
       return;
     }
     const owner = hit.collider?.owner;
@@ -174,6 +210,7 @@ export class Combat {
     } else {
       g.fx.impact(hit.point, hit.normal, 'world');
     }
+    if (g.isNearPlayer(hit.point, 60)) g.audio.impact(hit.point, this.surfaceOf(hit));
   }
 
   damageActor(target, amount, shooter, cause, head = false, point = null, shieldHit = false) {
