@@ -39,6 +39,11 @@ require('fs').mkdirSync(OUT, { recursive: true });
   // time up
   await waitState('playing');
   await ev(() => { window.__app.match.clock = 0.5; });
+  // blue (the player) won: the victory cinematic plays and can be skipped
+  console.log('victory cinematic:', await waitState('victory', 60000));
+  for (let i = 0; i < 200; i++) { if (await ev(() => window.__app.match.cine && window.__app.match.cine.t > 1.1)) break; await page.waitForTimeout(100); }
+  await page.screenshot({ path: path.join(OUT, 'victory.png') });
+  await press('Space');
   console.log('over:', await waitState('over', 60000));
   for (let i = 0; i < 100; i++) { if (await ev(() => window.__app.menu.screen === 'results')) break; await page.waitForTimeout(300); }
   console.log('results screen:', await ev(() => window.__app.menu.screen));

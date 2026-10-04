@@ -321,6 +321,7 @@ export class Menu {
     this.option(p, 'Default camera', [{ label: 'Ball cam', value: true }, { label: 'Car cam', value: false }], () => s.ballCam, (v) => { s.ballCam = v; });
     this.option(p, 'Field of view', [90, 95, 100, 105, 110].map((v) => ({ label: v + '°', value: v })), () => s.fov, (v) => { s.fov = v; });
     this.option(p, 'Goal replays', [{ label: 'On', value: true }, { label: 'Off', value: false }], () => s.replays, (v) => { s.replays = v; });
+    this.option(p, 'Victory cinematic', [{ label: 'On', value: true }, { label: 'Off', value: false }], () => s.victoryFx !== false, (v) => { s.victoryFx = v; });
     this.option(p, 'Controller rumble', [{ label: 'On', value: true }, { label: 'Off', value: false }], () => s.rumble, (v) => { s.rumble = v; });
     this.option(p, 'Volume', [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((v) => ({ label: v === 0 ? 'Off' : String(v), value: v / 10 })), () => Math.round(s.volume * 10) / 10, (v) => { s.volume = v; this.app.audio.setVolume(v); });
     this.option(p, 'Show FPS', [{ label: 'Off', value: false }, { label: 'On', value: true }], () => s.showFps, (v) => { s.showFps = v; });

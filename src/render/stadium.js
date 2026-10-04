@@ -209,6 +209,11 @@ export function buildStadium(renderer, scene, opts) {
   root.add(arena);
   scene.add(root);
   const anim = [];
+  // Victory cinematic: a slot is cut through the stands behind one goal so the sky road
+  // can leave the stadium. The planes clip only where all three agree (clipIntersection),
+  // and with zero width they clip nothing.
+  const cutPlanes = [new THREE.Plane(new THREE.Vector3(1, 0, 0), 0), new THREE.Plane(new THREE.Vector3(-1, 0, 0), 0), new THREE.Plane(new THREE.Vector3(0, 0, -1), 0)];
+  const cuttable = (mat) => { mat.clippingPlanes = cutPlanes; mat.clipIntersection = true; return mat; };
 
   scene.fog = new THREE.FogExp2(preset.fog, preset.fogDensity * 0.35);
 
@@ -367,6 +372,7 @@ export function buildStadium(renderer, scene, opts) {
 
   // ---- goals
   const goalLights = [];
+  const goalBacks = [];
   for (const team of [0, 1]) {
     const s = team === 0 ? -1 : 1;
     const tc = TEAM_COLORS[team];
@@ -384,13 +390,18 @@ export function buildStadium(renderer, scene, opts) {
     const side2 = side1.clone();
     side2.position.x = -GW;
     const back = new THREE.Mesh(new THREE.PlaneGeometry(2 * GW, GH), backMat);
-    back.position.set(0, GH / 2, s * (HZ + GD));
+    back.position.set(0, GH / 2, 0);
+    // hinged at the bottom so it can flap down like a drawbridge
+    const backHinge = new THREE.Group();
+    backHinge.position.set(0, 0, s * (HZ + GD));
+    backHinge.add(back);
     const topTex = netTex.clone(); topTex.repeat.set((2 * GW) / 300, GD / 300); topTex.needsUpdate = true;
     const topMat = netMat.clone(); topMat.emissiveMap = topTex; topMat.emissiveIntensity = 0.8;
     const top = new THREE.Mesh(new THREE.PlaneGeometry(2 * GW, GD), topMat);
     top.rotation.x = Math.PI / 2;
     top.position.set(0, GH, s * (HZ + GD / 2));
-    g.add(side1, side2, back, top);
+    g.add(side1, side2, backHinge, top);
+    goalBacks.push({ hinge: backHinge, s });
     // glowing frame
     const frameMat = new THREE.MeshStandardMaterial({ color: 0x222222, emissive: tc.main, emissiveIntensity: 4.5, roughness: 0.3, metalness: 0.6 });
     const dimFrameMat = new THREE.MeshStandardMaterial({ color: 0x2a2d33, emissive: tc.main, emissiveIntensity: 1.2, roughness: 0.4, metalness: 0.7 });
@@ -424,8 +435,8 @@ export function buildStadium(renderer, scene, opts) {
 
   // ---- stands
   const crowd = T.crowdTexture();
-  const standMat = new THREE.MeshStandardMaterial({ map: crowd, roughness: 0.95, emissive: 0xffffff, emissiveMap: crowd, emissiveIntensity: 0.07, side: THREE.DoubleSide });
-  const darkMat = new THREE.MeshStandardMaterial({ color: 0x15181e, roughness: 0.8, metalness: 0.3, side: THREE.DoubleSide });
+  const standMat = cuttable(new THREE.MeshStandardMaterial({ map: crowd, roughness: 0.95, emissive: 0xffffff, emissiveMap: crowd, emissiveIntensity: 0.07, side: THREE.DoubleSide }));
+  const darkMat = cuttable(new THREE.MeshStandardMaterial({ color: 0x15181e, roughness: 0.8, metalness: 0.3, side: THREE.DoubleSide }));
   const lower = [[-60, 720], [-1200, 1240], [-2300, 1760], [-3300, 2300]];
   const upper = [[-3300, 2780], [-4200, 3250], [-5100, 3720], [-5900, 4150]];
   const slopeV = (prof) => {
@@ -443,21 +454,21 @@ export function buildStadium(renderer, scene, opts) {
   const ribbonTex = T.adTexture();
   const ribbon = new THREE.Mesh(
     stripGeometry(pts, [[-3300, 2300], [-3300, 2780]], { uLen: 5200, vOf: (j) => j }),
-    new THREE.MeshStandardMaterial({ color: 0x050505, emissive: 0xffffff, emissiveMap: ribbonTex, emissiveIntensity: 1.6, side: THREE.DoubleSide }),
+    cuttable(new THREE.MeshStandardMaterial({ color: 0x050505, emissive: 0xffffff, emissiveMap: ribbonTex, emissiveIntensity: 1.6, side: THREE.DoubleSide })),
   );
   arena.add(ribbon);
   anim.push((dt) => { ribbonTex.offset.x = (ribbonTex.offset.x - dt * 0.02) % 1; });
   // back wall with a light rim, then an open canopy so the sky and city show above the field
   arena.add(new THREE.Mesh(stripGeometry(pts, [[-5900, 4150], [-5900, 4650]], { uLen: 2000 }), darkMat));
-  const rimMat = new THREE.MeshBasicMaterial({ vertexColors: true, fog: false, side: THREE.DoubleSide });
+  const rimMat = cuttable(new THREE.MeshBasicMaterial({ vertexColors: true, fog: false, side: THREE.DoubleSide }));
   arena.add(new THREE.Mesh(stripGeometry(pts, [[-5900, 4650], [-5900, 4700]], { colorOf: (x, y, z) => teamTint(z, 2.2) }), rimMat));
-  const roofMat = new THREE.MeshStandardMaterial({ color: 0x0e1014, roughness: 0.8, metalness: 0.4, side: THREE.DoubleSide });
+  const roofMat = cuttable(new THREE.MeshStandardMaterial({ color: 0x0e1014, roughness: 0.8, metalness: 0.4, side: THREE.DoubleSide }));
   arena.add(new THREE.Mesh(stripGeometry(pts, [[-6500, 5350], [-4200, 5220], [-1900, 5120]], { uLen: 2000 }), roofMat));
   arena.add(new THREE.Mesh(stripGeometry(pts, [[-1900, 5120], [-1900, 5020]], { uLen: 2000 }), darkMat));
 
   // trusses with light strips spanning the open roof
   const trussMat = new THREE.MeshStandardMaterial({ color: 0x1a1d22, roughness: 0.6, metalness: 0.7 });
-  const lightMat = new THREE.MeshBasicMaterial({ color: new THREE.Color(4.2, 4.2, 4.0), fog: false });
+  const lightMat = cuttable(new THREE.MeshBasicMaterial({ color: new THREE.Color(4.2, 4.2, 4.0), fog: false }));
   const trussZ = [-3700, -1250, 1250, 3700];
   const lightGeo = new THREE.BoxGeometry(150, 14, 60);
   const lightCount = trussZ.length * 30 + 160;
@@ -513,7 +524,7 @@ export function buildStadium(renderer, scene, opts) {
       g.rotation.y = sz > 0 ? Math.PI : 0;
       g.rotation.x = 0.12; // lean toward the field
       arena.add(g);
-      screens.push({ c, tex, ctx: c.getContext('2d') });
+      screens.push({ c, tex, ctx: c.getContext('2d'), group: g, end: sz });
     }
   }
   let screenState = '';
@@ -569,7 +580,7 @@ export function buildStadium(renderer, scene, opts) {
     const designs = [['#1f5fe0', '#ffffff', '#e8621a'], ['#c8102e', '#ffffff', '#003da5'], ['#009246', '#ffffff', '#ce2b37'], ['#000000', '#dd0000', '#ffce00'],
       ['#ff7a1a', '#ffffff', '#2f7bff'], ['#0055a4', '#ffffff', '#ef4135'], ['#ffcc00', '#00843d', '#00843d'], ['#2f7bff', '#2f7bff', '#ffffff']];
     const fw = 300, fh = 190;
-    const poleMat = new THREE.MeshStandardMaterial({ color: 0x9aa1aa, metalness: 0.9, roughness: 0.3 });
+    const poleMat = cuttable(new THREE.MeshStandardMaterial({ color: 0x9aa1aa, metalness: 0.9, roughness: 0.3 }));
     const ring = wallOutline(1100, 2);
     const poleGeo = new THREE.CylinderGeometry(9, 9, 520, 6);
     const poles = new THREE.InstancedMesh(poleGeo, poleMat, ring.length);
@@ -597,7 +608,7 @@ export function buildStadium(renderer, scene, opts) {
       });
       const tex = new THREE.CanvasTexture(c);
       tex.colorSpace = THREE.SRGBColorSpace;
-      const mat = new THREE.MeshStandardMaterial({ map: tex, side: THREE.DoubleSide, roughness: 0.9, emissive: 0xffffff, emissiveMap: tex, emissiveIntensity: 0.15 });
+      const mat = cuttable(new THREE.MeshStandardMaterial({ map: tex, side: THREE.DoubleSide, roughness: 0.9, emissive: 0xffffff, emissiveMap: tex, emissiveIntensity: 0.15 }));
       mat.onBeforeCompile = (sh) => {
         sh.uniforms.uTime = flagTime;
         sh.vertexShader = 'uniform float uTime;\n' + sh.vertexShader.replace('#include <begin_vertex>', `#include <begin_vertex>
@@ -798,6 +809,41 @@ export function buildStadium(renderer, scene, opts) {
       const gl = goalLights[team];
       gl.light.intensity = 2500;
       gl.frameMat.emissiveIntensity = 14;
+    },
+    // ---- hooks for the victory cinematic
+    cine: {
+      arena,
+      buildings,
+      ground,
+      // stands cross-section behind a goal, [offset behind the back wall, height] in uu
+      standEdge: [[GD, 1094], [1200, 1240], [2300, 1760], [3300, 2300], [3300, 2780], [4200, 3250], [5100, 3720], [5900, 4150], [5900, 4700]],
+      roofEdge: [[1900, 5020], [1900, 5120], [4200, 5220], [6500, 5350]],
+      // angle 0 = closed, PI/2 = lying flat outside the goal
+      setGoalFlap(team, angle) {
+        const gb = goalBacks[team];
+        gb.hinge.rotation.x = gb.s * angle;
+      },
+      // open a slot of half-width w (uu) through the stands behind this team's goal
+      setCut(team, w) {
+        const s = team === 0 ? -1 : 1;
+        const hw = Math.max(0, w) * S;
+        cutPlanes[0].constant = -hw;
+        cutPlanes[1].constant = -hw;
+        cutPlanes[2].normal.set(0, 0, -s);
+        cutPlanes[2].constant = (HZ + GD - 20) * S;
+      },
+      screenFor(team) { const end = team === 0 ? -1 : 1; return screens.find((sc) => sc.end === end).group; },
+      reset() {
+        for (const gb of goalBacks) gb.hinge.rotation.x = 0;
+        cutPlanes[0].constant = 0;
+        cutPlanes[1].constant = 0;
+        for (const sc of screens) sc.group.visible = true;
+        arena.position.set(0, 0, 0);
+        arena.quaternion.identity();
+        arena.scale.setScalar(S);
+        arena.visible = true;
+        ground.visible = true;
+      },
     },
   };
 }

@@ -253,3 +253,32 @@ table.stats tr.team1 td:first-child { border-left-color: var(--orange); }
   .item { padding: 11px 12px; font-size: 14px; }
   .opt-value { min-width: 90px; }
 }
+
+/* ---------- victory cinematic */
+.cine { position: fixed; inset: 0; pointer-events: none; z-index: 30; overflow: hidden; }
+.cine-bar { position: absolute; left: 0; right: 0; height: 0; background: #000; transition: height 0.8s ease; }
+.cine-bar.top { top: 0; }
+.cine-bar.bottom { bottom: 0; }
+.cine.on .cine-bar { height: 9vh; }
+.cine.out .cine-bar { height: 0; transition-duration: 0.5s; }
+.cine-fill { position: absolute; inset: 0; background: #fff; opacity: 0; }
+.cine-text {
+  position: absolute; left: 50%; top: 44%; transform: translate(-50%, -50%) scale(0.85); text-align: center; white-space: nowrap;
+  opacity: 0; transition: opacity 0.5s ease, transform 0.8s ease;
+}
+.cine-text.show { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+.cine-main { font-family: var(--display); font-style: italic; font-size: clamp(44px, 11vmin, 130px); letter-spacing: 2px; color: #fff; }
+.cine-sub { margin-top: 8px; font-weight: 800; font-size: clamp(16px, 3vmin, 30px); letter-spacing: 3px; color: #e8f0ff; text-shadow: 0 2px 8px rgba(0,0,0,0.8); }
+.cine-text.blue .cine-main { color: #d6ecff; text-shadow: 0 0 40px var(--blue), 0 0 80px var(--blue), 0 6px 14px rgba(0,0,0,0.6); }
+.cine-text.orange .cine-main { color: #fff1e0; text-shadow: 0 0 40px var(--orange), 0 0 80px var(--orange), 0 6px 14px rgba(0,0,0,0.6); }
+/* on the white-out after the universe explodes */
+.cine-text.final .cine-main { text-shadow: 0 4px 22px rgba(0,0,0,0.25); }
+.cine-text.final.blue .cine-main { color: var(--blue); }
+.cine-text.final.orange .cine-main { color: var(--orange); }
+.cine-text.final .cine-sub { color: #3a4458; text-shadow: none; }
+.cine-skip {
+  position: absolute; right: 24px; bottom: calc(9vh + 14px); font-size: 13px; font-weight: 700; letter-spacing: 1px; color: rgba(255,255,255,0.55);
+  opacity: 0; transition: opacity 1s ease 1s;
+}
+.cine.on .cine-skip { opacity: 1; }
+.cine.out .cine-skip { opacity: 0; transition-delay: 0s; }

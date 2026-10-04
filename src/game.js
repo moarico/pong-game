@@ -11,6 +11,7 @@ import { ballTextures } from './render/textures.js';
 import { createMode, ITEMS, ITEM_KEYS } from './physics/modes.js';
 import { ModeFx } from './render/modeFx.js';
 import { TireMarks } from './render/tireMarks.js';
+import { VictoryCinematic } from './render/victory.js';
 
 const BOT_NAMES = ['Atlas', 'Blitz', 'Comet', 'Dash', 'Echo', 'Flare', 'Ghost', 'Havoc', 'Jinx', 'Nova', 'Rex', 'Zippy', 'Vortex', 'Turbo'];
 const REPLAY_SECONDS = 6;
@@ -176,6 +177,7 @@ export class Match {
   }
 
   dispose() {
+    if (this.cine) { this.cine.dispose(); this.cine = null; }
     this.app.gfx.scene.remove(this.group);
     this.group.traverse((o) => {
       if (o.geometry && !o.geometry.userData.shared) o.geometry.dispose();
@@ -310,6 +312,24 @@ export class Match {
     this.app.audio.horn();
     this.app.stadium.cheer(0.8);
     this.app.hud.showBanner(win === 0 ? 'BLUE WINS!' : 'ORANGE WINS!', `${this.scores[0]} - ${this.scores[1]}`, win === 0 ? 'blue' : 'orange', 99);
+    // a local player won: roll the victory cinematic before the results
+    const champ = this.humans.filter((p) => p.car.team === win).sort((a, b) => b.car.stats.score - a.car.stats.score)[0];
+    if (champ && this.app.settings.victoryFx !== false) {
+      this.app.hud.hideBanner();
+      this.effects.clear();
+      this.state = 'victory';
+      this.cine = new VictoryCinematic(this, champ, win);
+    }
+  }
+
+  endVictory() {
+    if (this.cine) { this.cine.dispose(); this.cine = null; }
+    this.app.gfx.setViews(this.views);
+    this.app.hud.setup(this.views);
+    this.app.hud.show(true);
+    this.app.hud.showBanner(this.winner === 0 ? 'BLUE WINS!' : 'ORANGE WINS!', `${this.scores[0]} - ${this.scores[1]}`, this.winner === 0 ? 'blue' : 'orange', 99);
+    this.state = 'over';
+    this.stateT = 0;
   }
 
   results() {
@@ -332,7 +352,8 @@ export class Match {
     for (const p of this.humans) {
       const c = input.controls(p.device);
       p.controls = c;
-      if (c.pause && this.state !== 'over' && app.frames !== app.resumeFrame) { app.pauseMatch(p); return; }
+      if (c.pause && this.state === 'victory') skip = true;
+      else if (c.pause && this.state !== 'over' && app.frames !== app.resumeFrame) { app.pauseMatch(p); return; }
       if (c.skip) skip = true;
       if (c.ballCam && p.view) {
         p.view.rig.ballCam = !p.view.rig.ballCam;
@@ -343,6 +364,10 @@ export class Match {
       ci.jump = c.jump; ci.boost = c.boost; ci.powerslide = c.powerslide;
       ci.steer = this.shapeSteer(p, c, dt);
       ci.useItem = !!c.itemDown;
+    }
+    if (this.state === 'victory') {
+      if (!this.cine.update(dt, skip)) this.endVictory();
+      return;
     }
 
     // ball prediction for the bots (and shot detection)

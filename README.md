@@ -25,6 +25,7 @@ A Rocket League–style car soccer game that runs in the browser. It has 3D grap
 - **HUD in Rocket League style.** Score and clock bar, circular boost meter, name plates, ball cam / car cam.
 - **Sound effects** for the engine, boost, hits, goals and the crowd. All of them are generated in code, so no audio files are needed.
 - **Controller rumble** on hits, bumps, demolitions and goals.
+- **Victory cinematic.** When your team wins, the back of the other team's goal flaps down and a glowing road builds itself up into the sky. Your car drives up it and falls off the end into a black hole, where it explodes. The black hole swells and sucks in the stadium and the whole city. The camera pulls out into space to show a black hole far bigger than the Earth swallowing the planet, and then the whole universe explodes. Press **A**, **Space** or **Start** to skip it, or turn it off in **Settings**.
 
 ## Playing
 
@@ -98,7 +99,7 @@ Moves to try:
 
 ## Settings
 
-**Handling** (Easy or Realistic), graphics quality, default camera, field of view, goal replays, rumble, volume and an FPS counter can be changed in **Settings**. *Easy* handling, the default, grips harder, turns tighter at speed, and eases keyboard steering in smoothly. *Realistic* uses Rocket League's exact turning and grip. The defaults are **High** on desktop and **Medium** on Xbox. Choose **Low** on slower machines. You can also force a quality level with the URL, e.g. `index.html?quality=low`.
+**Handling** (Easy or Realistic), graphics quality, default camera, field of view, goal replays, the victory cinematic, rumble, volume and an FPS counter can be changed in **Settings**. *Easy* handling, the default, grips harder, turns tighter at speed, and eases keyboard steering in smoothly. *Realistic* uses Rocket League's exact turning and grip. The defaults are **High** on desktop and **Medium** on Xbox. Choose **Low** on slower machines. You can also force a quality level with the URL, e.g. `index.html?quality=low`.
 
 ## Development
 
@@ -125,7 +126,8 @@ src/
   input.js                 keyboard + Gamepad API (Xbox mapping, rumble)
   hud.js, menu.js          scoreboard/boost meter and controller-friendly menus
   audio.js                 WebAudio sound effects
-  render/                  three.js stadium, car model, effects, camera, renderer
+  render/                  three.js stadium, car model, effects, camera, renderer,
+                           victory cinematic (victory.js, blackHole.js, space.js)
 tests/                     node + Playwright tests
 ```
 

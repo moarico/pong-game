@@ -20,7 +20,7 @@ function loadSettings() {
   const d = {
     quality: defaultQuality(), volume: 0.7, rumble: true, ballCam: true, fov: 100, replays: true, showFps: false,
     timeOfDay: 'night', split: 'horizontal', duration: 300, difficulty: 'pro',
-    teamSize_solo: 1, teamSize_versus: 1, teamSize_coop: 2, handling: 'easy', gameMode: 'soccar', items: 'all',
+    teamSize_solo: 1, teamSize_versus: 1, teamSize_coop: 2, handling: 'easy', gameMode: 'soccar', items: 'all', victoryFx: true,
   };
   try {
     const s = JSON.parse(localStorage.getItem(SETTINGS_KEY) || '{}');

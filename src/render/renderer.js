@@ -28,9 +28,11 @@ export class GameRenderer {
     renderer.shadowMap.enabled = quality !== 'low';
     renderer.shadowMap.type = THREE.PCFShadowMap;
     renderer.autoClear = false;
+    renderer.localClippingEnabled = true; // the victory cinematic cuts a gap through the stands
     container.appendChild(renderer.domElement);
     this.renderer = renderer;
     this.scene = new THREE.Scene();
+    this.overrideScene = null; // drawn instead of the stadium scene (victory cinematic in space)
     this.views = [];
     this.pixelRatio = Math.min(window.devicePixelRatio || 1, quality === 'high' ? 1.75 : quality === 'medium' ? 1.25 : 1);
     renderer.setPixelRatio(this.pixelRatio);
@@ -102,7 +104,7 @@ export class GameRenderer {
         r.setScissor(x * scale, y * scale, w * scale, hh * scale);
         r.setScissorTest(true);
       }
-      r.render(this.scene, v.camera);
+      r.render(this.overrideScene || this.scene, v.camera);
     }
     if (target) {
       target.viewport.set(0, 0, target.width, target.height);
