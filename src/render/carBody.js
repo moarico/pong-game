@@ -1,4 +1,4 @@
-// Procedural sports-car geometry: a body lofted from smooth cross-sections with real wheel
+// Procedural Octane-style car geometry: a body lofted from smooth cross-sections with real wheel
 // arches, a glass greenhouse, conforming decals (lights, door shut lines, grilles) and
 // detailed wheels. Everything is built once per quality level and shared between cars.
 // Units are uu in car space: +z forward, +x left, +y up, origin 17 uu above the ground.
@@ -7,19 +7,20 @@ import { DecalGeometry } from 'three/addons/geometries/DecalGeometry.js';
 import { CAR } from '../config.js';
 
 // ------------------------------------------------------------------ shape tables
-// stations from the tail (-z) to the nose (+z)
-const KZ = [-58.4, -57.6, -56.5, -53, -46, -34, -22, -10, 2, 16, 30, 40, 51, 62, 71, 77, 81, 83, 84.2];
-const TOP = [6, 13, 17.5, 20.5, 22.5, 22.8, 21.5, 19.5, 18.6, 18.4, 18, 16.5, 16.5, 15.5, 12, 8.5, 4.5, 1, -2.5];
-const BOT = [-2, -5, -6.5, -8, -9.5, -10.5, -11, -11, -11, -11, -11, -11, -10.5, -10.2, -9.8, -9.2, -8.6, -7.6, -6];
-const CY = [2, 8, 12, 15, 16.5, 17.5, 15, 11, 9, 9, 9.5, 11, 12, 10.5, 6.5, 2.5, -1, -3, -4.3];
-const HALF = [22, 33.5, 38.5, 41.8, 44.0, 44.6, 42.6, 40, 39.2, 39.2, 39.6, 40.6, 41.3, 40.4, 37.4, 33.6, 28.2, 21, 10];
-const DIP = [0, 0.5, 1.5, 2.2, 2.5, 2.5, 1.8, 0.5, 0, 0, 0, 2, 3, 2.8, 2, 1.2, 0.5, 0, 0];
-const NT = [2.4, 2.6, 2.8, 3, 3.2, 3.2, 3.2, 3.4, 3.4, 3.4, 3.2, 3.2, 3.2, 3.2, 3, 2.8, 2.6, 2.4, 2.2];
-const NB = [2.6, 3, 3.4, 3.6, 3.8, 3.8, 3.8, 3.8, 3.8, 3.8, 3.8, 3.8, 3.8, 3.6, 3.4, 3, 2.8, 2.6, 2.4];
-// greenhouse
-const GZ = [-35, -31, -24, -16, -8, 0, 8, 16, 24, 31, 36.5, 38.6];
-const ROOF = [21.6, 23.6, 27.4, 30.8, 32.6, 33.2, 33, 31.6, 27.8, 23.3, 19.5, 17];
-const GHALF = [30, 32, 33.5, 34, 34, 33.8, 33.5, 33, 32, 30.5, 29, 27];
+// Octane-style shell: wedge nose, bulging fenders, tall cab, short rear deck that carries
+// the exposed engine. Stations run from the tail (-z) to the nose (+z).
+const KZ = [-46.2, -45.5, -44.4, -40, -34, -26, -18, -8, 4, 16, 26, 34, 44, 51, 58, 65, 70, 73, 74.4];
+const TOP = [13, 18.5, 21, 21.8, 22.2, 21.5, 19.5, 17.6, 16.8, 16.4, 16.2, 16, 16.4, 16.6, 15.4, 11.6, 7.4, 3.8, 0.8];
+const BOT = [2, 0, -1.5, -2.5, -3, -3, -3.2, -3.2, -3.2, -3.2, -3.2, -3.2, -3, -2.8, -2.4, -2, -1.6, -1.2, -0.8];
+const CY = [8, 11, 12.5, 13.5, 14, 13, 11, 9.5, 8.8, 8.6, 8.6, 9, 9.8, 10.2, 9.4, 7, 4.4, 1.8, 0];
+const HALF = [30, 34.5, 36.5, 37.5, 38, 37, 35, 34, 34, 34.5, 36.2, 38.8, 40.6, 41, 39.8, 36, 30.5, 24, 17];
+const DIP = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 3.4, 5, 5.4, 4.6, 3.2, 1.8, 0.6, 0];
+const NT = [3.4, 4, 4.6, 5, 5.2, 5.4, 5.6, 5.8, 5.8, 5.8, 5.6, 5, 4.6, 4.6, 4.4, 4, 3.4, 3, 2.6];
+const NB = [3.4, 4.5, 5.5, 6, 6, 6, 6, 6, 6, 6, 6, 6, 5.5, 5, 4.8, 4.4, 4, 3.4, 3];
+// greenhouse: compact, angular cab set back on the body
+const GZ = [-22.5, -19, -14, -8, -1, 6, 11, 16.5, 21.5, 25.5, 28.5];
+const ROOF = [21, 26.4, 31.6, 34.6, 35.4, 35.4, 34.6, 30.6, 25.6, 20.8, 16.4];
+const GHALF = [27.5, 28.5, 29.5, 30, 30, 29.8, 29.5, 29, 28, 27, 25.5];
 
 // monotone cubic interpolation (no overshoot between keys)
 function interp(xs, ys) {
@@ -72,10 +73,11 @@ function outline(sec, th) {
 }
 
 // wheel openings
+export const tyreHalf = (r) => (r < 14 ? 6.5 : 8);
 const ARCHES = CAR.wheels.filter((w) => w.x > 0).map((w) => {
-  const half = w.r < 14 ? 5.5 : 6.5;
+  const half = tyreHalf(w.r);
   const px = Math.abs(w.x) + 7;
-  return { z: w.z, cy: -CAR.restHeight + w.r, R: w.r + 3.6, inner: px - half - 2.2 };
+  return { z: w.z, cy: -CAR.restHeight + w.r, R: w.r + (w.front ? 3.4 : 5.2), inner: px - half - 2.2 };
 });
 
 function archAt(z) {
@@ -144,7 +146,7 @@ function buildBody(q) {
   for (const z of zs) {
     const sec = section(z);
     const ar = archAt(z);
-    const lipY = ar ? ar.y : Math.min(sec.cy - 1, -6.8);
+    const lipY = ar ? ar.y : Math.min(sec.cy - 1, -0.5);
     const thLip = thetaAtY(sec, lipY);
     const A = resample((t) => outline(sec, t), 0, thLip, MA);
     let B, C;
@@ -163,17 +165,9 @@ function buildBody(q) {
       C = resample((t) => outline(sec, t), thLip, Math.PI, MC);
     }
     const right = A.concat(B.slice(1), C.slice(1)); // side + 1 points
-    // side intakes ahead of the rear wheels (mid-engine look)
-    for (let k = 0; k < right.length; k++) {
-      const [x, y] = right[k];
-      const bz = THREE.MathUtils.smoothstep(z, -22, -18) * (1 - THREE.MathUtils.smoothstep(z, -9, -5));
-      const by = THREE.MathUtils.smoothstep(y, -2, 2) * (1 - THREE.MathUtils.smoothstep(y, 9, 13));
-      if (k <= MA && bz * by > 0) right[k] = [x - 4.5 * bz * by * Math.min(1, (x / sec.a - 0.7) * 4), y];
-    }
     const isDark = (k, x, y, z2) => {
       if (k > MA + (ar ? 0 : MB)) return 1; // wheel wells, sills, under-tray
-      const bz = z2 > -21 && z2 < -6 && y > -1 && y < 12 && x > sec.a - 3.5;
-      return bz ? 1 : 0;
+      return z2 < -44.6 ? 1 : 0; // the tail is the dark rear frame
     };
     // ring: right side top -> bottom, then left side bottom -> top (no repeats)
     for (let k = 0; k <= side; k++) { const [x, y] = right[k]; pos.push(-x, y, z); dark.push(isDark(k, x, y, z)); }
@@ -246,20 +240,32 @@ function buildGreenhouse(q) {
   for (let z = GZ[0]; z < GZ[GZ.length - 1]; z += q.step) zs.push(z);
   zs.push(GZ[GZ.length - 1]);
   const ringN = 2 * M + 1;
-  const pos = [], base = [];
-  for (const z of zs) {
+  const pos = [], cat = [];
+  const sections = zs.map((z) => {
     const gb = G.half(z);
     const yb = bodyTopAt(z, gb) - 0.7;
     const h = Math.max(0.25, G.roof(z) - yb);
     const pts = resample((th) => {
       const s = Math.sin(th), c = Math.cos(th);
-      const y = yb + h * Math.pow(Math.max(0, c), 2 / 2.7);
-      const tumble = 1 - 0.27 * Math.pow((y - yb) / h, 1.6);
-      return [gb * Math.pow(Math.max(0, s), 2 / 2.7) * tumble, y];
+      const y = yb + h * Math.pow(Math.max(0, c), 2 / 5);
+      const tumble = 1 - 0.2 * Math.pow((y - yb) / h, 1.2);
+      return [gb * Math.pow(Math.max(0, s), 2 / 5) * tumble, y];
     }, 0, Math.PI / 2, M);
+    return { z, h, pts };
+  });
+  // where the tallest section turns from roof to side; the same profile index is used
+  // everywhere so the glass edges run in clean lines along the car
+  const tall = sections.reduce((a, b) => (b.h > a.h ? b : a));
+  let corner = M;
+  for (let k = 0; k < M; k++) {
+    const p = tall.pts;
+    if (Math.abs(p[k + 1][1] - p[k][1]) > Math.abs(p[k + 1][0] - p[k][0])) { corner = k; break; }
+  }
+  const band = (k) => (k >= M - 1 ? 3 : k > corner + 1 ? 2 : k >= corner - 1 ? 1 : 0); // 0 top, 1 rail, 2 side, 3 seal
+  for (const { z, pts } of sections) {
     // left base .. roof .. right base
-    for (let k = M; k >= 0; k--) { pos.push(pts[k][0], pts[k][1], z); base.push(M - k); }
-    for (let k = 1; k <= M; k++) { pos.push(-pts[k][0], pts[k][1], z); base.push(M - k); }
+    for (let k = M; k >= 0; k--) { pos.push(pts[k][0], pts[k][1], z); cat.push(band(k)); }
+    for (let k = 1; k <= M; k++) { pos.push(-pts[k][0], pts[k][1], z); cat.push(band(k)); }
   }
   const S = zs.length;
   const idx = [];
@@ -269,30 +275,18 @@ function buildGreenhouse(q) {
       idx.push(a, b, c, b, d, c);
     }
   }
-  // classify: 0 paint (roof, pillars), 1 glass, 2 black trim
-  const g0 = new THREE.BufferGeometry();
-  g0.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
-  g0.setIndex(idx);
-  g0.computeVertexNormals();
-  const P = g0.attributes.position;
-  const vA = new THREE.Vector3(), vB = new THREE.Vector3(), vC = new THREE.Vector3(), n = new THREE.Vector3(), e1 = new THREE.Vector3(), e2 = new THREE.Vector3();
+  // materials: 0 paint (roof, pillars, rails), 1 glass, 2 black trim
   const tri = [];
-  for (let t = 0; t < idx.length / 3; t++) {
-    // both triangles of a quad share a material so the glass edges don't zig-zag
-    if (t % 2 === 1) { tri.push(tri[t - 1]); continue; }
-    const ia = idx[t * 3], ib = idx[t * 3 + 1], ic = idx[t * 3 + 2];
-    vA.fromBufferAttribute(P, ia); vB.fromBufferAttribute(P, ib); vC.fromBufferAttribute(P, ic);
-    n.crossVectors(e1.subVectors(vB, vA), e2.subVectors(vC, vA)).normalize();
-    const z = (vA.z + vB.z + vC.z) / 3;
-    const ax = Math.abs(n.x);
-    const minBase = Math.min(base[ia], base[ib], base[ic]);
-    let m = 1;
-    if (minBase <= 0 && Math.max(base[ia], base[ib], base[ic]) <= 1) m = 2; // window seal along the beltline
-    else if (ax > 0.4 && ax < 0.84) m = 0; // pillars and roof rails
-    else if (z > -7 && z < 15 && n.y > 0.72) m = 0; // roof panel
-    else if (z > -3.2 && z < 0.6 && ax >= 0.84) m = 2; // B-pillar
-    else if (Math.abs(n.z) > 0.25 && n.y < 0.8 && ax < 0.4 && z < -27) m = 0; // short tail of the fastback
-    tri.push(m);
+  for (let t = 0; t < idx.length / 3; t += 2) {
+    const ia = idx[t * 3], ib = idx[t * 3 + 1];
+    const c = Math.max(cat[ia], cat[ib]);
+    const z = pos[ia * 3 + 2];
+    let m;
+    if (c === 3) m = 2;
+    else if (c === 2) m = z > -3.2 && z < 0.8 ? 2 : 1; // side glass with a black B-pillar
+    else if (c === 1) m = 0;
+    else m = z > 11 || z < -9 ? 1 : 0; // windscreen and rear glass, painted roof
+    tri.push(m, m);
   }
   return grouped(pos, idx, tri, 3);
 }
@@ -363,24 +357,19 @@ function headlightTextures() {
   return { map: texOf(c), emissiveMap: texOf(e) };
 }
 
-// full-width LED light bar
-function tailTextures() {
-  const W = 512, H = 40;
-  const c = canvas(W, H), e = canvas(W, H);
-  const g = c.getContext('2d'), ge = e.getContext('2d');
-  roundRect(g, 4, 6, W - 8, H - 12, 12);
-  g.fillStyle = '#2a0204';
-  g.fill();
-  g.strokeStyle = '#151618';
-  g.lineWidth = 4;
-  g.stroke();
-  ge.fillStyle = '#000';
-  ge.fillRect(0, 0, W, H);
-  ge.fillStyle = '#ff2030';
-  roundRect(ge, 14, 15, W - 28, 6, 3);
-  ge.fill();
-  for (const x of [20, W - 110]) { roundRect(ge, x, 11, 90, 14, 6); ge.fill(); }
-  return { map: texOf(c), emissiveMap: texOf(e) };
+// round tail lamp: bright ring and a dimmer centre
+function lampTexture() {
+  const c = canvas(64, 64);
+  const g = c.getContext('2d');
+  const rg = g.createRadialGradient(32, 32, 2, 32, 32, 31);
+  rg.addColorStop(0, '#4a0a0c');
+  rg.addColorStop(0.45, '#c01822');
+  rg.addColorStop(0.62, '#ffffff');
+  rg.addColorStop(0.75, '#ff3a40');
+  rg.addColorStop(1, '#5a0306');
+  g.fillStyle = rg;
+  g.fillRect(0, 0, 64, 64);
+  return texOf(c);
 }
 
 // door and engine-cover shut lines, door handle
@@ -406,49 +395,24 @@ function panelLineTexture() {
   return texOf(c);
 }
 
-// honeycomb grille, alpha-shaped
-function grilleTexture(shape) {
-  const W = 256, H = 64;
+// twin hood vents
+function hoodVentTexture() {
+  const W = 256, H = 128;
   const c = canvas(W, H);
   const g = c.getContext('2d');
-  g.save();
-  shape(g, W, H);
-  g.clip();
-  g.fillStyle = '#060607';
-  g.fillRect(0, 0, W, H);
-  g.strokeStyle = '#2c2f34';
-  g.lineWidth = 1.5;
-  const r = 4.5;
-  for (let y = 0, row = 0; y < H + r; y += r * 1.5, row++) {
-    for (let x = (row % 2) * r * 0.866; x < W + r; x += r * 1.732) {
-      g.beginPath();
-      for (let k = 0; k < 6; k++) { const a = (Math.PI / 3) * k + Math.PI / 6; g.lineTo(x + Math.cos(a) * r, y + Math.sin(a) * r); }
-      g.closePath();
-      g.stroke();
-    }
-  }
-  g.restore();
-  g.strokeStyle = '#1a1c20';
-  g.lineWidth = 4;
-  shape(g, W, H);
-  g.stroke();
-  return texOf(c);
-}
-
-function louverTexture() {
-  const W = 256, H = 160;
-  const c = canvas(W, H);
-  const g = c.getContext('2d');
-  roundRect(g, 4, 4, W - 8, H - 8, 18);
-  g.fillStyle = '#0a0b0d';
-  g.fill();
-  for (let y = 18; y < H - 14; y += 13) {
-    const gr = g.createLinearGradient(0, y, 0, y + 9);
-    gr.addColorStop(0, '#3a3e45');
-    gr.addColorStop(1, '#121417');
-    g.fillStyle = gr;
-    roundRect(g, 16, y, W - 32, 8, 4);
+  g.clearRect(0, 0, W, H);
+  for (const x0 of [22, 140]) {
+    g.beginPath();
+    g.moveTo(x0, 100); g.lineTo(x0 + 94, 100); g.lineTo(x0 + 80, 30); g.lineTo(x0 + 14, 30); g.closePath();
+    g.fillStyle = '#08090b';
     g.fill();
+    g.strokeStyle = 'rgba(255,255,255,0.12)';
+    g.lineWidth = 2;
+    g.stroke();
+    for (let y = 40; y < 96; y += 11) {
+      g.fillStyle = '#25282d';
+      g.fillRect(x0 + 12 + (100 - y) * 0.2, y, 70 - (100 - y) * 0.4, 4);
+    }
   }
   return texOf(c);
 }
@@ -485,7 +449,7 @@ function decal(mesh, position, dir, size, up = null, flipU = false) {
 // ------------------------------------------------------------------ wheels
 function buildWheel(r, half, q) {
   const seg = q.wheelSeg;
-  const rimR = r * 0.68;
+  const rimR = r * 0.6;
   const toAxleX = (g) => g.rotateZ(-Math.PI / 2); // lathe axis Y -> car X (outer face +x)
   // tyre: rounded sidewalls with a flat tread band
   const tread = new THREE.LatheGeometry([
@@ -511,9 +475,9 @@ function buildWheel(r, half, q) {
   lip.translate(half * 0.8, 0, 0);
   // five double spokes, dished toward the hub
   const spokes = [];
-  const n = 10;
+  const n = 6;
   for (let i = 0; i < n; i++) {
-    const g = new THREE.BoxGeometry(1.3, rimR - r * 0.2, 1.5, 1, 4, 1);
+    const g = new THREE.BoxGeometry(1.4, rimR - r * 0.2, 2.6, 1, 4, 1);
     g.translate(0, (rimR + r * 0.2) / 2 - 0.2, 0);
     const p = g.attributes.position;
     for (let k = 0; k < p.count; k++) {
@@ -522,7 +486,7 @@ function buildWheel(r, half, q) {
       p.setZ(k, p.getZ(k) * (1.25 - 0.45 * f)); // taper
       p.setX(k, p.getX(k) + half * (0.48 + 0.3 * f)); // concave face
     }
-    g.rotateX(((i - (i % 2)) / n) * Math.PI * 2 + (i % 2 ? 0.2 : -0.2) + 0.3);
+    g.rotateX((i / n) * Math.PI * 2 + 0.3);
     spokes.push(g);
   }
   const hub = new THREE.CylinderGeometry(r * 0.22, r * 0.24, 1.6, 20);
@@ -600,28 +564,19 @@ export function carGeometry(quality = 'high') {
   ghMesh.updateMatrixWorld(true);
   const V = (x, y, z) => new THREE.Vector3(x, y, z);
   const decals = {
-    headR: decal(bodyMesh, V(-28.5, 5, 76.5), V(-0.62, 0.22, 0.75).normalize(), V(17, 7.4, 12)),
-    headL: decal(bodyMesh, V(28.5, 5, 76.5), V(0.62, 0.22, 0.75).normalize(), V(17, 7.4, 12), null, false),
-    tail: decal(bodyMesh, V(0, 14.2, -57), V(0, 0.15, -1).normalize(), V(72, 5.6, 9)),
-    doorR: decal(bodyMesh, V(-40, 5, 12.5), V(-1, 0, 0), V(41, 26, 9)),
-    doorL: decal(bodyMesh, V(40, 5, 12.5), V(1, 0, 0), V(41, 26, 9)),
-    numR: decal(bodyMesh, V(-40, 3.5, 10), V(-1, 0, 0), V(21, 12.5, 9)),
-    numL: decal(bodyMesh, V(40, 3.5, 10), V(1, 0, 0), V(21, 12.5, 9)),
-    scoopR: decal(bodyMesh, V(-41, 5.2, -13.5), V(-1, 0, 0), V(15.5, 13, 12)),
-    scoopL: decal(bodyMesh, V(41, 5.2, -13.5), V(1, 0, 0), V(15.5, 13, 12)),
-    grille: decal(bodyMesh, V(0, -3.2, 83), V(0, 0.05, 1).normalize(), V(52, 7, 10)),
-    louvers: decal(bodyMesh, V(0, 22, -45.5), V(0, 1, 0), V(30, 16, 8), V(0, 0, -1)),
-    badge: decal(bodyMesh, V(0, 3.4, 81.6), V(0, 0.55, 0.84).normalize(), V(5.5, 5.5, 6)),
+    headR: decal(bodyMesh, V(-23, 7, 69), V(-0.45, 0.55, 0.7).normalize(), V(13, 6, 10)),
+    headL: decal(bodyMesh, V(23, 7, 69), V(0.45, 0.55, 0.7).normalize(), V(13, 6, 10)),
+    doorR: decal(bodyMesh, V(-34.5, 7, 8), V(-1, 0, 0), V(40, 21, 9)),
+    doorL: decal(bodyMesh, V(34.5, 7, 8), V(1, 0, 0), V(40, 21, 9)),
+    numR: decal(bodyMesh, V(-34.5, 7.5, 5), V(-1, 0, 0), V(19, 11.5, 9)),
+    numL: decal(bodyMesh, V(34.5, 7.5, 5), V(1, 0, 0), V(19, 11.5, 9)),
+    hoodVents: decal(bodyMesh, V(0, 11.5, 50), V(0, 1, 0.25).normalize(), V(24, 13, 8), V(0, 0, 1)),
+    badge: decal(bodyMesh, V(0, 4, 72.6), V(0, 0.6, 0.8).normalize(), V(4.5, 4.5, 6)),
   };
-  // mirror the left-side textures so they read correctly
-  for (const k of ['headR', 'doorR', 'numR', 'scoopR']) {
-    const uv = decals[k].attributes.uv;
-    for (let i = 0; i < uv.count; i++) uv.setX(i, 1 - uv.getX(i));
-  }
+  // (each side's projector faces outward, so its texture already reads correctly)
   const wheels = {};
   for (const w of CAR.wheels) {
-    const half = w.r < 14 ? 5.5 : 6.5;
-    if (!wheels[w.r]) wheels[w.r] = buildWheel(w.r, half, q);
+    if (!wheels[w.r]) wheels[w.r] = buildWheel(w.r, tyreHalf(w.r), q);
   }
   const all = [body, greenhouse, ...Object.values(decals)];
   for (const wset of Object.values(wheels)) all.push(...Object.values(wset));
@@ -635,11 +590,9 @@ export function carTextures() {
   if (tex) return tex;
   tex = {
     head: headlightTextures(),
-    tail: tailTextures(),
+    lamp: lampTexture(),
     panel: panelLineTexture(),
-    grille: grilleTexture((g, W, H) => { g.beginPath(); g.moveTo(6, 10); g.lineTo(W - 6, 10); g.lineTo(W - 34, H - 6); g.lineTo(34, H - 6); g.closePath(); }),
-    scoop: grilleTexture((g, W, H) => { g.beginPath(); g.moveTo(16, 10); g.lineTo(W - 8, 4); g.lineTo(W - 20, H - 6); g.lineTo(30, H - 10); g.closePath(); }),
-    louvers: louverTexture(),
+    vents: hoodVentTexture(),
     badge: badgeTexture(),
   };
   return tex;
