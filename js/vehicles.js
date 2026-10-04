@@ -1,42 +1,16 @@
 import * as THREE from 'three';
 import { VEHICLE } from './config.js';
-import { GeoBuilder } from './world/geobuilder.js';
+import { truckGeometry, modelMaterial } from './zh/models.js';
 import { clamp } from './util.js';
 
-const COLORS = ['#c0392b', '#2f6dd0', '#e0a030', '#3fae6a', '#8a5a9a', '#e8e8e8'];
-const geoCache = new Map();
-
-function truckGeometry(color) {
-  if (geoCache.has(color)) return geoCache.get(color);
-  const gb = new GeoBuilder();
-  gb.jitter = 0;
-  // front of the truck faces -Z
-  gb.box(-1.05, 0.45, -2.4, 1.05, 1.1, 2.4, color);
-  gb.box(-1.0, 1.1, -1.5, 1.0, 2.0, 0.1, color);
-  gb.box(-0.95, 1.25, -1.55, 0.95, 1.9, -1.48, '#2c3a45');
-  gb.box(-1.02, 1.25, -1.35, 1.02, 1.85, -0.2, '#2c3a45');
-  gb.box(-1.05, 1.1, 0.2, -0.95, 1.6, 2.4, color);
-  gb.box(0.95, 1.1, 0.2, 1.05, 1.6, 2.4, color);
-  gb.box(-1.05, 1.1, 2.3, 1.05, 1.6, 2.4, color);
-  gb.box(-1.1, 0.35, -2.5, 1.1, 0.6, -2.35, '#9aa3ad');
-  gb.box(-1.1, 0.35, 2.35, 1.1, 0.6, 2.5, '#9aa3ad');
-  gb.box(-0.9, 0.75, -2.45, -0.55, 0.95, -2.39, '#fff6b0');
-  gb.box(0.55, 0.75, -2.45, 0.9, 0.95, -2.39, '#fff6b0');
-  gb.box(-0.9, 0.75, 2.39, -0.55, 0.95, 2.45, '#e04a3a');
-  gb.box(0.55, 0.75, 2.39, 0.9, 0.95, 2.45, '#e04a3a');
-  for (const [x, z] of [[-1.05, -1.6], [1.05, -1.6], [-1.05, 1.6], [1.05, 1.6]]) gb.box(x - 0.18, 0, z - 0.45, x + 0.18, 0.9, z + 0.45, '#1e1e1e', false);
-  const g = gb.build();
-  geoCache.set(color, g);
-  return g;
-}
-
+const COLORS = ['#4a5a3a', '#7a2a22', '#2f4f6f', '#c9a23a', '#3a3f45', '#d8d8d0'];
 export class Vehicle {
   constructor(game, spot, color) {
     this.game = game;
     this.kind = 'vehicle';
     this.spawn = spot;
     this.color = color;
-    this.mesh = new THREE.Mesh(truckGeometry(color), new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.55, metalness: 0.2 }));
+    this.mesh = new THREE.Mesh(truckGeometry(color), modelMaterial());
     this.mesh.castShadow = true;
     this.mesh.receiveShadow = true;
     this.root = new THREE.Group();

@@ -1,51 +1,10 @@
 import * as THREE from 'three';
 import { MAP } from './config.js';
-import { GeoBuilder, worldMaterial } from './world/geobuilder.js';
-import { makeGlowTexture } from './world/structures.js';
+import { busModel } from './zh/models.js';
 
-// The "Sky Coach": a bus carried across the island by a hot-air balloon.
+// The "Sky Coach": a bus carried across the island by a hot-air balloon (model in zh/models.js).
 export function buildBusModel() {
-  const g = new THREE.Group();
-  const gb = new GeoBuilder();
-  gb.jitter = 0;
-  // bus body (front faces -Z)
-  gb.box(-1.3, 0, -3.2, 1.3, 2.6, 3.2, '#2f6dd0');
-  gb.box(-1.32, 1.3, -3.0, 1.32, 2.2, 2.6, '#bfe4ff');
-  for (let z = -2.6; z < 2.6; z += 1.1) gb.box(-1.34, 1.3, z, 1.34, 2.2, z + 0.12, '#2f6dd0');
-  gb.box(-1.2, 0.9, -3.25, 1.2, 2.2, -3.18, '#bfe4ff');
-  gb.box(-1.31, 0.3, -3.2, 1.31, 0.6, 3.2, '#f0c040');
-  gb.box(-1.0, 2.6, -2.5, 1.0, 2.9, 2.5, '#244f9a');
-  for (const [x, z] of [[-1.2, -2.2], [1.2, -2.2], [-1.2, 2.2], [1.2, 2.2]]) gb.box(x - 0.2, -0.45, z - 0.45, x + 0.2, 0.45, z + 0.45, '#1e1e1e');
-  gb.box(-1.0, 0.4, -3.3, -0.6, 0.8, -3.2, '#fff6b0');
-  gb.box(0.6, 0.4, -3.3, 1.0, 0.8, -3.2, '#fff6b0');
-  // ropes
-  for (const [x, z] of [[-1.1, -2.8], [1.1, -2.8], [-1.1, 2.8], [1.1, 2.8]]) {
-    const top = [x * 2.2, 9, z * 1.1];
-    gb.boxRot((x + top[0]) / 2, 2.9, (z + top[2]) / 2, 0.06, 6.4, 0.06, 0, '#d8d0c0');
-  }
-  // burner + balloon
-  gb.cylinder(0, 8.6, 0, 0.6, 0.8, 0.8, 8, '#555');
-  const cols = ['#e84a5f', '#ffffff', '#2f6dd0', '#f0c040'];
-  for (let i = 0; i < 16; i++) {
-    const a0 = (i / 16) * Math.PI * 2, a1 = ((i + 1) / 16) * Math.PI * 2;
-    const col = gb.rgb(cols[i % 4]);
-    for (let j = 0; j < 9; j++) {
-      const t0 = (j / 9) * Math.PI, t1 = ((j + 1) / 9) * Math.PI;
-      const rr = (t) => Math.sin(t) * 7 * (t > Math.PI * 0.6 ? 1 - (t - Math.PI * 0.6) * 0.45 : 1);
-      const P = (t, a) => [Math.cos(a) * rr(t), 17 + Math.cos(t) * 8, Math.sin(a) * rr(t)];
-      gb.triOut(P(t0, a0), P(t1, a0), P(t1, a1), col, 0, 17, 0);
-      gb.triOut(P(t0, a0), P(t1, a1), P(t0, a1), col, 0, 17, 0);
-    }
-  }
-  const mesh = new THREE.Mesh(gb.build(), worldMaterial());
-  mesh.castShadow = true;
-  g.add(mesh);
-  const flame = new THREE.Sprite(new THREE.SpriteMaterial({ map: makeGlowTexture(), color: 0xff9a30, blending: THREE.AdditiveBlending, depthWrite: false }));
-  flame.position.set(0, 9.6, 0);
-  flame.scale.setScalar(2.2);
-  g.add(flame);
-  g.userData.flame = flame;
-  return g;
+  return busModel();
 }
 
 export class Bus {
@@ -94,7 +53,7 @@ export class Bus {
     this.pointAt(this.progress, this.pos);
     this.model.position.copy(this.pos);
     this.model.position.y += Math.sin(this.t * 1.3) * 0.4;
-    this.model.userData.flame.scale.setScalar(2 + Math.sin(this.t * 17) * 0.4);
+    this.model.userData.flame.scale.setScalar(2.2 + Math.sin(this.t * 17) * 0.35 + Math.sin(this.t * 5.3) * 0.2);
     for (const a of this.game.actors) {
       if (a.alive && a.mode === 'bus') a.pos.copy(this.pos);
     }

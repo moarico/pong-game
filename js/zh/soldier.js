@@ -6,7 +6,7 @@ import * as THREE from 'three';
 import { partGeo2, Bx, Sp, Dm, TL, CYL, CYL8, mulC, cnv, damp, TAU } from './parts.js';
 import { weaponGeo, pickaxeGeo, healGeo, gunMaterial, gunDefs, ZH_ID } from './guns.js';
 import { zhTextures } from './textures.js';
-import { GeoBuilder } from '../world/geobuilder.js';
+import { gliderModel } from './models.js';
 
 const lerp = (a, b, t) => a + (b - a) * t;
 const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
@@ -196,51 +196,6 @@ function soldierGeos(o, v) {
   return out;
 }
 
-// ---------- gliders (one per outfit, built once) ----------
-
-const GLIDERS = new Map();
-function gliderGeo(o) {
-  if (GLIDERS.has(o.id)) return GLIDERS.get(o.id);
-  const gb = new GeoBuilder();
-  gb.jitter = 0;
-  const c1 = gb.rgb(o.primary), c2 = gb.rgb(o.accent), c3 = gb.rgb(o.secondary), bar = gb.rgb('#2a2c30');
-  switch (o.glider) {
-    case 'para':
-      for (let i = 0; i < 7; i++) {
-        const a0 = -0.9 + (i / 7) * 1.8, a1 = -0.9 + ((i + 1) / 7) * 1.8;
-        const p = (a, z) => [Math.sin(a) * 1.8, Math.cos(a) * 0.7 - 0.2, z];
-        const col = i % 2 ? c1 : c2;
-        gb.quad(p(a0, -0.6), p(a1, -0.6), p(a1, 0.6), p(a0, 0.6), col);
-        gb.quad(p(a0, 0.6), p(a1, 0.6), p(a1, -0.6), p(a0, -0.6), col);
-      }
-      for (const s of [-1, 1]) gb.boxRot(s * 0.75, -0.9, 0, 0.02, 1.3, 0.02, 0, gb.rgb('#ddd'));
-      break;
-    case 'moth':
-    case 'bird':
-      for (const s of [-1, 1]) {
-        const col = o.glider === 'moth' ? c3 : c1;
-        gb.tri([0, 0.1, -0.3], [s * 2.0, 0.5, -0.6], [s * 1.6, 0.0, 0.8], col);
-        gb.tri([0, 0.1, -0.3], [s * 1.6, 0.0, 0.8], [s * 2.0, 0.5, -0.6], col);
-        gb.tri([0, 0.1, -0.3], [s * 1.2, 0.2, 0.3], [s * 0.4, 0.05, 0.9], c2);
-        gb.tri([0, 0.1, -0.3], [s * 0.4, 0.05, 0.9], [s * 1.2, 0.2, 0.3], c2);
-      }
-      gb.box(-0.03, -0.9, -0.03, 0.03, 0.1, 0.03, bar);
-      gb.box(-0.5, -0.9, -0.03, 0.5, -0.86, 0.03, bar);
-      break;
-    default:
-      gb.tri([0, 0.3, -1.2], [-1.6, 0, 0.6], [0, 0.12, 0.3], c1);
-      gb.tri([0, 0.3, -1.2], [0, 0.12, 0.3], [1.6, 0, 0.6], c2);
-      gb.tri([0, 0.3, -1.2], [0, 0.12, 0.3], [-1.6, 0, 0.6], c1);
-      gb.tri([0, 0.3, -1.2], [1.6, 0, 0.6], [0, 0.12, 0.3], c2);
-      gb.box(-0.03, -0.9, -0.03, 0.03, 0.12, 0.03, bar);
-      gb.box(-0.5, -0.9, -0.03, 0.5, -0.86, 0.03, bar);
-  }
-  const g = gb.build();
-  GLIDERS.set(o.id, g);
-  return g;
-}
-let GLIDERMAT = null;
-
 // ---------- the model ----------
 
 export class CharacterModel {
@@ -316,8 +271,7 @@ export class CharacterModel {
     }
     this.glider = new THREE.Group();
     this.glider.position.set(0, 2.55, 0);
-    if (!GLIDERMAT) GLIDERMAT = new THREE.MeshLambertMaterial({ vertexColors: true, side: THREE.DoubleSide });
-    this.glider.add(new THREE.Mesh(gliderGeo(outfit), GLIDERMAT));
+    this.glider.add(gliderModel(outfit));
     this.glider.visible = false;
     this.root.add(this.glider);
     this.held = null;

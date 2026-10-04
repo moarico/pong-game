@@ -27,6 +27,7 @@ import { fabricMat } from './zh/soldier.js';
 import { PostChain, hdrSupported } from './zh/post.js';
 import { DAY } from './zh/atmos.js';
 import { GrassField } from './world/grass.js';
+import { TitleCinematic } from './cinematic.js';
 
 const SETTINGS_KEY = 'stormdrop-settings-v1';
 const DEFAULTS = {
@@ -89,6 +90,8 @@ class Game {
       if (this.state === 'playing' && !this.input.locked && !this.menus.invOpen) this.input.requestLock();
     });
     this.menus.show('title');
+    // Build the island behind the title screen; once it exists the title becomes a live flyover.
+    setTimeout(() => this.preloadWorld(), 400);
     this.last = performance.now();
     requestAnimationFrame((t) => this.loop(t));
     window.game = this;
@@ -121,6 +124,15 @@ class Game {
   }
 
   // ---------- world ----------
+
+  preloadWorld() {
+    if (!this.loadingPromise) {
+      this.loadingPromise = this.loadWorld().then(() => {
+        this.cinematic = new TitleCinematic(this);
+      });
+    }
+    return this.loadingPromise;
+  }
 
   async loadWorld() {
     const step = async (f, label) => {
@@ -192,7 +204,8 @@ class Game {
     this.menus.toggleInventory(false);
     this.menus.startLoading();
     await tick();
-    if (!this.worldReady) await this.loadWorld();
+    if (!this.worldReady) await this.preloadWorld();
+    if (this.cinematic) this.cinematic.stop();
     this.menus.setLoading(0.85, 'Hiding loot...');
     await tick();
     this.resetMatch();
@@ -409,7 +422,18 @@ class Game {
       this.renderWorld();
     } else {
       this.menus.updatePad();
-      if (this.lobby.active) {
+      const titleLive = this.state === 'title' && this.menus.current === 'title' && this.cinematic && this.worldReady;
+      this.menus.screens.title.classList.toggle('live', !!titleLive);
+      if (titleLive) {
+        this.dt = dt;
+        this.cinematic.start();
+        this.cinematic.update(dt);
+        this.renderWorld();
+        this.cinematic.maybeCapture();
+      } else if (this.cinematic && this.cinematic.active && this.state !== 'title') this.cinematic.stop();
+      if (titleLive) {
+        // the flyover is the backdrop
+      } else if (this.lobby.active) {
         this.lobby.update(dt);
         this.renderer.render(this.lobby.scene, this.lobby.camera);
       } else if ((this.state === 'paused' || this.state === 'end') && this.worldReady) {

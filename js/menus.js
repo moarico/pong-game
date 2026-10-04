@@ -267,7 +267,17 @@ export class Menus {
     const v = variants[Math.floor(Math.random() * variants.length)];
     this.show('loading');
     const cv = $('canvas.art', this.screens.loading);
-    paintArt(cv, v, Math.floor(Math.random() * 1000));
+    // key art: a frame of the island flyover if one was captured, else the painted art
+    const shots = this.game.cinematic ? this.game.cinematic.shots : [];
+    const L = this.screens.loading;
+    if (shots.length) {
+      L.style.backgroundImage = `url(${shots[Math.floor(Math.random() * shots.length)]})`;
+      L.classList.add('keyart');
+    } else {
+      L.style.backgroundImage = '';
+      L.classList.remove('keyart');
+      paintArt(cv, v, Math.floor(Math.random() * 1000));
+    }
     $('#ld-tip').textContent = TIPS[Math.floor(Math.random() * TIPS.length)];
     this.setLoading(0, 'Preparing the island...');
   }

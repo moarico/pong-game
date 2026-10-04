@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { LOOT, WEAPONS, RARITY, AMMO_PICKUP } from './config.js';
 import { itemModel, itemName, makeAmmo, makeMat, randomWeapon, randomHeal, makeHeal } from './items.js';
-import { GeoBuilder } from './world/geobuilder.js';
+import { chestParts, supplyParts, modelMaterial } from './zh/models.js';
 import { makeGlowTexture } from './world/structures.js';
 import { clamp } from './util.js';
 
@@ -12,50 +12,21 @@ const beamMats = RARITY.map((r) => new THREE.MeshBasicMaterial({ color: r.color,
 let chestGeo = null, lidGeo = null;
 function chestGeometries() {
   if (chestGeo) return;
-  const gb = new GeoBuilder();
-  gb.jitter = 0;
-  gb.box(-0.55, 0, -0.35, 0.55, 0.5, 0.35, '#8a5a2b');
-  gb.box(-0.57, 0.0, -0.37, 0.57, 0.08, 0.37, '#e0b030');
-  gb.box(-0.57, 0.42, -0.37, 0.57, 0.5, 0.37, '#e0b030');
-  gb.box(-0.6, 0, -0.1, -0.5, 0.5, 0.1, '#e0b030');
-  gb.box(0.5, 0, -0.1, 0.6, 0.5, 0.1, '#e0b030');
-  chestGeo = gb.build();
-  const lb = new GeoBuilder();
-  lb.jitter = 0;
-  // Lid pivots at its back edge (z = +0.35).
-  lb.box(-0.55, 0, -0.7, 0.55, 0.22, 0, '#9a6630');
-  lb.box(-0.57, 0.15, -0.72, 0.57, 0.24, 0.02, '#f0c040');
-  lb.box(-0.08, -0.12, -0.74, 0.08, 0.1, -0.68, '#f6d870');
-  lidGeo = lb.build();
+  const c = chestParts();
+  chestGeo = c.base;
+  lidGeo = c.lid;
 }
 
-let crateGeo = null, balloonGeo = null;
+let crateGeo = null, balloonGeo = null, linesGeo = null;
 function supplyGeometries() {
   if (crateGeo) return;
-  const gb = new GeoBuilder();
-  gb.jitter = 0;
-  gb.box(-0.9, 0, -0.9, 0.9, 1.4, 0.9, '#2f6dd0');
-  gb.box(-0.95, 0, -0.95, 0.95, 0.15, 0.95, '#f0c040');
-  gb.box(-0.95, 1.25, -0.95, 0.95, 1.42, 0.95, '#f0c040');
-  for (const [x, z] of [[-0.9, -0.9], [0.9, -0.9], [-0.9, 0.9], [0.9, 0.9]]) gb.box(x - 0.08, 0, z - 0.08, x + 0.08, 1.42, z + 0.08, '#f0c040');
-  crateGeo = gb.build();
-  const bb = new GeoBuilder();
-  bb.jitter = 0;
-  for (let i = 0; i < 8; i++) {
-    const a0 = (i / 8) * Math.PI * 2, a1 = ((i + 1) / 8) * Math.PI * 2;
-    const col = bb.rgb(i % 2 ? '#ffffff' : '#2f6dd0');
-    for (let j = 0; j < 6; j++) {
-      const t0 = (j / 6) * Math.PI, t1 = ((j + 1) / 6) * Math.PI;
-      const P = (t, a) => [Math.sin(t) * Math.cos(a) * 2.6, Math.cos(t) * 3 + 6, Math.sin(t) * Math.sin(a) * 2.6];
-      bb.triOut(P(t0, a0), P(t1, a0), P(t1, a1), col, 0, 6, 0);
-      if (j > 0) bb.triOut(P(t0, a0), P(t1, a1), P(t0, a1), col, 0, 6, 0);
-    }
-  }
-  for (const [x, z] of [[-0.8, -0.8], [0.8, -0.8], [-0.8, 0.8], [0.8, 0.8]]) bb.boxRot(x * 1.2, 1.4, z * 1.2, 0.04, 2.4, 0.04, 0, '#dddddd');
-  balloonGeo = bb.build();
+  const c = supplyParts();
+  crateGeo = c.crate;
+  balloonGeo = c.balloon;
+  linesGeo = c.lines;
 }
 
-const vmat = () => new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.6, metalness: 0.1 });
+const vmat = () => modelMaterial();
 
 export class LootSystem {
   constructor(game) {
@@ -195,8 +166,9 @@ export class LootSystem {
     const obj = new THREE.Group();
     const crate = new THREE.Mesh(crateGeo, this.mat);
     crate.castShadow = true;
-    const balloon = new THREE.Mesh(balloonGeo, this.mat);
-    obj.add(crate, balloon);
+    const balloon = new THREE.Mesh(balloonGeo, new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.55, side: THREE.DoubleSide }));
+    balloon.castShadow = true;
+    obj.add(crate, balloon, new THREE.Mesh(linesGeo, this.mat));
     obj.position.set(x, ground + 160, z);
     this.group.add(obj);
     // Flare: a bright sprite that shoots up and hangs in the sky, plus a smoke column.

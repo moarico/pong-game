@@ -217,7 +217,7 @@ export class HUD {
       });
     }
     // hotbar
-    const sig = a.slots.map((s) => (s ? `${s.kind}${s.type}${s.rarity}${s.count ?? ''}` : '-')).join('|') + a.sel + (a.buildMode ? 'b' : '') + pad;
+    const sig = a.slots.map((s) => (s ? `${s.kind}${s.type}${s.rarity}${s.count ?? ''}${s.ammo ?? ''}` : '-')).join('|') + a.sel + (a.buildMode ? 'b' : '') + pad;
     this.set('hotbar', sig, () => {
       this.slotEls[0].classList.toggle('sel', a.sel === -1 && !a.buildMode);
       this.slotEls[0].querySelector('.skey').textContent = pad ? '' : 'H';
@@ -230,7 +230,7 @@ export class HUD {
         const url = iconUrl(s), ic = e.querySelector('.sicon');
         if (url) ic.innerHTML = `<img src="${url}" alt="">`;
         else ic.textContent = s ? iconFor(s) : '';
-        e.querySelector('.scount').textContent = s && s.kind === 'heal' ? s.count : '';
+        e.querySelector('.scount').textContent = s && s.kind === 'heal' ? s.count : s && s.kind === 'weapon' ? s.ammo : '';
         e.querySelector('.skey').textContent = pad ? '' : i + 1;
         e.title = s ? itemName(s) : '';
       }

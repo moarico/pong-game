@@ -90,15 +90,16 @@ export class LobbyStage {
     if (!this.dragging) this.spin += dt * (this.layout === 'locker' ? 0.25 : 0.4);
     const m = this.model;
     m.root.rotation.y = this.spin;
-    m.animate({ dt, mode: this.showGlider ? 'glide' : 'ground', speed: 0, pitch: 0, holding: 'pickaxe', emote: false });
+    m.setHeld(this.showGlider ? null : 'pickaxe');
+    m.animate({ dt, mode: this.showGlider ? 'glide' : 'ground', speed: 0, pitch: 0, holding: this.showGlider ? null : 'pickaxe', emote: false, onGround: true });
     m.root.position.y = this.showGlider ? 0.3 + Math.sin(performance.now() / 500) * 0.05 : 0;
     const aspect = innerWidth / innerHeight;
     this.camera.aspect = aspect;
     // Frame the model left of center in the locker so the card grid fits on the right.
     const shift = this.layout === 'locker' && aspect > 1 ? 0.9 : this.layout === 'lobby' && aspect > 1 ? -0.4 : 0;
-    const dist = this.showGlider ? 7.5 : 5.4;
-    this.camera.position.set(shift, 1.25 + (this.showGlider ? 0.8 : 0), dist);
-    this.camera.lookAt(shift, 1.0 + (this.showGlider ? 0.7 : 0), 0);
+    const dist = this.showGlider ? 11.5 : 5.4;
+    this.camera.position.set(shift * (this.showGlider ? 1.8 : 1), 1.25 + (this.showGlider ? 1.6 : 0), dist);
+    this.camera.lookAt(shift * (this.showGlider ? 1.8 : 1), 1.0 + (this.showGlider ? 1.35 : 0), 0);
     this.camera.updateProjectionMatrix();
     this.sparkles.rotation.y += dt * 0.02;
   }
