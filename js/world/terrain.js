@@ -3,6 +3,7 @@ import { MAP } from '../config.js';
 import { POIS, LAKE, MOUNTAIN, BIOMES, RIVERS, ROADS, ROAD_HALF_WIDTH, BIOME_COLORS } from './island.js';
 import { makeNoise2D, fbm, smoothstep, lerp, clamp, resamplePolyline, distToSegment } from '../util.js';
 import { GeoBuilder } from './geobuilder.js';
+import { terrainMaterial } from './terrainmat.js';
 
 export const BIOME_IDS = ['grass', 'forest', 'snow', 'desert', 'swamp', 'autumn', 'farm'];
 
@@ -72,6 +73,24 @@ const C = {
   mud: hexToRgb('#6b5a3c'),
 };
 const mix3 = (a, b, t) => [lerp(a[0], b[0], t), lerp(a[1], b[1], t), lerp(a[2], b[2], t)];
+// Splat channels for the detail textures (see groundtex.js).
+const G = { grass: 0, forest: 1, dry: 2, dirt: 3, rock: 4, sand: 5, snow: 6, paved: 7 };
+// What each biome's ground is made of.
+const BIOME_SPLAT = {
+  grass: [[G.grass, 1]],
+  forest: [[G.forest, 0.7], [G.grass, 0.3]],
+  snow: [[G.snow, 0.8], [G.rock, 0.2]],
+  desert: [[G.sand, 0.75], [G.dirt, 0.25]],
+  swamp: [[G.forest, 0.5], [G.dirt, 0.5]],
+  autumn: [[G.dry, 0.55], [G.forest, 0.45]],
+  farm: [[G.dry, 0.55], [G.grass, 0.25], [G.dirt, 0.2]],
+};
+// Move the splat weights toward one channel by t (the same blend the colors get).
+function splatTo(sp, ch, t) {
+  if (t <= 0) return;
+  for (let i = 0; i < 8; i++) sp[i] *= 1 - t;
+  sp[ch] += t;
+}
 
 export class Terrain {
   constructor(seed = 20241) {
@@ -273,19 +292,24 @@ export class Terrain {
 
   computeColors(weightsCache) {
     const N = this.N;
+    this.splat = new Float32Array((N + 1) * (N + 1) * 8);
+    const sp = new Float32Array(8);
     for (let j = 0; j <= N; j++) {
       for (let i = 0; i <= N; i++) {
         const k = j * (N + 1) + i;
         const x = -this.half + i * this.cell, z = -this.half + j * this.cell;
-        const c = this.groundColor(x, z, this.heights[k], weightsCache[k]);
+        const c = this.groundColor(x, z, this.heights[k], weightsCache[k], sp);
         this.colors[k * 3] = c[0];
         this.colors[k * 3 + 1] = c[1];
         this.colors[k * 3 + 2] = c[2];
+        this.splat.set(sp, k * 8);
       }
     }
   }
 
-  groundColor(x, z, h, w) {
+  // Ground color (biome palette) and, into sp, the splat weights of the detail textures.
+  groundColor(x, z, h, w, sp = new Float32Array(8)) {
+    sp.fill(0);
     const nA = (this.n1(x / 32, z / 32) + 1) / 2;
     const nB = (this.n3(x / 11, z / 11) + 1) / 2;
     let col = [0, 0, 0];
@@ -306,11 +330,24 @@ export class Terrain {
       col[0] += c[0] * w[name];
       col[1] += c[1] * w[name];
       col[2] += c[2] * w[name];
+      for (const [ch, f] of BIOME_SPLAT[name]) sp[ch] += f * w[name];
+    }
+    {
+      let t = 0;
+      for (let i = 0; i < 8; i++) t += sp[i];
+      if (t > 0) for (let i = 0; i < 8; i++) sp[i] /= t;
+      else sp[G.grass] = 1;
     }
     // Slope and altitude
     const s = this.slopeAtRaw(x, z);
-    if (h > 46) col = mix3(col, C.snow, smoothstep(46, 58, h));
-    if (s > 0.75) col = mix3(col, h > 50 ? C.darkRock : C.rock, smoothstep(0.75, 1.2, s) * 0.85);
+    if (h > 46) {
+      col = mix3(col, C.snow, smoothstep(46, 58, h));
+      splatTo(sp, G.snow, smoothstep(46, 58, h));
+    }
+    if (s > 0.75) {
+      col = mix3(col, h > 50 ? C.darkRock : C.rock, smoothstep(0.75, 1.2, s) * 0.85);
+      splatTo(sp, G.rock, smoothstep(0.65, 1.1, s));
+    }
     // POI ground
     for (const p of POIS) {
       const d = Math.hypot(x - p.x, z - p.z);
@@ -323,14 +360,29 @@ export class Terrain {
       } else if (p.type === 'factory' || p.type === 'power') g = C.concrete;
       else if (p.type === 'castle') g = d < p.r * 0.62 ? C.courtyard : null;
       else if (p.type === 'camp' || p.type === 'cabins') g = d < p.r * 0.4 ? C.dirt : null;
-      if (g) col = mix3(col, g, inner * (p.type === 'castle' || p.type === 'camp' || p.type === 'cabins' ? 0.8 : 0.92));
+      if (g) {
+        const t = inner * (p.type === 'castle' || p.type === 'camp' || p.type === 'cabins' ? 0.8 : 0.92);
+        col = mix3(col, g, t);
+        splatTo(sp, g === C.dirt ? G.dirt : G.paved, t);
+      }
     }
     // Shores, river banks and underwater
     const coast = this.coastDistance(x, z);
-    if (h < 2.4 && (coast > 0.8 || w.desert > 0.5)) col = mix3(col, C.sand, smoothstep(2.4, 1.0, h));
-    if (h < 1.2 && w.swamp > 0.5) col = mix3(col, C.mud, smoothstep(1.2, 0.2, h));
-    else if (h < 1.0) col = mix3(col, C.wetSand, smoothstep(1.0, 0.0, h));
-    if (h < 0) col = mix3(C.wetSand, C.deep, smoothstep(0, -8, h));
+    if (h < 2.4 && (coast > 0.8 || w.desert > 0.5)) {
+      col = mix3(col, C.sand, smoothstep(2.4, 1.0, h));
+      splatTo(sp, G.sand, smoothstep(2.4, 1.0, h));
+    }
+    if (h < 1.2 && w.swamp > 0.5) {
+      col = mix3(col, C.mud, smoothstep(1.2, 0.2, h));
+      splatTo(sp, G.dirt, smoothstep(1.2, 0.2, h));
+    } else if (h < 1.0) {
+      col = mix3(col, C.wetSand, smoothstep(1.0, 0.0, h));
+      splatTo(sp, G.sand, smoothstep(1.0, 0.0, h));
+    }
+    if (h < 0) {
+      col = mix3(C.wetSand, C.deep, smoothstep(0, -8, h));
+      splatTo(sp, G.sand, 1);
+    }
     return col;
   }
 
@@ -416,10 +468,19 @@ export class Terrain {
     const g = new THREE.BufferGeometry();
     g.setAttribute('position', new THREE.BufferAttribute(pos, 3));
     g.setAttribute('color', new THREE.BufferAttribute(col, 3));
+    const s0 = new Float32Array(W * W * 4), s1 = new Float32Array(W * W * 4);
+    for (let k = 0; k < W * W; k++) {
+      for (let c4 = 0; c4 < 4; c4++) {
+        s0[k * 4 + c4] = this.splat[k * 8 + c4];
+        s1[k * 4 + c4] = this.splat[k * 8 + 4 + c4];
+      }
+    }
+    g.setAttribute('aSplat0', new THREE.BufferAttribute(s0, 4));
+    g.setAttribute('aSplat1', new THREE.BufferAttribute(s1, 4));
     g.setIndex(new THREE.BufferAttribute(idx, 1));
     g.computeVertexNormals();
     g.computeBoundingSphere();
-    const mesh = new THREE.Mesh(g, new THREE.MeshLambertMaterial({ vertexColors: true }));
+    const mesh = new THREE.Mesh(g, terrainMaterial());
     mesh.receiveShadow = true;
     mesh.name = 'terrain';
     return mesh;
@@ -479,7 +540,7 @@ export class Terrain {
     }
     const mesh = new THREE.Mesh(
       gb.build(),
-      new THREE.MeshLambertMaterial({ vertexColors: true, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -4 }),
+      new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.8, metalness: 0, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -4 }),
     );
     mesh.receiveShadow = true;
     mesh.name = 'roads';

@@ -74,7 +74,7 @@ export class Combat {
     game.scene.add(this.group);
     this.rocketGeo = new THREE.CylinderGeometry(0.1, 0.1, 0.8, 8);
     this.rocketGeo.rotateX(Math.PI / 2);
-    this.rocketMat = new THREE.MeshLambertMaterial({ color: 0x6e7a48, emissive: 0x331100 });
+    this.rocketMat = new THREE.MeshStandardMaterial({ color: 0x6e7a48, roughness: 0.5, metalness: 0.3, emissive: 0x331100 });
     this.bulletMat = new THREE.SpriteMaterial({ map: makeGlowTexture(), color: 0xfff0a0, blending: THREE.AdditiveBlending, depthWrite: false });
   }
 

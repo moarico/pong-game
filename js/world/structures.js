@@ -1,5 +1,6 @@
 import * as THREE from 'three';
-import { GeoBuilder, worldMaterial } from './geobuilder.js';
+import { GeoBuilder, worldMaterial, tagSurface, SURF } from './geobuilder.js';
+import { buildingMaterial } from './buildingmat.js';
 import { POIS, LAKE, ROAD_HALF_WIDTH } from './island.js';
 import { makeRng, clamp, lerp } from '../util.js';
 
@@ -38,6 +39,13 @@ const WALLS = ['#e8dcc6', '#d9b38c', '#a7c4d9', '#c96f53', '#f2efe6', '#9fb48a',
 const ROOFS = ['#a8473a', '#5a6470', '#3e5c7a', '#7a4b2f', '#46603f', '#8a3b52'];
 const TOWER_WALLS = ['#c7ccd3', '#b9a99a', '#7d8fa3', '#d8d2c4', '#a3b8a8', '#d4b9a0'];
 const WOOD = '#8e6a46', DARK_WOOD = '#5f4430', FLOOR = '#a07d57', FOUNDATION = '#8d8a85', STONE = '#9a958c';
+// What each paint is made of, for the building detail textures.
+tagSurface([...ROOFS, '#7a3b2f', '#e9eef3', '#eef3f8', '#4a4038', '#3e4a3a', '#5a3a2a', '#8a3b2f', '#7a5a3a'], SURF.shingles);
+tagSurface([WOOD, DARK_WOOD, FLOOR, '#8b6b48', '#7d5f3f', '#7a5b3d', '#8a6d45', '#7a5236', '#a3542f', '#8b5e3c', '#b03a2e', '#6b5442', '#4f3423', '#8a5a32', '#a87e55', '#6b5a48'], SURF.planks);
+tagSurface([FOUNDATION, STONE, '#8c877e', '#a39d93', '#b3ada2', '#cfcac0', '#d8d3c9', '#a9a49b'], SURF.stone);
+tagSurface(['#c96f53', '#8d4b3b', '#a07a5a'], SURF.brick);
+tagSurface(['#7f8a92', '#8f9aa1', '#9a8f80', '#c4553b', '#3b7bc4', '#3ba06a', '#c9a23a', '#6f7a80', '#9aa3a8', '#4a4f55'], SURF.metal);
+tagSurface(['#7c7a76', '#55585e', '#8e9196'], SURF.concrete);
 
 export class Structures {
   constructor(terrain, collision, seed = 99) {
@@ -443,14 +451,15 @@ export class Structures {
 
   flush(name) {
     if (this.gb.vertexCount > 0) {
-      const mesh = new THREE.Mesh(this.gb.build(), worldMaterial());
+      const mesh = new THREE.Mesh(this.gb.build(), buildingMaterial());
       mesh.castShadow = true;
       mesh.receiveShadow = true;
       mesh.name = 'poi-' + name;
       this.group.add(mesh);
     }
     if (this.glass && this.glass.vertexCount > 0) {
-      const mat = new THREE.MeshLambertMaterial({ vertexColors: true, transparent: true, opacity: 0.35, depthWrite: false });
+      // glass: dark, glossy and reflective, so windows mirror the sky
+      const mat = new THREE.MeshStandardMaterial({ vertexColors: true, transparent: true, opacity: 0.55, depthWrite: false, roughness: 0.04, metalness: 0.2, envMapIntensity: 1.4 });
       const mesh = new THREE.Mesh(this.glass.build(), mat);
       mesh.name = 'glass-' + name;
       mesh.renderOrder = 2;

@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { STORM_PHASES, STORM_START_RADIUS, STORM_FINAL_CLOSE } from './config.js';
 import { lerp, fmtTime } from './util.js';
+import { ATM, HAZE_GLSL } from './zh/atmos.js';
 
 const vert = /* glsl */ `
 varying vec3 vWorld;
@@ -11,19 +12,46 @@ void main() {
   vWorld = w.xyz;
   gl_Position = projectionMatrix * viewMatrix * w;
 }`;
+// A towering curtain of violet cloud: churning fbm swirls lit from inside, a bright seam where it meets the
+// ground, more see-through up close, and melting into the haze far away.
 const frag = /* glsl */ `
 uniform float uTime;
+uniform vec3 zhSunDir;
+uniform vec3 zhFogCol;
+uniform vec3 zhFogSun;
+uniform vec4 zhFogP;
+uniform vec3 zhCamPos;
 varying vec3 vWorld;
 varying vec2 vUv;
+${HAZE_GLSL}
+float sh( vec2 p ) { vec3 p3 = fract( vec3( p.xyx ) * 0.1031 ); p3 += dot( p3, p3.yzx + 33.33 ); return fract( ( p3.x + p3.y ) * p3.z ); }
+float sn( vec2 p ) { vec2 i = floor( p ), f = fract( p ), u = f * f * ( 3.0 - 2.0 * f );
+  return mix( mix( sh( i ), sh( i + vec2( 1.0, 0.0 ) ), u.x ), mix( sh( i + vec2( 0.0, 1.0 ) ), sh( i + vec2( 1.0, 1.0 ) ), u.x ), u.y ); }
+float sfbm( vec2 p ) { float s = 0.0, a = 0.5; for ( int i = 0; i < 5; i ++ ) { s += a * sn( p ); p = p * 2.03 + vec2( 3.1, 1.7 ); a *= 0.5; } return s; }
 void main() {
-  float dist = length(vWorld - cameraPosition);
-  float a = atan(vWorld.z, vWorld.x);
-  float bands = sin(a * 40.0 + vWorld.y * 0.05 - uTime * 1.5) * 0.5 + 0.5;
-  float swirl = sin(a * 9.0 - vWorld.y * 0.02 + uTime * 0.7) * 0.5 + 0.5;
-  float fadeTop = 1.0 - smoothstep(0.75, 1.0, vUv.y);
-  float alpha = (0.42 + bands * 0.18 + swirl * 0.12) * fadeTop * mix(1.0, 0.3, smoothstep(120.0, 900.0, dist));
-  vec3 col = mix(vec3(0.42, 0.12, 0.72), vec3(0.85, 0.45, 1.0), bands * swirl);
-  gl_FragColor = vec4(col, alpha);
+  float dist = length( vWorld - cameraPosition );
+  float ang = atan( vWorld.z, vWorld.x );
+  vec2 q = vec2( ang * 60.0, vWorld.y * 0.035 );
+  vec2 warp = vec2( sfbm( q * 0.6 + vec2( uTime * 0.05, 0.0 ) ), sfbm( q * 0.6 + vec2( 4.0, - uTime * 0.04 ) ) );
+  float n = sfbm( q + warp * 2.2 + vec2( - uTime * 0.12, uTime * 0.03 ) );
+  vec3 deep = vec3( 0.16, 0.04, 0.36 ), mid = vec3( 0.55, 0.18, 1.05 ), hot = vec3( 1.4, 0.7, 2.4 );
+  float glow = smoothstep( 0.62, 0.9, sfbm( q * 1.7 - warp + vec2( uTime * 0.2, 0.0 ) ) );
+  vec3 col = mix( deep, mid, smoothstep( 0.25, 0.75, n ) ) + hot * glow * 0.25;
+  // the bright seam along the ground
+  float seam = exp( - abs( vWorld.y - 2.0 ) * 0.08 );
+  col += vec3( 1.2, 0.5, 2.2 ) * seam * 0.8;
+  float fadeTop = 1.0 - smoothstep( 0.35, 1.0, vUv.y );
+  // seen from high above (the coach, skydiving) the wall is a glowing ring, not a sheet over everything
+  float above = smoothstep( 120.0, 420.0, cameraPosition.y );
+  fadeTop *= 1.0 - above * 0.75 * smoothstep( 0.08, 0.5, vUv.y );
+  float near = smoothstep( 6.0, 60.0, dist );   // you can see through it when you stand at it
+  float far = 1.0 - 0.7 * smoothstep( 150.0, 650.0, dist );   // and a distant wall is a veil, not a ceiling
+  float alpha = ( 0.38 + 0.32 * n + 0.2 * seam ) * fadeTop * mix( 0.35, 1.0, near ) * far;
+  // the haze swallows it with distance like everything else
+  float f = zhFog( vWorld );
+  col = mix( col, zhHaze( normalize( vWorld - zhCamPos ) ) * 0.9 + vec3( 0.05, 0.0, 0.12 ), f * 0.85 );
+  alpha *= 1.0 - f * 0.55;
+  gl_FragColor = vec4( col, alpha );
 }`;
 
 // The shrinking storm circle. Each phase waits, then shrinks to a new random circle
@@ -33,7 +61,9 @@ export class Storm {
     this.game = game;
     const geo = new THREE.CylinderGeometry(1, 1, 1, 128, 1, true);
     geo.translate(0, 0.5, 0);
-    this.uniforms = { uTime: { value: 0 } };
+    this.uniforms = {
+      uTime: { value: 0 }, zhSunDir: { value: ATM.sun }, zhFogCol: { value: ATM.col }, zhFogSun: { value: ATM.sunCol }, zhFogP: { value: ATM.p }, zhCamPos: { value: ATM.cam },
+    };
     this.mesh = new THREE.Mesh(geo, new THREE.ShaderMaterial({
       vertexShader: vert, fragmentShader: frag, uniforms: this.uniforms,
       transparent: true, depthWrite: false, side: THREE.DoubleSide,
@@ -129,8 +159,8 @@ export class Storm {
 
   updateMesh() {
     const c = this.current;
-    this.mesh.position.set(c.x, -60, c.z);
-    this.mesh.scale.set(Math.max(0.5, c.r), 700, Math.max(0.5, c.r));
+    this.mesh.position.set(c.x, -40, c.z);
+    this.mesh.scale.set(Math.max(0.5, c.r), 300, Math.max(0.5, c.r));
   }
 
   isInside(x, z) {

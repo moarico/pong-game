@@ -78,11 +78,11 @@ export const ROADS = [
 
 // Biome ground palettes (sRGB hex).
 export const BIOME_COLORS = {
-  grass: ['#5fae3e', '#6dbb46', '#4f9c37'],
-  forest: ['#3f8a33', '#4b9a3a', '#356f2c'],
+  grass: ['#4f8a34', '#5b9439', '#467d2d'],
+  forest: ['#3a6c2a', '#447a30', '#325e25'],
   snow: ['#eef3f8', '#dfe8f1', '#f7fbff'],
-  desert: ['#e3b46a', '#d99c55', '#ecc684'],
-  swamp: ['#55652f', '#4a5a2b', '#62683a'],
-  autumn: ['#9f8a3c', '#a8783a', '#8f8a40'],
-  farm: ['#8cbf4a', '#c9b450', '#8b6b3d'],
+  desert: ['#d9a862', '#cf9450', '#e2b87a'],
+  swamp: ['#4a5a2a', '#405026', '#566034'],
+  autumn: ['#8f7a34', '#9c6a32', '#7f7a38'],
+  farm: ['#6fa63c', '#b9a248', '#7a5e36'],
 };

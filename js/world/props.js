@@ -2,89 +2,8 @@ import * as THREE from 'three';
 import { GeoBuilder } from './geobuilder.js';
 import { POIS, LAKE } from './island.js';
 import { makeRng } from '../util.js';
-
-function treeGeometry(type) {
-  const gb = new GeoBuilder(makeRng(type.length * 31));
-  gb.jitter = 0.08;
-  const trunk = '#6b4a2f';
-  switch (type) {
-    case 'oak':
-    case 'autumnA':
-    case 'autumnB': {
-      const leaf = type === 'oak' ? '#4f9a3a' : type === 'autumnA' ? '#e0862e' : '#c8452f';
-      gb.cylinder(0, -0.5, 0, 0.42, 0.28, 4.2, 6, trunk);
-      gb.sphere(0, 4.8, 0, 2.5, 7, 5, leaf);
-      gb.sphere(1.1, 4.1, 0.6, 1.8, 6, 4, leaf);
-      gb.sphere(-0.9, 4.3, -0.6, 1.9, 6, 4, leaf);
-      gb.sphere(0.2, 6.2, -0.2, 1.5, 6, 4, leaf);
-      break;
-    }
-    case 'pine':
-    case 'snowpine': {
-      const g = '#2f6e3a';
-      const w = type === 'snowpine' ? '#e6eef4' : '#3a7d43';
-      gb.cylinder(0, -0.5, 0, 0.35, 0.25, 2.6, 6, trunk);
-      gb.cone(0, 1.6, 0, 2.6, 3.4, 7, g);
-      gb.cone(0, 3.6, 0, 2.0, 3.0, 7, type === 'snowpine' ? w : g);
-      gb.cone(0, 5.5, 0, 1.4, 2.6, 7, w);
-      break;
-    }
-    case 'palm': {
-      let x = 0, y = -0.5;
-      for (let i = 0; i < 5; i++) {
-        gb.cylinder(x, y, 0, 0.32 - i * 0.03, 0.29 - i * 0.03, 1.5, 6, '#8a6a45');
-        x += 0.18 + i * 0.06;
-        y += 1.45;
-      }
-      const leaf = '#3d9a3a';
-      for (let i = 0; i < 7; i++) {
-        const a = (i / 7) * Math.PI * 2;
-        const c = Math.cos(a), s = Math.sin(a);
-        const base = [x, y, 0];
-        const mid = [x + c * 2.2, y + 0.4, s * 2.2];
-        const tip = [x + c * 3.8, y - 1.0, s * 3.8];
-        const px = -s * 0.6, pz = c * 0.6;
-        const col = gb.rgb(leaf);
-        gb.tri(base, [mid[0] + px, mid[1], mid[2] + pz], [mid[0] - px, mid[1], mid[2] - pz], col);
-        gb.tri(base, [mid[0] - px, mid[1], mid[2] - pz], [mid[0] + px, mid[1], mid[2] + pz], col);
-        gb.tri([mid[0] + px, mid[1], mid[2] + pz], tip, [mid[0] - px, mid[1], mid[2] - pz], col);
-        gb.tri([mid[0] - px, mid[1], mid[2] - pz], tip, [mid[0] + px, mid[1], mid[2] + pz], col);
-      }
-      gb.sphere(x, y - 0.2, 0, 0.45, 6, 4, '#6b4a2f');
-      break;
-    }
-    case 'cactus': {
-      const g = '#5c8f3a';
-      gb.cylinder(0, -0.5, 0, 0.45, 0.4, 4, 7, g);
-      gb.sphere(0, 3.5, 0, 0.4, 7, 4, g);
-      gb.cylinder(0.4, 1.4, 0, 0.22, 0.22, 0.2, 6, g);
-      gb.boxRot(0.75, 1.3, 0, 0.8, 0.4, 0.4, 0, g);
-      gb.cylinder(1.0, 1.3, 0, 0.22, 0.2, 1.5, 6, g);
-      gb.boxRot(-0.7, 2.0, 0, 0.7, 0.36, 0.36, 0, g);
-      gb.cylinder(-0.95, 2.0, 0, 0.2, 0.18, 1.1, 6, g);
-      break;
-    }
-    case 'swamp': {
-      gb.cylinder(0, -0.8, 0, 0.6, 0.35, 5, 6, '#4d3f2c');
-      gb.sphere(0, 5.4, 0, 3.6, 8, 5, '#5d6b2c', 0.45);
-      gb.sphere(1.5, 4.8, 1, 2, 6, 4, '#6a7a33', 0.5);
-      for (let i = 0; i < 5; i++) {
-        const a = (i / 5) * Math.PI * 2;
-        gb.cylinder(Math.cos(a) * 2.6, 2.6, Math.sin(a) * 2.6, 0.05, 0.12, 2.4, 4, '#7a8a45');
-      }
-      break;
-    }
-    case 'dead': {
-      const c = '#7a6a58';
-      gb.cylinder(0, -0.5, 0, 0.3, 0.18, 4.5, 5, c);
-      gb.boxRot(0.6, 2.4, 0, 1.4, 0.18, 0.18, 0.3, c);
-      gb.boxRot(-0.5, 3.1, 0.2, 1.2, 0.16, 0.16, 2.2, c);
-      gb.boxRot(0.2, 3.7, -0.4, 1, 0.14, 0.14, 4.1, c);
-      break;
-    }
-  }
-  return gb.build();
-}
+import { treeParts, bushParts, boulderGeometry, foliageMaterials, cropGeometry, WIND } from './foliage.js';
+import { rockMaterial } from './terrainmat.js';
 
 function metalGeometry(kind) {
   const gb = new GeoBuilder(makeRng(kind.length * 7));
@@ -135,12 +54,36 @@ export class Props {
     this.harvestables = [];
     this.meshes = {};
     this.shaking = new Set();
-    this.mat = new THREE.MeshLambertMaterial({ vertexColors: true });
+    this.mat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.92, metalness: 0 });
     this._m = new THREE.Matrix4();
     this._q = new THREE.Quaternion();
     this._e = new THREE.Euler();
     this._v = new THREE.Vector3();
     this._s = new THREE.Vector3();
+  }
+
+  // Instanced meshes split into 128 m chunks, so the camera and the shadow pass cull what is out of view.
+  // items: [{ x, z, ... }]; place(item, mesh, index) fills one instance. Returns the meshes created.
+  chunked(name, geo, mat, items, place, shadow = true) {
+    const CH = 128, by = new Map(), out = [];
+    for (const it of items) {
+      const k = Math.floor(it.x / CH) + ',' + Math.floor(it.z / CH);
+      if (!by.has(k)) by.set(k, []);
+      by.get(k).push(it);
+    }
+    for (const [key, list] of by) {
+      const mesh = new THREE.InstancedMesh(geo, mat, list.length);
+      mesh.castShadow = shadow;
+      mesh.receiveShadow = true;
+      mesh.name = name + '-' + key;
+      list.forEach((it, i) => place(it, mesh, i));
+      mesh.instanceMatrix.needsUpdate = true;
+      if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
+      mesh.computeBoundingSphere();
+      this.group.add(mesh);
+      out.push(mesh);
+    }
+    return out;
   }
 
   blocked(x, z, pad) {
@@ -184,31 +127,69 @@ export class Props {
         trees[type].push({ x, z, s: rng.range(0.8, 1.35), r: rng() * Math.PI * 2 });
       }
     }
+    // Trees are instanced per 128 m chunk so the camera culls whole chunks, and far chunks swap their
+    // canopies for a low-detail version with a quarter of the leaf cards.
+    const M = foliageMaterials();
+    const CH = 128;
+    this.treeChunks = [];
     for (const type of TREE_TYPES) {
       const list = trees[type];
       if (!list.length) continue;
-      const mesh = new THREE.InstancedMesh(treeGeometry(type), this.mat, list.length);
-      mesh.castShadow = true;
-      mesh.receiveShadow = true;
-      mesh.name = 'trees-' + type;
-      list.forEach((t, i) => {
-        const y = this.T.heightAt(t.x, t.z);
-        const tint = 0.85 + rng() * 0.3;
-        mesh.setColorAt(i, new THREE.Color(tint, tint, tint));
-        const hp = Math.round(type === 'cactus' ? 120 : 150 * t.s + 60);
-        const h = {
-          kind: 'tree', type, x: t.x, y, z: t.z, s: t.s, rot: t.r, hp, maxHp: hp, resource: 'wood',
-          mesh, index: i, alive: true, shake: 0,
-        };
-        const rad = (type === 'swamp' ? 0.6 : 0.45) * t.s;
-        h.collider = this.W.box(t.x - rad, y - 1, t.z - rad, t.x + rad, y + 6.5 * t.s, t.z + rad, h);
-        this.setMatrix(h);
-        this.harvestables.push(h);
-      });
-      mesh.instanceMatrix.needsUpdate = true;
-      if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
-      this.group.add(mesh);
-      this.meshes[type] = mesh;
+      const parts = treeParts(type), far = parts.leaves ? treeParts(type, 1) : null;
+      const byChunk = new Map();
+      for (const t of list) {
+        const k = Math.floor(t.x / CH) + ',' + Math.floor(t.z / CH);
+        if (!byChunk.has(k)) byChunk.set(k, []);
+        byChunk.get(k).push(t);
+      }
+      for (const [key, items] of byChunk) {
+        const mesh = new THREE.InstancedMesh(parts.trunk, type === 'cactus' || type === 'dead' ? M.plain : M.bark, items.length);
+        mesh.castShadow = true;
+        mesh.receiveShadow = true;
+        mesh.name = 'trees-' + type + '-' + key;
+        let leaves = null, leavesFar = null;
+        if (parts.leaves) {
+          leaves = new THREE.InstancedMesh(parts.leaves, M[parts.leafMat], items.length);
+          leaves.castShadow = true;
+          leaves.receiveShadow = true;
+          leaves.name = 'leaves-' + type + '-' + key;
+          leavesFar = new THREE.InstancedMesh(far.leaves, M[parts.leafMat], items.length);
+          leavesFar.castShadow = true;
+          leavesFar.receiveShadow = true;
+          leavesFar.visible = false;
+          leavesFar.name = 'leavesfar-' + type + '-' + key;
+        }
+        items.forEach((t, i) => {
+          const y = this.T.heightAt(t.x, t.z);
+          const tint = 0.85 + rng() * 0.3;
+          mesh.setColorAt(i, new THREE.Color(tint, tint, tint));
+          if (leaves) {
+            const lt = 0.82 + rng() * 0.36;
+            const lc = new THREE.Color(lt * (0.95 + rng() * 0.1), lt, lt * (0.95 + rng() * 0.1));
+            leaves.setColorAt(i, lc);
+            leavesFar.setColorAt(i, lc);
+          }
+          const hp = Math.round(type === 'cactus' ? 120 : 150 * t.s + 60);
+          const h = {
+            kind: 'tree', type, x: t.x, y, z: t.z, s: t.s, rot: t.r, hp, maxHp: hp, resource: 'wood',
+            mesh, mesh2: leaves, mesh3: leavesFar, index: i, alive: true, shake: 0,
+          };
+          const rad = (type === 'swamp' ? 0.6 : 0.45) * t.s;
+          h.collider = this.W.box(t.x - rad, y - 1, t.z - rad, t.x + rad, y + 6.5 * t.s, t.z + rad, h);
+          this.setMatrix(h);
+          this.harvestables.push(h);
+        });
+        const cx = (Math.floor(items[0].x / CH) + 0.5) * CH, cz = (Math.floor(items[0].z / CH) + 0.5) * CH;
+        for (const m of [mesh, leaves, leavesFar]) {
+          if (!m) continue;
+          m.instanceMatrix.needsUpdate = true;
+          if (m.instanceColor) m.instanceColor.needsUpdate = true;
+          m.computeBoundingSphere();
+          this.group.add(m);
+        }
+        this.treeChunks.push({ cx, cz, leaves, leavesFar });
+        this.meshes[type] = mesh;
+      }
     }
     this.generateRocks();
     this.generateBushes();
@@ -233,31 +214,25 @@ export class Props {
         list.push({ x, z, sx: rng.range(1.0, 2.6), sy: rng.range(0.7, 1.8), sz: rng.range(1.0, 2.6), r: rng() * Math.PI * 2, biome });
       }
     }
-    const geo = new THREE.DodecahedronGeometry(1, 0);
-    geo.computeVertexNormals();
-    const cols = new Float32Array(geo.attributes.position.count * 3).fill(1);
-    geo.setAttribute('color', new THREE.BufferAttribute(cols, 3));
-    const mesh = new THREE.InstancedMesh(geo, this.mat, list.length);
-    mesh.castShadow = true;
-    mesh.receiveShadow = true;
-    mesh.name = 'rocks';
+    // three boulder shapes, dealt out in turn
+    const rmat = rockMaterial();
     const c = new THREE.Color();
-    list.forEach((r, i) => {
-      const y = this.T.heightAt(r.x, r.z);
-      c.set(r.biome === 'desert' ? '#c79a6a' : r.biome === 'snow' ? '#9aa1a8' : '#8d8a84');
-      c.multiplyScalar(0.85 + this.rng() * 0.3);
-      mesh.setColorAt(i, c);
-      const hp = Math.round(200 + 60 * r.sx * r.sz);
-      const h = { kind: 'rock', type: 'rock', x: r.x, y: y - 0.3 * r.sy, z: r.z, sx: r.sx, sy: r.sy, sz: r.sz, rot: r.r, hp, maxHp: hp, resource: 'stone', mesh, index: i, alive: true, shake: 0 };
-      const ext = Math.max(r.sx, r.sz) * 0.8;
-      h.collider = this.W.box(r.x - ext, y - 2, r.z - ext, r.x + ext, y + r.sy * 0.75, r.z + ext, h);
-      this.setMatrix(h);
-      this.harvestables.push(h);
-    });
-    mesh.instanceMatrix.needsUpdate = true;
-    if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
-    this.group.add(mesh);
-    this.meshes.rock = mesh;
+    for (let k = 0; k < 3; k++) {
+      const geo = boulderGeometry(91 + k * 37);
+      const mine = list.filter((_, i) => i % 3 === k);
+      this.chunked('rocks' + k, geo, rmat, mine, (r, mesh, i) => {
+        const y = this.T.heightAt(r.x, r.z);
+        c.set(r.biome === 'desert' ? '#b98d64' : r.biome === 'snow' ? '#9ea4aa' : '#8f8b84');
+        c.multiplyScalar(0.85 + this.rng() * 0.3);
+        mesh.setColorAt(i, c);
+        const hp = Math.round(200 + 60 * r.sx * r.sz);
+        const h = { kind: 'rock', type: 'rock', x: r.x, y: y - 0.3 * r.sy, z: r.z, sx: r.sx, sy: r.sy, sz: r.sz, rot: r.r, hp, maxHp: hp, resource: 'stone', mesh, index: i, alive: true, shake: 0 };
+        const ext = Math.max(r.sx, r.sz) * 0.8;
+        h.collider = this.W.box(r.x - ext, y - 2, r.z - ext, r.x + ext, y + r.sy * 0.75, r.z + ext, h);
+        this.setMatrix(h);
+        this.harvestables.push(h);
+      });
+    }
   }
 
   generateBushes() {
@@ -272,21 +247,19 @@ export class Props {
       if (this.T.distToRoad(x, z) < 5 || this.blocked(x, z, 1.5)) continue;
       pts.push({ x, z, y: h, s: rng.range(0.7, 1.5), b });
     }
-    const geo = new THREE.IcosahedronGeometry(1, 0);
-    geo.computeVertexNormals();
-    geo.setAttribute('color', new THREE.BufferAttribute(new Float32Array(geo.attributes.position.count * 3).fill(1), 3));
-    const mesh = new THREE.InstancedMesh(geo, this.mat, pts.length);
-    mesh.receiveShadow = true;
+    // leafy bushes, one set of chunked meshes per kind of leaf color
+    const M = foliageMaterials();
     const m = new THREE.Matrix4(), c = new THREE.Color();
-    pts.forEach((p, i) => {
-      m.compose(new THREE.Vector3(p.x, p.y + 0.3 * p.s, p.z), new THREE.Quaternion().setFromEuler(new THREE.Euler(0, rng() * 6, 0)), new THREE.Vector3(p.s * 1.3, p.s * 0.9, p.s * 1.3));
-      mesh.setMatrixAt(i, m);
-      c.set(p.b === 'autumn' ? '#b8702e' : p.b === 'swamp' ? '#5a6a2c' : '#4a8f35');
-      c.multiplyScalar(0.85 + rng() * 0.3);
-      mesh.setColorAt(i, c);
-    });
-    mesh.name = 'bushes';
-    this.group.add(mesh);
+    for (const kind of ['green', 'autumn', 'swamp']) {
+      const mine = pts.filter((p) => (p.b === 'autumn' ? 'autumn' : p.b === 'swamp' ? 'swamp' : 'green') === kind);
+      if (!mine.length) continue;
+      this.chunked('bushes-' + kind, bushParts(kind), M.broad, mine, (p, mesh, i) => {
+        m.compose(new THREE.Vector3(p.x, p.y - 0.15, p.z), new THREE.Quaternion().setFromEuler(new THREE.Euler(0, rng() * 6, 0)), new THREE.Vector3(p.s * 1.3, p.s * 1.0, p.s * 1.3));
+        mesh.setMatrixAt(i, m);
+        const k = 0.85 + rng() * 0.3;
+        mesh.setColorAt(i, c.setRGB(k, k, k));
+      });
+    }
   }
 
   generateMetal() {
@@ -342,7 +315,7 @@ export class Props {
   generateCrops() {
     const rng = this.rng;
     const pts = [];
-    for (let i = 0; i < 9000 && pts.length < 2600; i++) {
+    for (let i = 0; i < 16000 && pts.length < 4200; i++) {
       const x = -40 + (rng() - 0.5) * 260, z = -300 + (rng() - 0.5) * 200;
       if (this.T.biomeAt(x, z) !== 'farm') continue;
       const h = this.T.heightAt(x, z);
@@ -352,24 +325,23 @@ export class Props {
       const kind = Math.abs(Math.sin(fx * 3.1 + fz * 7.7)) % 1;
       if (kind < 0.35) continue;
       // snap to rows
-      const rz = Math.round(z / 1.6) * 1.6;
+      const rz = Math.round(z / 1.2) * 1.2;
       pts.push({ x, z: rz, y: this.T.heightAt(x, rz), corn: kind > 0.7 });
     }
-    const geo = new THREE.BoxGeometry(0.5, 1, 0.5).toNonIndexed();
-    geo.translate(0, 0.5, 0);
-    geo.setAttribute('color', new THREE.BufferAttribute(new Float32Array(geo.attributes.position.count * 3).fill(1), 3));
-    const mesh = new THREE.InstancedMesh(geo, this.mat, pts.length);
+    // corn stalks and wheat clumps, swaying with the grass
+    const M = foliageMaterials();
     const m = new THREE.Matrix4(), c = new THREE.Color();
-    pts.forEach((p, i) => {
-      const hgt = p.corn ? 1.9 : 0.9;
-      m.compose(new THREE.Vector3(p.x, p.y - 0.1, p.z), new THREE.Quaternion(), new THREE.Vector3(1, hgt, 1));
-      mesh.setMatrixAt(i, m);
-      c.set(p.corn ? '#5e9e38' : '#d9bd55').multiplyScalar(0.85 + rng() * 0.3);
-      mesh.setColorAt(i, c);
-    });
-    mesh.name = 'crops';
-    mesh.receiveShadow = true;
-    this.group.add(mesh);
+    for (const corn of [true, false]) {
+      const mine = pts.filter((p) => p.corn === corn);
+      if (!mine.length) continue;
+      this.chunked(corn ? 'crops-corn' : 'crops-wheat', cropGeometry(corn ? 'corn' : 'wheat'), corn ? M.frond : M.plain, mine, (p, mesh, i) => {
+        const s = 0.85 + rng() * 0.3;
+        m.compose(new THREE.Vector3(p.x, p.y - 0.05, p.z), new THREE.Quaternion().setFromEuler(new THREE.Euler(0, rng() * 6.28, 0)), new THREE.Vector3(s, s * (0.9 + rng() * 0.2), s));
+        mesh.setMatrixAt(i, m);
+        const k = 0.85 + rng() * 0.3;
+        mesh.setColorAt(i, c.setRGB(k, k, k));
+      }, corn);
+    }
   }
 
   setMatrix(h, wobble = 0) {
@@ -380,6 +352,14 @@ export class Props {
     this._m.compose(this._v.set(h.x, h.y, h.z), q, this._s);
     h.mesh.setMatrixAt(h.index, this._m);
     h.mesh.instanceMatrix.needsUpdate = true;
+    if (h.mesh2) {
+      h.mesh2.setMatrixAt(h.index, this._m);
+      h.mesh2.instanceMatrix.needsUpdate = true;
+    }
+    if (h.mesh3) {
+      h.mesh3.setMatrixAt(h.index, this._m);
+      h.mesh3.instanceMatrix.needsUpdate = true;
+    }
   }
 
   // Apply a pickaxe hit. Returns true if destroyed.
@@ -398,7 +378,20 @@ export class Props {
     return false;
   }
 
+  // Near chunks show full canopies, far ones the low-detail cards.
+  updateLod(camera) {
+    if (!this.treeChunks) return;
+    const p = camera.position;
+    for (const c of this.treeChunks) {
+      if (!c.leaves) continue;
+      const near = Math.hypot(c.cx - p.x, c.cz - p.z) < 150;
+      c.leaves.visible = near;
+      c.leavesFar.visible = !near;
+    }
+  }
+
   update(dt) {
+    WIND.time.value += dt;
     for (const h of this.shaking) {
       h.shake -= dt;
       if (h.shake <= 0) {

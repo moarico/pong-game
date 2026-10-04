@@ -36,7 +36,7 @@ export class Vehicle {
     this.kind = 'vehicle';
     this.spawn = spot;
     this.color = color;
-    this.mesh = new THREE.Mesh(truckGeometry(color), new THREE.MeshLambertMaterial({ vertexColors: true }));
+    this.mesh = new THREE.Mesh(truckGeometry(color), new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.55, metalness: 0.2 }));
     this.mesh.castShadow = true;
     this.mesh.receiveShadow = true;
     this.root = new THREE.Group();

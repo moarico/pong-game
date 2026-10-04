@@ -79,3 +79,46 @@ export function zhTextures() {
   }
   return T;
 }
+
+// Tileable value-noise fbm, 0..1 (Zero Hour's texture field).
+export function field(s, periods, weights, seed) {
+  const out = new Float32Array(s * s);
+  let rs = seed || 7;
+  const r = () => {
+    rs = (rs * 16807) % 2147483647;
+    return (rs - 1) / 2147483646;
+  };
+  for (let o = 0; o < periods.length; o++) {
+    const p = periods[o], w = weights[o], g = new Float32Array(p * p);
+    for (let i = 0; i < p * p; i++) g[i] = r();
+    for (let y = 0; y < s; y++) {
+      const fy = (y / s) * p, iy = Math.floor(fy), ty = fy - iy, sy = ty * ty * (3 - 2 * ty), y0 = iy % p, y1 = (iy + 1) % p;
+      for (let x = 0; x < s; x++) {
+        const fx = (x / s) * p, ix = Math.floor(fx), tx = fx - ix, sx = tx * tx * (3 - 2 * tx), x0 = ix % p, x1 = (ix + 1) % p;
+        const a = g[y0 * p + x0], b = g[y0 * p + x1], c = g[y1 * p + x0], d = g[y1 * p + x1];
+        const top = a + (b - a) * sx, bot = c + (d - c) * sx;
+        out[y * s + x] += w * (top + (bot - top) * sy);
+      }
+    }
+  }
+  return out;
+}
+
+// A tileable normal map from a height field.
+export function normalMapFrom(S, f, strength) {
+  const c = cnv(S, S), x = c.getContext('2d'), img = x.createImageData(S, S), d = img.data;
+  const h = (i, j) => f[((j + S) % S) * S + ((i + S) % S)];
+  for (let j = 0; j < S; j++) {
+    for (let i = 0; i < S; i++) {
+      const dx = (h(i + 1, j) - h(i - 1, j)) * strength, dy = (h(i, j + 1) - h(i, j - 1)) * strength, L = Math.hypot(dx, dy, 1), o = (j * S + i) * 4;
+      d[o] = (-dx / L * 0.5 + 0.5) * 255;
+      d[o + 1] = (-dy / L * 0.5 + 0.5) * 255;
+      d[o + 2] = (1 / L * 0.5 + 0.5) * 255;
+      d[o + 3] = 255;
+    }
+  }
+  x.putImageData(img, 0, 0);
+  const t = new THREE.CanvasTexture(c);
+  t.wrapS = t.wrapT = THREE.RepeatWrapping;
+  return t;
+}

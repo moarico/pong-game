@@ -78,7 +78,7 @@ const geoCache = new Map();
 const matCache = new Map();
 
 function lambert(key, opts) {
-  if (!matCache.has(key)) matCache.set(key, new THREE.MeshLambertMaterial(opts));
+  if (!matCache.has(key)) matCache.set(key, new THREE.MeshStandardMaterial({ roughness: 0.8, metalness: 0, ...opts }));
   return matCache.get(key);
 }
 

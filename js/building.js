@@ -102,7 +102,7 @@ export class BuildSystem {
     this.group = new THREE.Group();
     this.group.name = 'builds';
     game.scene.add(this.group);
-    this.mat = new THREE.MeshLambertMaterial({ vertexColors: true });
+    this.mat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.85, metalness: 0 });
     this.blueprint = new THREE.MeshLambertMaterial({ color: 0x66c6ff, transparent: true, opacity: 0.55, emissive: 0x1a4a7a, depthWrite: false });
     this.ghostOk = new THREE.MeshBasicMaterial({ color: 0x4fb4ff, transparent: true, opacity: 0.35, depthWrite: false });
     this.ghostBad = new THREE.MeshBasicMaterial({ color: 0xff4a4a, transparent: true, opacity: 0.35, depthWrite: false });

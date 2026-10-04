@@ -55,7 +55,7 @@ function supplyGeometries() {
   balloonGeo = bb.build();
 }
 
-const vmat = () => new THREE.MeshLambertMaterial({ vertexColors: true });
+const vmat = () => new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.6, metalness: 0.1 });
 
 export class LootSystem {
   constructor(game) {

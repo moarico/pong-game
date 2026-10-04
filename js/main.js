@@ -24,7 +24,9 @@ import { LobbyStage } from './lobby.js';
 import { AudioSystem } from './zh/sound.js';
 import { ViewModel } from './zh/viewmodel.js';
 import { fabricMat } from './zh/soldier.js';
-import { skyEnvironment } from './zh/envmap.js';
+import { PostChain, hdrSupported } from './zh/post.js';
+import { DAY } from './zh/atmos.js';
+import { GrassField } from './world/grass.js';
 
 const SETTINGS_KEY = 'stormdrop-settings-v1';
 const DEFAULTS = {
@@ -41,6 +43,9 @@ class Game {
     this.renderer = new THREE.WebGLRenderer({ canvas: this.canvas, antialias: this.settings.quality !== 'low', powerPreference: 'high-performance' });
     this.renderer.shadowMap.enabled = true;
     this.renderer.shadowMap.type = THREE.PCFShadowMap;
+    // Direct renders (lobby, and the world when the device has no float targets) get a filmic curve;
+    // the world normally goes through Zero Hour's HDR camera instead (zh/post.js).
+    this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
     this.scene = new THREE.Scene();
     this.camera = new THREE.PerspectiveCamera(80, innerWidth / innerHeight, 0.1, 2600);
     this.camera.rotation.order = 'YXZ';
@@ -102,6 +107,8 @@ class Game {
     const dpr = window.devicePixelRatio || 1;
     this.renderer.setPixelRatio(Math.min(dpr, S.quality === 'high' ? 2 : S.quality === 'medium' ? 1.25 : 0.85));
     if (this.env) this.env.setQuality(S.quality);
+    if (this.post) this.post.setQuality(S.quality);
+    if (this.grass) this.grass.enabled = S.quality !== 'low';
     if (this.controller) this.controller.firstPerson = S.view !== 'third';
     if (this.menus) this.menus.refreshLobby();
     if (save) this.saveSettings();
@@ -138,10 +145,16 @@ class Game {
     buildAnimatedProps(this.structures, this.scene);
     this.mapCanvas = this.terrain.buildMapCanvas(1024, this.structures.footprints);
     await step(0.7, 'Fueling the Sky Coach...');
-    this.env = new Environment(this.scene, this.settings.quality);
-    // the sky lights and reflects off guns, gear and fabric
-    this.envTex = skyEnvironment(this.renderer, { sunDir: this.env.sunDir });
-    this.scene.environment = this.envTex;
+    this.env = new Environment(this.scene, this.settings.quality, this.renderer);
+    // the sky lights and reflects off everything: ground, buildings, guns, gear and fabric
+    this.envTex = this.env.buildEnv();
+    this.grass = new GrassField(this);
+    this.grass.enabled = this.settings.quality !== 'low';
+    this.post = hdrSupported(this.renderer) ? new PostChain(this.renderer) : null;
+    if (this.post) {
+      this.post.setAtmos(DAY);
+      this.post.setQuality(this.settings.quality);
+    }
     this.viewmodel = new ViewModel(this);
     this.viewmodel.setEnvironment(this.envTex);
     this.fx = new Effects(this);
@@ -407,9 +420,22 @@ class Game {
   }
 
   renderWorld() {
-    this.renderer.render(this.scene, this.camera);
-    // the gun in your hands is drawn last, by its own camera, so it never clips into walls
-    if (this.controller && this.controller.fpActive && this.player && this.player.alive) this.viewmodel.render(this.renderer);
+    const r = this.renderer, vm = this.controller && this.controller.fpActive && this.player && this.player.alive;
+    if (this.post) {
+      r.setRenderTarget(this.post.target);
+      r.render(this.scene, this.camera);
+      // the gun in your hands is drawn last, by its own camera, so it never clips into walls
+      if (vm) this.viewmodel.render(r);
+      const p = this.player;
+      this.post.render(this.camera, this.env.sunDir, {
+        dt: this.dt, hurt: p && p.alive ? Math.min(1, Math.max(0, (45 - p.health) / 45)) : 0, storm: this.stormView || 0,
+      });
+    } else {
+      r.toneMappingExposure = 0.62;
+      r.render(this.scene, this.camera);
+      if (vm) this.viewmodel.render(r);
+      r.toneMappingExposure = 1;
+    }
   }
 
   updateMatch(dt) {
@@ -447,7 +473,12 @@ class Game {
     this.fx.update(dt);
     this.build.updateGhost(p.alive ? p : null);
     this.updateWeakSpot();
-    this.env.update(dt, this.camera, p.alive ? p.pos : this.camera.position);
+    // how much of the view is inside the storm (tints the sky and the grade)
+    const c = this.camera.position, out = this.storm.distOutside(c.x, c.z);
+    this.stormView = Math.min(1, Math.max(0, (out + 4) / 10)) * (p.alive && p.mode !== 'bus' ? 1 : 0.4);
+    this.env.update(dt, this.camera, p.alive ? p.pos : this.camera.position, this.stormView);
+    this.grass.update(this.camera);
+    this.props.updateLod(this.camera);
     this.hud.update(dt);
     if (this.endAt !== null && this.time >= this.endAt) this.endMatch();
   }

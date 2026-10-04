@@ -4,11 +4,19 @@ import * as THREE from 'three';
 // Used for buildings, props and models so whole areas render in a single draw call.
 const tmpColor = new THREE.Color();
 
+// Surface tags: which detail texture a paint gets on buildings (see buildingmat.js). 0 = pick by orientation.
+export const SURF = { auto: 0, plaster: 1, planks: 2, shingles: 3, brick: 4, stone: 5, metal: 6, concrete: 7 };
+const SURF_OF = new Map();
+export function tagSurface(colors, surf) {
+  for (const c of colors) SURF_OF.set(String(c).toLowerCase(), surf);
+}
+
 export class GeoBuilder {
   constructor(rng = Math.random) {
     this.pos = [];
     this.nor = [];
     this.col = [];
+    this.surf = [];
     this.rng = rng;
     this.jitter = 0.06;
   }
@@ -21,7 +29,9 @@ export class GeoBuilder {
     if (Array.isArray(color)) return color;
     tmpColor.set(color);
     const j = this.jitter ? 1 + (this.rng() - 0.5) * 2 * this.jitter : 1;
-    return [tmpColor.r * j, tmpColor.g * j, tmpColor.b * j];
+    const out = [tmpColor.r * j, tmpColor.g * j, tmpColor.b * j];
+    out.surf = SURF_OF.get(String(color).toLowerCase()) || 0;
+    return out;
   }
 
   // Flat triangle; vertices in counter-clockwise order seen from the front.
@@ -34,6 +44,8 @@ export class GeoBuilder {
     this.pos.push(a[0], a[1], a[2], b[0], b[1], b[2], c[0], c[1], c[2]);
     this.nor.push(nx, ny, nz, nx, ny, nz, nx, ny, nz);
     this.col.push(rgb[0], rgb[1], rgb[2], rgb[0], rgb[1], rgb[2], rgb[0], rgb[1], rgb[2]);
+    const sf = rgb.surf || 0;
+    this.surf.push(sf, sf, sf);
   }
 
   // Triangle whose winding is fixed so its normal points away from (cx, cy, cz).
@@ -163,6 +175,7 @@ export class GeoBuilder {
       this.nor.push(other.nor[i]);
       this.col.push(other.col[i]);
     }
+    for (let i = 0; i < other.surf.length; i++) this.surf.push(other.surf[i]);
   }
 
   build() {
@@ -170,6 +183,7 @@ export class GeoBuilder {
     g.setAttribute('position', new THREE.Float32BufferAttribute(this.pos, 3));
     g.setAttribute('normal', new THREE.Float32BufferAttribute(this.nor, 3));
     g.setAttribute('color', new THREE.Float32BufferAttribute(this.col, 3));
+    if (this.surf.some((v) => v !== 0)) g.setAttribute('aSurf', new THREE.Float32BufferAttribute(this.surf, 1));
     g.computeBoundingSphere();
     g.computeBoundingBox();
     return g;
@@ -179,6 +193,6 @@ export class GeoBuilder {
 // Shared vertex-color material for static world geometry.
 let worldMat = null;
 export function worldMaterial() {
-  if (!worldMat) worldMat = new THREE.MeshLambertMaterial({ vertexColors: true });
+  if (!worldMat) worldMat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.9, metalness: 0 });
   return worldMat;
 }
