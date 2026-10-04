@@ -74,7 +74,7 @@ export class Match {
         const h = humans[i];
         const car = this.world.addCar(new Car(team, h ? h.name : names.pop()));
         car.handling = app.settings.handling === 'realistic' ? 'realistic' : 'easy';
-        const model = new CarModel(team, carNumbers.pop());
+        const model = new CarModel(team, carNumbers.pop(), app.settings.quality);
         this.group.add(model.root);
         if (app.settings.quality === 'low') model.blob = this.addBlob(1.6, 2.2);
         const p = { car, model, human: !!h, device: h ? h.device : null, bot: h ? null : new Bot(car, cfg.difficulty), name: car.name };

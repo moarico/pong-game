@@ -168,7 +168,7 @@ export class Effects {
     _u.set(0, 1, 0).applyQuaternion(quat);
     _l.set(1, 0, 0).applyQuaternion(quat);
     if (car.boosting) {
-      _e.copy(pos).addScaledVector(_f, -54).addScaledVector(_u, 12).multiplyScalar(S);
+      _e.copy(pos).addScaledVector(_f, -60).addScaledVector(_u, 1.5).multiplyScalar(S);
       const cv = _v.copy(car.vel).multiplyScalar(S);
       const n = Math.max(1, Math.round(dt * 150 * this.mult));
       const fl = tc.flame, fe = tc.flameEnd;

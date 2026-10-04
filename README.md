@@ -10,6 +10,10 @@ A Rocket League–style car soccer game that runs in the browser. It has 3D grap
 
 ![Night stadium](docs/gameplay-night.jpg)
 
+| The cars | Victory cinematic |
+| --- | --- |
+| ![Car close-up](docs/car.jpg) | ![Black hole eating the Earth](docs/victory-black-hole.jpg) |
+
 ## Features
 
 - **Physics close to the real game.** It uses Rocket League's units and numbers: 2300 uu/s top speed, boost, supersonic, jump and double jump, flips and dodges, air roll, powerslide, and Psyonix-style ball hits. Cars can drive up the curved walls. The ball bounces and spins realistically.
@@ -20,7 +24,8 @@ A Rocket League–style car soccer game that runs in the browser. It has 3D grap
   - *2 Players — Versus*: split screen, Player 1 (blue) vs Player 2 (orange). You can fill the teams with bots for 2v2 or 3v3.
   - *2 Players — Co-op*: split screen, both players on blue against CPU opponents.
 - **Match rules.** Kickoff countdown, 3/5/7-minute or unlimited matches, and a golden-goal overtime. Time runs out only once the ball touches the ground. Goal explosions are followed by an instant replay. Supersonic hits demolish cars. The post-game screen shows stats (score, goals, assists, saves, shots, demos) and an MVP.
-- **Stadium details from the reference photos.** Tyre marks are torn into the grass and dirt flies off the wheels. Cars have racing numbers and exposed superchargers. Big score screens show "GOAL!!" and fire jets go off when someone scores. Flags wave over the stands, chevrons glow on the walls, and searchlights sweep the sky at night.
+- **Realistic sports cars.** Each car is a smooth GT coupé with real wheel arches, a tinted glass cabin, LED headlights and a full-width tail-light bar, door mirrors, side air intakes, a front splitter, a rear diffuser, twin exhausts and a swan-neck rear wing. The wheels have rounded tyres, spoked rims, brake discs and calipers. The paint is metallic with a clear coat, and the cars stay the same size as the Octane hitbox, so the handling is unchanged.
+- **Stadium details from the reference photos.** Tyre marks are torn into the grass and dirt flies off the wheels. Cars have racing numbers on the doors. Big score screens show "GOAL!!" and fire jets go off when someone scores. Flags wave over the stands, chevrons glow on the walls, and searchlights sweep the sky at night.
 - **Realistic visuals.** Night or sunset stadium with a city skyline, a crowd and floodlights. The grass is mowed in stripes. Goals glow and the walls are hex-glass. Lighting is physically based, with shadows and bloom. The ball has glowing panels, and boost flames and smoke trails come in team colours.
 - **HUD in Rocket League style.** Score and clock bar, circular boost meter, name plates, ball cam / car cam.
 - **Sound effects** for the engine, boost, hits, goals and the crowd. All of them are generated in code, so no audio files are needed.
