@@ -170,14 +170,18 @@ export function busModel() {
     const r = t < 0.12 ? 1.9 + t * 10 : R * Math.sin(Math.min(1, (t - 0.12) / 0.6) * Math.PI * 0.5) * (t > 0.72 ? Math.sqrt(Math.max(0, 1 - Math.pow((t - 0.72) / 0.28, 2))) : 1);
     pts.push(new THREE.Vector2(Math.max(0.01, r), y0 + t * H));
   }
-  const lathe = new THREE.LatheGeometry(pts, 48);
+  const lathe = new THREE.LatheGeometry(pts, 96);
   const pos = lathe.attributes.position, cols = new Float32Array(pos.count * 3), c = new THREE.Color();
   for (let i = 0; i < pos.count; i++) {
     const x = pos.getX(i), y = pos.getY(i), z = pos.getZ(i);
-    const gore = Math.floor(((Math.atan2(z, x) + Math.PI) / (Math.PI * 2)) * 16 + 0.5) % 16;
+    const frac = ((Math.atan2(z, x) + Math.PI) / (Math.PI * 2)) * 16;
+    const gore = Math.floor(frac + 0.5) % 16;
     const t = (y - y0) / H;
     c.setHex(t < 0.16 ? NAVY : gore % 2 ? 0x3b7fd4 : 0xd6e6f5);
     if (t > 0.92) c.setHex(0x3b7fd4);
+    // a seam down each gore boundary
+    const u = (frac + 0.5) % 1;
+    if (u < 0.02 || u > 0.98) c.setHex(NAVY);
     cols[i * 3] = c.r;
     cols[i * 3 + 1] = c.g;
     cols[i * 3 + 2] = c.b;
@@ -186,16 +190,6 @@ export function busModel() {
   const env = new THREE.Mesh(lathe, new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.55, metalness: 0, side: THREE.DoubleSide }));
   env.castShadow = true;
   g.add(env);
-  // seams down each gore
-  const seams = [];
-  for (let k = 0; k < 16; k++) {
-    const a = (k / 16) * Math.PI * 2 + Math.PI / 16;
-    for (let i = 0; i < pts.length - 1; i += 2) {
-      const p0 = pts[i], p1 = pts[Math.min(pts.length - 1, i + 2)];
-      seams.push(...Cap(0.04, [Math.cos(a) * p0.x * 1.003, p0.y, Math.sin(a) * p0.x * 1.003], [Math.cos(a) * p1.x * 1.003, p1.y, Math.sin(a) * p1.x * 1.003], NAVY));
-    }
-  }
-  g.add(new THREE.Mesh(partGeo(seams), mat));
   // blue burner flame
   const T = zhTextures();
   const flame = new THREE.Sprite(new THREE.SpriteMaterial({ map: T.glow, color: 0x6ab0ff, blending: THREE.AdditiveBlending, depthWrite: false, transparent: true }));
@@ -339,6 +333,34 @@ export function truckGeometry(color) {
   const g = partGeo(items);
   TRUCKS.set(key, g);
   return g;
+}
+
+// A parked sedan for the streets (white body, so instance colors paint it). It runs along x, nose at -x.
+let SEDAN = null;
+export function sedanGeometry() {
+  if (SEDAN) return SEDAN;
+  const BODY = 0xf2f2f2, GLASS = 0x14161a, DARK = 0x20262e, CHROME = 0x8a9096, BLACK = 0x151515;
+  if (!MRTAB[BODY]) MRTAB[BODY] = [0.4, 0.3];
+  const items = [];
+  // lower body and the greenhouse, side profiles extruded across the car (x = length here, via a 90 degree turn)
+  const lower = extrudeSide(roundRect(-2.2, 0.32, 2.2, 0.98, 0.2), 1.8, BODY, 0.08);
+  const cabin = extrudeSide([[-1.05, 0.95], [1.15, 0.95], [0.75, 1.5], [-0.65, 1.52]], 1.62, BODY, 0.06);
+  for (const it of [lower, cabin]) it.r = [0, Math.PI / 2, 0];
+  items.push(lower, cabin);
+  // windows: windshield, rear glass and side glass
+  items.push(Bx(0.06, 0.66, 1.5, -0.86, 1.23, 0, GLASS, 0, 0, -0.61), Bx(0.06, 0.64, 1.5, 0.95, 1.225, 0, GLASS, 0, 0, 0.63));
+  for (const sz of [-1, 1]) {
+    items.push(Bx(1.55, 0.4, 0.04, 0.05, 1.22, sz * 0.81, GLASS), Bx(0.06, 0.42, 0.05, 0.05, 1.22, sz * 0.82, BODY));
+    items.push(Bx(0.08, 0.04, 0.2, -0.95, 1.05, sz * 0.95, DARK));
+    for (const x of [-1.35, 1.35]) wheelX(items, x, 0.34, sz * 0.82, 0.34, 0.24, BLACK, CHROME, sz);
+    items.push(Bx(0.22, 0.12, 0.04, -2.22, 0.78, sz * 0.62, 0xfff0b8), Bx(0.12, 0.14, 0.04, 2.22, 0.78, sz * 0.62, 0xd23a2e));
+  }
+  items.push(Bx(0.18, 0.18, 1.86, -2.24, 0.45, 0, CHROME), Bx(0.18, 0.18, 1.86, 2.24, 0.45, 0, DARK), Bx(0.05, 0.22, 0.9, -2.27, 0.7, 0, DARK));
+  SEDAN = partGeo(items);
+  return SEDAN;
+}
+function wheelX(items, x, y, z, r, w, tire, rim, side) {
+  items.push(Cyl(r, w, x, y, z, tire, 'z'), Cyl(r * 0.6, w + 0.02, x, y, z, 0x2b2b2b, 'z'), Cyl(r * 0.5, 0.03, x, y, z + side * (w / 2 + 0.01), rim, 'z'));
 }
 
 // One wheel, centered on its axle (x is the axle direction, +x the outer side), so it can spin around x.

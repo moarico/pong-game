@@ -425,13 +425,18 @@ export class LootSystem {
           it.settled = true;
         }
       }
+      // models up close, the light beams from further off
       const md = Math.abs(it.pos.x - camPos.x) + Math.abs(it.pos.z - camPos.z);
-      const near = md < 200;
+      const near = md < 170;
       it.obj.visible = near;
       if (near) {
-        it.model.rotation.y = t * 0.9 + it.spin;
-        it.model.position.y = 0.2 + Math.sin(t * 2 + it.spin) * 0.07;
-        if (it.fx) it.fx.visible = md < 140;
+        const close = md < 85;
+        it.model.visible = close;
+        if (close) {
+          it.model.rotation.y = t * 0.9 + it.spin;
+          it.model.position.y = 0.2 + Math.sin(t * 2 + it.spin) * 0.07;
+        }
+        if (it.fx) it.fx.visible = true;
       }
     }
     // chest trim shimmer
@@ -444,6 +449,7 @@ export class LootSystem {
         c.lid.rotation.x = -(1.95 * (1 - Math.pow(1 - e, 3)) + Math.sin(e * Math.PI) * 0.35);
       }
       if (!c.opened) c.glow.material.opacity = 0.5 + Math.sin(t * 3.2 + c.seed) * 0.22;
+      c.obj.visible = Math.abs(c.pos.x - camPos.x) + Math.abs(c.pos.z - camPos.z) < 140;
     }
     this.updateSparkles(t, camPos);
     for (let i = this.bursts.length - 1; i >= 0; i--) {

@@ -102,10 +102,14 @@ function chamferBox(w, h, d) {
   return g.clone();
 }
 
-function forEachPart(items, fn) {
+// lo: the far version, with coarser spheres and cylinders and no bevels
+function forEachPart(items, fn, lo = false) {
   const m = new THREE.Matrix4(), q = new THREE.Quaternion(), e = new THREE.Euler(), pv = new THREE.Vector3(), nm = new THREE.Matrix3();
   for (const it of items) {
-    let g = it.g ? it.g.clone() : it.sharp ? new THREE.BoxGeometry(it.b[0], it.b[1], it.b[2]) : chamferBox(it.b[0], it.b[1], it.b[2]);
+    // tiny parts (rail teeth, screws, thin plates) stay plain: their bevels would never show
+    const plain = lo || it.sharp || Math.min(it.b ? Math.min(it.b[0], it.b[1], it.b[2]) : 1, 1) < 0.02;
+    const src = it.g && lo ? LO.get(it.g) || it.g : it.g;
+    let g = src ? src.clone() : plain ? new THREE.BoxGeometry(it.b[0], it.b[1], it.b[2]) : chamferBox(it.b[0], it.b[1], it.b[2]);
     if (g.index) {
       const ng = g.toNonIndexed();
       g.dispose();
@@ -126,7 +130,7 @@ function forEachPart(items, fn) {
 }
 
 // Hard parts: color + [metalness, roughness] per vertex, with a little baked top-light.
-export function partGeo(items) {
+export function partGeo(items, lo = false) {
   const P = [], N = [], C = [], MR = [], v = new THREE.Vector3(), col = new THREE.Color();
   forEachPart(items, (it, g, m, nm) => {
     const pa = g.attributes.position, na = g.attributes.normal;
@@ -141,7 +145,7 @@ export function partGeo(items) {
       C.push(col.r * sh, col.g * sh, col.b * sh);
       MR.push(mr[0], mr[1]);
     }
-  });
+  }, lo);
   const G = new THREE.BufferGeometry();
   G.setAttribute('position', new THREE.Float32BufferAttribute(P, 3));
   G.setAttribute('normal', new THREE.Float32BufferAttribute(N, 3));
@@ -152,7 +156,7 @@ export function partGeo(items) {
 }
 
 // Fabric and skin: color + box-projected UVs in part space so a camo print stays glued to the limb.
-export function partGeo2(items) {
+export function partGeo2(items, lo = false) {
   if (!items.length) return null;
   const P = [], N = [], C = [], U = [], v = new THREE.Vector3(), w = new THREE.Vector3(), col = new THREE.Color();
   forEachPart(items, (it, g, m, nm) => {
@@ -180,7 +184,7 @@ export function partGeo2(items) {
       }
       U.push(u * 6.2, t * 6.2);
     }
-  });
+  }, lo);
   const G = new THREE.BufferGeometry();
   G.setAttribute('position', new THREE.Float32BufferAttribute(P, 3));
   G.setAttribute('normal', new THREE.Float32BufferAttribute(N, 3));
@@ -194,6 +198,11 @@ export const SPH = new THREE.SphereGeometry(1, 14, 10);
 export const CYL = new THREE.CylinderGeometry(1, 1, 1, 14);
 export const CYL8 = new THREE.CylinderGeometry(1, 1, 1, 8);
 export const DOME = new THREE.SphereGeometry(1, 18, 10, 0, TAU, 0, Math.PI * 0.56);
+// coarse stand-ins for the far versions
+const LO = new Map([
+  [SPH, new THREE.SphereGeometry(1, 7, 5)], [CYL, new THREE.CylinderGeometry(1, 1, 1, 7)], [CYL8, new THREE.CylinderGeometry(1, 1, 1, 6)],
+  [DOME, new THREE.SphereGeometry(1, 8, 5, 0, TAU, 0, Math.PI * 0.56)],
+]);
 
 export const Bx = (sx, sy, sz, x, y, z, c, rx, ry, rz) => ({ b: [sx, sy, sz], p: [x, y, z], c, r: [rx || 0, ry || 0, rz || 0] });
 export const Sp = (rx, ry, rz, x, y, z, c, rot) => ({ g: SPH, s: [rx, ry, rz], p: [x, y, z], r: rot || [0, 0, 0], c, b: [rx * 2, ry * 2, rz * 2] });

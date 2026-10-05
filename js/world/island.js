@@ -22,6 +22,8 @@ export const POIS = [
   { id: 'coral', name: 'Coral Cove', x: -300, z: 330, r: 46, type: 'beach', loot: 'low' },
   { id: 'redrock', name: 'Redrock Gulch', x: 140, z: 388, r: 40, type: 'desert', loot: 'low' },
   { id: 'gullrock', name: 'Gull Rock', x: -40, z: -462, r: 22, type: 'camp', loot: 'low' },
+  { id: 'maple', name: 'Maple Grove', x: 112, z: -14, r: 58, type: 'suburb', loot: 'medium' },
+  { id: 'pitstop', name: 'Pit Stop', x: -80, z: 170, r: 30, type: 'outpost', loot: 'low' },
 ];
 
 export const LAKE = { x: -140, z: -120, r: 38, depth: -4.5 };
@@ -130,6 +132,8 @@ export const ROADS = [
   [[-332, -186], [-310, -130], [-276, -72]],
   [[-276, -72], [-216, -102], [-180, -116]],
   [[-140, -162], [-104, -222], [-70, -280]],
+  [[0, 30], [58, 10], [112, -14]],
+  [[112, -14], [196, 30], [290, 82]],
 ];
 
 // Biome ground palettes (sRGB hex).

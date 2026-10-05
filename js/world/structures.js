@@ -3,6 +3,7 @@ import { GeoBuilder, worldMaterial, tagSurface, SURF } from './geobuilder.js';
 import { buildingMaterial } from './buildingmat.js';
 import { POIS, LAKE, ROAD_HALF_WIDTH } from './island.js';
 import { furnishFloor } from './interiors.js';
+import { powerLines, streetFurniture, yard, wildSpots } from './details.js';
 import { makeRng, clamp, lerp } from '../util.js';
 
 // Local building frame rotated by multiples of 90 degrees so every box stays axis aligned.
@@ -284,7 +285,7 @@ export class Structures {
       // a light ceiling under this floor's slab (the stair hole left open)
       if (f > 0) {
         const lane = lanes[(f - 1) % 2];
-        this.ceiling(F, x0 + T, z0 + T, x1 - T, z1 - T, y - 0.25, [sx, lane[0], sx + L, lane[1]], o.ceilingColor || (o.ceilingColor = rng.pick(['#f0ece4', '#e8e4dc', '#f2f2ee'])));
+        this.indoors(() => this.ceiling(F, x0 + T, z0 + T, x1 - T, z1 - T, y - 0.25, [sx, lane[0], sx + L, lane[1]], o.ceilingColor || (o.ceilingColor = rng.pick(['#f0ece4', '#e8e4dc', '#f2f2ee']))));
       }
       // trim band
       this.box(F, x0 - 0.05, y + fh - 0.25, z0 - 0.05, x1 + 0.05, y + fh, z0 + 0.02, trim, false);
@@ -309,13 +310,13 @@ export class Structures {
         b.stairs.push({ bottom: [bx, y, bz], top: [tx, y + fh, tz] });
       }
     }
-    this.interior(b, o, { F, x0, x1, z0, z1, T, floors, fh, base, doorX, doorW, laneW, sx, L, stairFloors, floorOps, wall });
+    this.indoors(() => this.interior(b, o, { F, x0, x1, z0, z1, T, floors, fh, base, doorX, doorW, laneW, sx, L, stairFloors, floorOps, wall }));
     // roof
     const top = base + floors * fh;
     const hole = o.roofAccess ? [sx, lanes[(floors - 1) % 2][0], sx + L, lanes[(floors - 1) % 2][1]] : null;
     const roofType = o.roof || 'gable';
     this.slab(F, x0, z0, x1, z1, top + 0.25, 0.3, roofType === 'flat' ? '#7c7a76' : FLOOR, hole);
-    this.ceiling(F, x0 + T, z0 + T, x1 - T, z1 - T, top - 0.05, hole, o.ceilingColor || (o.ceilingColor = rng.pick(['#f0ece4', '#e8e4dc', '#f2f2ee'])));
+    this.indoors(() => this.ceiling(F, x0 + T, z0 + T, x1 - T, z1 - T, top - 0.05, hole, o.ceilingColor || (o.ceilingColor = rng.pick(['#f0ece4', '#e8e4dc', '#f2f2ee']))));
     if (roofType === 'flat') {
       const ph = 0.9;
       this.box(F, x0, top + 0.25, z0, x1, top + 0.25 + ph, z0 + 0.25, wall);
@@ -690,30 +691,75 @@ export class Structures {
       this.gb = new GeoBuilder(this.rng);
       this.glass = new GeoBuilder(this.rng);
       this.glass.jitter = 0;
+      this.inner = new GeoBuilder(this.rng);
       const fn = this['gen_' + poi.type];
       if (fn) fn.call(this, poi);
       this.flush(poi.id);
+      this.flushInner(poi.id);
     }
     // Lone houses around the island for low loot between named areas.
+    this.innerMeshes = this.innerMeshes || [];
     this.gb = new GeoBuilder(this.rng);
     this.glass = new GeoBuilder(this.rng);
     const lone = { id: 'wild', name: 'Wilds', loot: 'low', x: 0, z: 0, r: 0, type: 'wild' };
     let placed = 0;
-    for (let tries = 0; tries < 400 && placed < 14; tries++) {
+    for (let tries = 0; tries < 600 && placed < 22; tries++) {
       const x = (this.rng() - 0.5) * 820, z = (this.rng() - 0.5) * 820;
       if (POIS.some((p) => Math.hypot(p.x - x, p.z - z) < p.r + 40)) continue;
       if (this.T.heightAt(x, z) < 2 || this.T.heightAt(x, z) > 40) continue;
       const near = this.T.distToRoad(x, z);
       if (near < 9) continue;
-      const w = 8, d = 7;
-      if (!this.rectClear(x - w / 2, z - d / 2, x + w / 2, z + d / 2, 30, { maxSlope: 3 })) continue;
-      this.reserve(x - w / 2, z - d / 2, x + w / 2, z + d / 2);
+      const w = this.rng.pick([7, 8, 9, 10]), d = this.rng.pick([7, 8]);
+      if (!this.rectClear(x - w / 2 - 4, z - d / 2 - 4, x + w / 2 + 4, z + d / 2 + 5, 24, { maxSlope: 3 })) continue;
+      this.reserve(x - w / 2 - 4, z - d / 2 - 4, x + w / 2 + 4, z + d / 2 + 5);
       const biome = this.T.biomeAt(x, z);
-      const roof = biome === 'desert' ? 'flat' : biome === 'snow' ? 'steep' : 'gable';
-      this.house(lone, { x, z, w, d, rot: this.rng.int(0, 3), floors: this.rng.chance(0.4) ? 2 : 1, roof, lootPerFloor: 1, wall: biome === 'desert' ? '#e0b98a' : undefined });
+      const roof = biome === 'desert' ? 'flat' : biome === 'snow' ? 'steep' : this.rng.pick(['gable', 'gable', 'pyramid']);
+      this.inner = new GeoBuilder(this.rng);
+      const b = this.house(lone, { x, z, w, d, rot: this.rng.int(0, 3), floors: this.rng.chance(0.45) ? 2 : 1, roof, lootPerFloor: 1, wall: biome === 'desert' ? '#e0b98a' : undefined });
+      this.flushInner('wild-' + placed);
+      if (biome !== 'desert' && biome !== 'snow' && this.rng.chance(0.6)) yard(this, b);
       placed++;
     }
     this.flush('wild');
+    // power lines, street furniture, and camps, ruins, lookouts and trailers in the wilds
+    this.gb = new GeoBuilder(this.rng);
+    this.glass = new GeoBuilder(this.rng);
+    powerLines(this);
+    streetFurniture(this);
+    wildSpots(this, 18);
+    this.flush('details');
+  }
+
+  // Furniture, partitions and ceilings go in their own mesh per area, drawn only when you are near.
+  flushInner(name) {
+    if (!this.inner || this.inner.vertexCount === 0) return;
+    const mesh = new THREE.Mesh(this.inner.build(), buildingMaterial());
+    mesh.receiveShadow = true;
+    mesh.name = 'inner-' + name;
+    mesh.geometry.computeBoundingSphere();
+    this.group.add(mesh);
+    (this.innerMeshes = this.innerMeshes || []).push(mesh);
+    this.inner = null;
+  }
+
+  updateInteriors(camera) {
+    const p = camera.position;
+    for (const m of this.innerMeshes || []) {
+      const s = m.geometry.boundingSphere;
+      m.visible = p.distanceTo(s.center) < s.radius + 70;
+    }
+  }
+
+  // Run fn with geometry going to the interior builder.
+  indoors(fn) {
+    if (!this.inner) return fn();
+    const saved = this.gb;
+    this.gb = this.inner;
+    try {
+      return fn();
+    } finally {
+      this.gb = saved;
+    }
   }
 
   flush(name) {
@@ -782,6 +828,42 @@ export class Structures {
       const a = rng() * Math.PI * 2;
       const r = 20 + rng() * 40;
       this.metalSpots.push({ x: poi.x + Math.cos(a) * r, z: poi.z + Math.sin(a) * r, kind: 'car' });
+    }
+  }
+
+  // A family neighborhood: houses with yards round a little park with a playground.
+  gen_suburb(poi) {
+    const rng = this.rng;
+    for (let i = 0; i < 11; i++) {
+      const w = rng.pick([8, 9, 10, 11]), d = rng.pick([7, 8, 9]);
+      const site = this.findSite(poi, w + 6.4, d + 8, 17, poi.r, { gap: 1.5, faceCenter: true, maxSlope: 5 });
+      if (!site) continue;
+      const F = new Frame(site.x, site.z, site.rot);
+      const [hx, hz] = F.tw(0, -0.8);
+      const b = this.house(poi, {
+        x: hx, z: hz, rot: site.rot, w, d, floors: rng.chance(0.6) ? 2 : 1, roof: rng.pick(['gable', 'gable', 'steep', 'pyramid']),
+        lootPerFloor: poi.loot === 'medium' ? 2 : 1, porch: rng.chance(0.65),
+      });
+      yard(this, b);
+    }
+    // the park: a lawn ring of benches, a swing set and a slide
+    const y = this.T.heightAt(poi.x, poi.z);
+    const F = new Frame(poi.x, poi.z, 0);
+    this.box(F, -1.6, y - 0.2, -1.6, 1.6, y + 0.25, 1.6, '#d8c890', false);
+    for (const x of [-2.4, 2.4]) {
+      this.box(F, x - 0.06, y, -3.2, x + 0.06, y + 2.4, -3.0, '#3a7ac8');
+      this.box(F, x - 0.06, y, -1.8, x + 0.06, y + 2.4, -1.6, '#3a7ac8');
+    }
+    this.box(F, -2.5, y + 2.35, -3.2, 2.5, y + 2.5, -1.6, '#3a7ac8', false);
+    for (const x of [-1, 1]) this.box(F, x - 0.25, y + 0.5, -2.5, x + 0.25, y + 0.56, -2.3, '#d84a3a', false);
+    this.box(F, 3.5, y, 2.0, 4.1, y + 2.2, 2.6, '#f0c040');
+    this.surface(F, 4.1, 2.0, 7.0, 2.6, y, y + 2.2, (lx) => y + 2.2 * Math.max(0, 1 - (lx - 4.1) / 2.9), 0.3);
+    for (let k = 0; k < 6; k++) this.box(F, 4.1 + k * 0.48, y + 2.2 - k * 0.44 - 0.1, 2.0, 4.6 + k * 0.48, y + 2.2 - k * 0.44, 2.6, '#d84a3a', false);
+    this.outdoorLoot(poi, poi.x, poi.z, 1);
+    this.reserve(poi.x - 8, poi.z - 8, poi.x + 8, poi.z + 8);
+    for (let i = 0; i < 3; i++) {
+      const a = rng() * Math.PI * 2;
+      this.metalSpots.push({ x: poi.x + Math.cos(a) * rng.range(12, poi.r), z: poi.z + Math.sin(a) * rng.range(12, poi.r), kind: 'car' });
     }
   }
 

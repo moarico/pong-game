@@ -116,7 +116,7 @@ function gearMat() {
 
 // ---------- geometry ----------
 
-const pair = (fab, gr) => ({ f: partGeo2(fab), g: partGeo2(gr) });
+const pair = (fab, gr) => ({ f: partGeo2(fab), g: partGeo2(gr), fl: partGeo2(fab, true), gl: partGeo2(gr, true) });
 const SG = new Map();
 
 function soldierGeos(o, v) {
@@ -204,13 +204,15 @@ export class CharacterModel {
     const v = soldierVariant(outfit, name);
     const g = soldierGeos(outfit, v);
     const fab = fabricMat(outfit), gm = gearMat();
+    this.lodMeshes = [];
     const add = (grp, pr) => {
-      for (const [geo, mat] of [[pr.f, fab], [pr.g, gm]]) {
+      for (const [geo, lo, mat] of [[pr.f, pr.fl, fab], [pr.g, pr.gl, gm]]) {
         if (!geo) continue;
         const m = new THREE.Mesh(geo, mat);
         m.castShadow = true;
         m.receiveShadow = true;
         grp.add(m);
+        if (lo) this.lodMeshes.push({ m, hi: geo, lo });
       }
     };
     this.root = new THREE.Group();
@@ -322,6 +324,12 @@ export class CharacterModel {
 
   // Far soldiers stop casting shadows (they are a few pixels tall and cost a lot of draw calls).
   lod(dist) {
+    // past ~40 m the body swaps to its coarse version
+    const far = dist > 40;
+    if (far !== this.far) {
+      this.far = far;
+      for (const L of this.lodMeshes) L.m.geometry = far ? L.lo : L.hi;
+    }
     const near = dist < 70;
     if (near === this.shadowNear) return;
     this.shadowNear = near;

@@ -145,6 +145,7 @@ export function itemModel(item) {
   let mesh;
   if (item.kind === 'weapon') {
     mesh = weaponModel(item.type, item.rarity);
+    mesh.castShadow = false;
     mesh.rotation.y = Math.PI / 2;
     mesh.position.y = 0.12;
     const g = new THREE.Group();
@@ -154,6 +155,7 @@ export function itemModel(item) {
   }
   if (item.kind === 'heal') {
     mesh = healModel(item.type);
+    mesh.castShadow = false;
     mesh.position.y = 0.1;
     const g = new THREE.Group();
     g.add(mesh);

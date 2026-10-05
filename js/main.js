@@ -555,6 +555,7 @@ class Game {
     this.env.update(dt, this.camera, p.alive ? p.pos : this.camera.position, this.stormView);
     this.grass.update(this.camera);
     this.props.updateLod(this.camera);
+    this.structures.updateInteriors(this.camera);
     this.hud.update(dt);
     if (this.endAt !== null && this.time >= this.endAt) this.endMatch();
   }

@@ -4,15 +4,13 @@ import { POIS, LAKE } from './island.js';
 import { makeRng } from '../util.js';
 import { treeParts, bushParts, boulderGeometry, foliageMaterials, cropGeometry, WIND } from './foliage.js';
 import { rockMaterial } from './terrainmat.js';
+import { sedanGeometry } from '../zh/models.js';
 
 function metalGeometry(kind) {
   const gb = new GeoBuilder(makeRng(kind.length * 7));
   gb.jitter = 0.05;
   if (kind === 'car') {
-    gb.box(-2.1, 0.35, -0.95, 2.1, 1.15, 0.95, '#ffffff');
-    gb.box(-1.0, 1.15, -0.85, 1.0, 1.85, 0.85, '#e6e6e6');
-    gb.box(-0.95, 1.2, -0.87, 0.95, 1.75, 0.87, '#2c3a45');
-    for (const [x, z] of [[-1.3, -0.9], [1.3, -0.9], [-1.3, 0.9], [1.3, 0.9]]) gb.box(x - 0.38, 0, z - 0.14, x + 0.38, 0.76, z + 0.14, '#222', false);
+    return sedanGeometry();
   } else if (kind === 'barrels') {
     for (const [x, z] of [[0, 0], [0.75, 0.2], [0.2, 0.8]]) {
       gb.cylinder(x, 0, z, 0.38, 0.38, 1.1, 8, '#ffffff');
@@ -334,13 +332,14 @@ export class Props {
     for (const corn of [true, false]) {
       const mine = pts.filter((p) => p.corn === corn);
       if (!mine.length) continue;
-      this.chunked(corn ? 'crops-corn' : 'crops-wheat', cropGeometry(corn ? 'corn' : 'wheat'), corn ? M.frond : M.plain, mine, (p, mesh, i) => {
+      this.cropChunks = this.cropChunks || [];
+      this.cropChunks.push(...this.chunked(corn ? 'crops-corn' : 'crops-wheat', cropGeometry(corn ? 'corn' : 'wheat'), corn ? M.frond : M.plain, mine, (p, mesh, i) => {
         const s = 0.85 + rng() * 0.3;
         m.compose(new THREE.Vector3(p.x, p.y - 0.05, p.z), new THREE.Quaternion().setFromEuler(new THREE.Euler(0, rng() * 6.28, 0)), new THREE.Vector3(s, s * (0.9 + rng() * 0.2), s));
         mesh.setMatrixAt(i, m);
         const k = 0.85 + rng() * 0.3;
         mesh.setColorAt(i, c.setRGB(k, k, k));
-      }, corn);
+      }, corn));
     }
   }
 
@@ -382,6 +381,11 @@ export class Props {
   updateLod(camera) {
     if (!this.treeChunks) return;
     const p = camera.position;
+    // crops are dense and small: only the fields near you are drawn
+    for (const m of this.cropChunks || []) {
+      const c = m.boundingSphere.center;
+      m.visible = Math.hypot(c.x - p.x, c.z - p.z) < 130 + m.boundingSphere.radius;
+    }
     for (const c of this.treeChunks) {
       if (!c.leaves) continue;
       const near = Math.hypot(c.cx - p.x, c.cz - p.z) < 150;

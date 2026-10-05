@@ -77,6 +77,8 @@ export class TitleCinematic {
     cam.fov = 62;
     cam.updateProjectionMatrix();
     g.env.update(dt, cam, lead, 0);
+    g.structures.updateInteriors(cam);
+    g.props.updateLod(cam);
   }
 
   // Grab a frame for the loading screens right after it renders.
