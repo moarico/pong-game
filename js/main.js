@@ -32,7 +32,7 @@ import { TitleCinematic } from './cinematic.js';
 
 const SETTINGS_KEY = 'stormdrop-settings-v1';
 const DEFAULTS = {
-  mouseSens: 1, padSens: 1, invertY: false, fov: 72, volume: 0.7, quality: 'medium', players: 25,
+  mouseSens: 1, padSens: 1, invertY: false, fov: 72, volume: 0.7, music: 0.5, quality: 'medium', players: 25,
   difficulty: 1, stormSpeed: 1, showFps: false, name: 'You', outfit: 'recruit', shoulder: 1, view: 'first',
 };
 const tick = () => new Promise((r) => setTimeout(r, 16));
@@ -108,6 +108,7 @@ class Game {
     const S = this.settings;
     S.players = Math.max(20, Math.min(30, Math.round(S.players)));
     this.audio.setVolume(S.volume);
+    this.audio.music.setLevel(S.music ?? 0.5);
     const dpr = window.devicePixelRatio || 1;
     this.renderer.setPixelRatio(Math.min(dpr, S.quality === 'high' ? 2 : S.quality === 'medium' ? 1.25 : 0.85));
     if (this.env) this.env.setQuality(S.quality);
@@ -458,6 +459,16 @@ class Game {
     this.menus.show('lobby');
   }
 
+  // Lobby theme in the menus, the Sky Coach tune from the bus until you land, quiet while you play.
+  musicTrack() {
+    if (this.state === 'end') return this.audio.music.trackName ?? null;
+    const p = this.player;
+    const inMatch = (this.state === 'playing' || this.state === 'paused') && p;
+    if (!inMatch) return 'lobby';
+    if (p.alive && (p.mode === 'bus' || p.mode === 'freefall' || p.mode === 'glide')) return 'bus';
+    return null;
+  }
+
   // ---------- loop ----------
 
   loop(t) {
@@ -468,6 +479,7 @@ class Game {
     this.input.poll();
     this.audio.setMenu(this.state !== 'playing');
     this.audio.frame(dt);
+    this.audio.music.play(this.musicTrack());
     if (this.state === 'playing') {
       if (this.menus.invOpen) this.menus.updatePad();
       this.updateMatch(dt);

@@ -163,6 +163,7 @@ export class Menus {
         <label>Camera <select data-k="view" data-nav><option value="first">First person</option><option value="third">Third person</option></select></label>
         <label>Field of view <input type="range" min="65" max="100" step="1" data-k="fov" data-nav><output></output></label>
         <label>Volume <input type="range" min="0" max="1" step="0.05" data-k="volume" data-nav><output></output></label>
+        <label>Music <input type="range" min="0" max="1" step="0.05" data-k="music" data-nav><output></output></label>
         <label>Graphics quality <select data-k="quality" data-nav><option value="low">Low</option><option value="medium">Medium</option><option value="high">High</option></select></label>
         <label>Players in a match <input type="range" min="20" max="30" step="1" data-k="players" data-nav><output></output></label>
         <label>Bot difficulty <select data-k="difficulty" data-nav><option value="0">Easy</option><option value="1">Normal</option><option value="2">Hard</option></select></label>
@@ -175,7 +176,7 @@ export class Menus {
     for (const input of el.querySelectorAll('[data-k]')) {
       const k = input.dataset.k;
       const out = input.parentElement.querySelector('output');
-      const fmt = (v) => (k === 'volume' ? Math.round(v * 100) + '%' : k === 'fov' ? v + '°' : String(v));
+      const fmt = (v) => (k === 'volume' || k === 'music' ? Math.round(v * 100) + '%' : k === 'fov' ? v + '°' : String(v));
       if (input.type === 'checkbox') input.checked = !!S[k];
       else input.value = S[k];
       if (out) out.textContent = fmt(input.value);

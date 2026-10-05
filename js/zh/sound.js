@@ -4,6 +4,7 @@
 // you can hear front/behind/left/right, arrive late with distance (speed of sound), and your own gun ducks
 // the world. Battle royale sounds (chests, building, gliding, the storm, the coach) are made the same way.
 import * as THREE from 'three';
+import { Music } from '../music.js';
 
 const TAU = Math.PI * 2;
 const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
@@ -115,12 +116,12 @@ function fsin(x) {
 
 // ---------- guns ----------
 const GUNP = {
-  ar: { crack: 0.9, bf: 1400, body: 1.0, bd: 0.034, th: 70, thd: 0.075, tha: 0.95, mech: 0.32, mt: 0.011, tail: 0.5, ta: 0.5, peak: 0.9 },
-  smg: { crack: 0.22, bf: 680, body: 0.65, bd: 0.028, th: 92, thd: 0.045, tha: 0.55, mech: 0.6, mt: 0.007, tail: 0.2, ta: 0.2, peak: 0.62 },
+  ar: { crack: 0.9, bf: 1400, body: 1.0, bd: 0.034, th: 70, thd: 0.08, tha: 1.1, mech: 0.32, mt: 0.011, tail: 0.38, ta: 0.42, peak: 0.92 },
+  smg: { crack: 0.3, bf: 760, body: 0.75, bd: 0.028, th: 92, thd: 0.05, tha: 0.7, mech: 0.55, mt: 0.007, tail: 0.18, ta: 0.2, peak: 0.66 },
   sg: { crack: 0.75, bf: 900, body: 1.25, bd: 0.075, th: 50, thd: 0.14, tha: 1.35, mech: 0.18, mt: 0.02, tail: 0.75, ta: 0.78, peak: 0.98 },
   sr: { crack: 1.25, bf: 1150, body: 1.1, bd: 0.06, th: 44, thd: 0.17, tha: 1.4, mech: 0.12, mt: 0.03, tail: 1.15, ta: 0.85, peak: 1.0 },
-  lmg: { crack: 0.85, bf: 1250, body: 1.05, bd: 0.045, th: 62, thd: 0.09, tha: 1.05, mech: 0.45, mt: 0.01, tail: 0.55, ta: 0.58, peak: 0.92 },
-  pis: { crack: 1.0, bf: 2000, body: 0.8, bd: 0.024, th: 112, thd: 0.04, tha: 0.62, mech: 0.32, mt: 0.006, tail: 0.32, ta: 0.36, peak: 0.74 },
+  lmg: { crack: 0.85, bf: 1250, body: 1.05, bd: 0.045, th: 62, thd: 0.09, tha: 1.2, mech: 0.45, mt: 0.01, tail: 0.42, ta: 0.48, peak: 0.94 },
+  pis: { crack: 1.0, bf: 1800, body: 0.85, bd: 0.024, th: 105, thd: 0.045, tha: 0.75, mech: 0.32, mt: 0.006, tail: 0.26, ta: 0.32, peak: 0.78 },
 };
 // Stormdrop weapon type -> gun sound.
 export const GUN_SND = { ar: 'ar', smg: 'smg', shotgun: 'sg', sniper: 'sr', pistol: 'pis', lmg: 'lmg', rocket: 'rocket' };
@@ -155,7 +156,7 @@ function gunVariant(p, far) {
     let F = s.F;
     if (!F) {
       F = s.F = {
-        hc: LPf(2600, sr), b: SVf(bf, 0.9, sr), mk: SVf(1300, 0.7, sr), r: [SVf(bf * 0.7, 1.2, sr), SVf(bf * 0.7, 1.2, sr), SVf(bf * 0.7, 1.2, sr)], tl: SVf(480 + ch * 60, 0.7, sr),
+        hc: LPf(2600, sr), b: SVf(bf, 0.9, sr), bk: SVf(330, 1.1, sr), mk: SVf(1300, 0.7, sr), r: [SVf(bf * 0.7, 1.2, sr), SVf(bf * 0.7, 1.2, sr), SVf(bf * 0.7, 1.2, sr)], tl: SVf(480 + ch * 60, 0.7, sr),
         fb: LPf(480, sr), ft: SVf(380 + ch * 50, 0.7, sr), fr: [LPf(420, sr), LPf(420, sr), LPf(420, sr)], out: SVf(far ? 2400 : 6500, 0.6, sr), ph: 0, wd: ch * 0.0045,
       };
     }
@@ -164,6 +165,7 @@ function gunVariant(p, far) {
     if (!far) {
       v += (n - F.hc(n)) * ex(t, 0.0012) * p.crack; // supersonic crack
       v += F.b(n).b * (t < 0.0006 ? t / 0.0006 : 1) * ex(t, bd) * p.body * 2.2; // muzzle blast
+      v += F.bk(n).b * ex(t, bd * 1.8) * p.body * 1.6; // the low-mid bark that gives a shot its weight
       F.ph += (TAU * th * (1 + 3 * ex(t, 0.006))) / sr;
       v += fsin(F.ph) * ex(t, p.thd) * p.tha * 1.45 + fsin(F.ph * 0.5) * ex(t, p.thd * 1.6) * p.tha * 0.5; // chest thump + sub
       const mt = t - p.mt;
@@ -341,49 +343,72 @@ function* soundJobs(B) {
     return fsin(s.ph) * ex(t, 0.05) * 0.5 + svf(s, 'g', n, 5200, 4, sr).b * ex(t, 0.03) * 0.9 + (n - lpf(s, 'h', n, 4000, sr)) * ex(t, 0.003) * 0.6;
   }, 0.8));
   yield;
-  // hit feedback
-  B.tick = [mk2(0.08, (t, s, sr) => {
+  // hit feedback: a crisp tick for body shots, a bright ding for headshots, a punchy hit and rising chime for
+  // an elimination, and a shower of glass when a shield breaks
+  B.tick = [mk2(0.09, (t, s, sr) => {
     const n = Math.random() * 2 - 1;
-    return lpf(s, 't', n, 900, sr) * ex(t, 0.012) * 2.2 + (n - lpf(s, 'h', n, 4000, sr)) * ex(t, 0.0025) * 0.8 + fsin(TAU * 150 * t) * ex(t, 0.018) * 0.6;
+    return (n - lpf(s, 'h', n, 3200, sr)) * ex(t, 0.0018) * 0.9 + fsin(TAU * 1650 * t) * ex(t, 0.016) * 0.75 + fsin(TAU * 2480 * t) * ex(t, 0.01) * 0.35 + lpf(s, 'b', n, 700, sr) * ex(t, 0.01) * 1.1;
   })];
   yield;
-  B.kill = [mk2(0.28, (t, s, sr) => {
+  B.kill = [mk2(0.6, (t, s, sr) => {
     const n = Math.random() * 2 - 1;
-    return lpf(s, 't', n, 380, sr) * ex(t, 0.05) * 2.8 + fsin(TAU * 72 * t) * ex(t, 0.08) * 1.2 + lpf(s, 'c', n, 1200, sr) * ex(t, 0.01) * 0.6;
+    let v = lpf(s, 't', n, 320, sr) * ex(t, 0.045) * 2.6 + fsin(TAU * (90 - 40 * Math.min(1, t / 0.1)) * t) * ex(t, 0.09) * 1.3 + (n - lpf(s, 'h', n, 2500, sr)) * ex(t, 0.004) * 0.7;
+    for (const [q, f] of [[0.04, 1046], [0.13, 1568]]) {
+      const d = t - q;
+      if (d > 0) v += (fsin(TAU * f * d) + 0.35 * fsin(TAU * f * 2.76 * d) + 0.2 * fsin(TAU * f * 5.4 * d)) * ex(d, 0.22) * 0.55;
+    }
+    return v;
   })];
   yield;
-  B.head = [mk2(0.22, (t, s, sr) => {
+  B.head = [mk2(0.42, (t, s, sr) => {
     const n = Math.random() * 2 - 1;
-    return lpf(s, 't', n, 500, sr) * ex(t, 0.035) * 2.6 + (n - lpf(s, 'h', n, 2500, sr)) * ex(t, 0.003) * 0.9 + fsin(TAU * 85 * t) * ex(t, 0.06);
+    const ding = fsin(TAU * 2093 * t) * ex(t, 0.2) + 0.5 * fsin(TAU * 3140 * t) * ex(t, 0.12) + 0.3 * fsin(TAU * 4186 * t) * ex(t, 0.08) + 0.18 * fsin(TAU * 5650 * t) * ex(t, 0.05);
+    return ding * 0.7 + (n - lpf(s, 'h', n, 3000, sr)) * ex(t, 0.003) * 1.0 + lpf(s, 'b', n, 600, sr) * ex(t, 0.02) * 1.2;
   })];
   yield;
-  B.shieldbreak = [mk2(0.5, (t, s, sr) => {
+  B.shieldbreak = [mk2(0.8, (t, s, sr) => {
     const n = Math.random() * 2 - 1;
-    const sh = svf(s, 's', n, 3800 - 2000 * Math.min(1, t / 0.3), 3, sr).b * ex(t, 0.12) * 1.2;
-    return sh + fsin(TAU * 1250 * t) * ex(t, 0.08) * 0.4 + fsin(TAU * 1870 * t) * ex(t, 0.06) * 0.3 + lpf(s, 'l', n, 300, sr) * ex(t, 0.04) * 1.2;
-  }, 0.8)];
+    // shards: little glassy pings scattered over the first quarter second
+    if (Math.random() < (180 * ex(t, 0.18) + 2) / sr) {
+      s.e = 1;
+      s.f = 2800 + Math.random() * 6000;
+      s.p = 0;
+    }
+    s.e = (s.e || 0) * 0.9992;
+    s.p = (s.p || 0) + (TAU * (s.f || 3000)) / sr;
+    const shards = fsin(s.p) * s.e * 0.55;
+    const burst = (n - lpf(s, 'h', n, 3500, sr)) * ex(t, 0.06) * 1.1;
+    s.w = (s.w || 0) + (TAU * (140 - 80 * Math.min(1, t / 0.25))) / sr;
+    const whump = fsin(s.w) * ex(t, 0.12) * 0.9;
+    const zap = fsin(TAU * (1800 - 1100 * Math.min(1, t / 0.3)) * t) * ex(t, 0.1) * 0.3;
+    return shards + burst + whump + zap;
+  }, 0.95)];
   yield;
   B.hurt = [0, 1].map(() => mk2(0.3, (t, s, sr) => {
     const n = Math.random() * 2 - 1;
     return lpf(s, 'a', n, 260, sr) * ex(t, 0.06) * 3 + fsin(TAU * 62 * t) * ex(t, 0.07) + svf(s, 'b', n, 1200, 2, sr).b * ex(t, 0.015) * 0.5;
   }));
   yield;
-  // footsteps: heel then toe, colored by surface
+  // footsteps: a heel strike with real weight, then the toe, colored by the surface underfoot
   const step = (surf) => {
-    const toe = 0.035 + Math.random() * 0.03, P = [[0, 1, 'h', 'H'], [toe, 0.55, 't', 'T']];
-    return mk2(0.2, (t, s, sr) => {
+    const toe = 0.04 + Math.random() * 0.03, P = [[0, 1, 'h', 'H', 'p'], [toe, 0.6, 't', 'T', 'q']];
+    const thumpF = 60 + Math.random() * 25;
+    return mk2(0.22, (t, s, sr) => {
       const n = Math.random() * 2 - 1;
       let v = 0;
-      for (const [q, g, k, k2] of P) {
+      for (const [q, g, k, k2, k3] of P) {
         const d = t - q;
         if (d < 0) continue;
-        if (surf === 'stone') v += (svf(s, k, n, 2800, 1.2, sr).b * ex(d, 0.012) * 1.5 + lpf(s, k2, n, 500, sr) * ex(d, 0.02) * 1.4 + fsin(TAU * 120 * d) * ex(d, 0.018) * 0.4) * g;
-        else if (surf === 'metal') v += (svf(s, k, n, 600, 0.9, sr).b * ex(d, 0.04) * 2.2 + lpf(s, k2, n, 200, sr) * ex(d, 0.05) * 1.6) * g;
-        else if (surf === 'wood') v += (svf(s, k, n, 520, 2, sr).b * ex(d, 0.035) * 2 + fsin(TAU * 180 * d) * ex(d, 0.04) * 0.6) * g;
-        else if (surf === 'grass') v += (svf(s, k, n, 3200, 1.6, sr).b * fsin(Math.PI * Math.min(1, d / 0.07)) * (d < 0.07 ? 0.9 : 0) + lpf(s, k2, n, 700, sr) * ex(d, 0.03) * 1.2) * g;
-        else if (surf === 'sand') v += (svf(s, k, n, 1800, 0.8, sr).b * fsin(Math.PI * Math.min(1, d / 0.09)) * (d < 0.09 ? 0.8 : 0) + lpf(s, k2, n, 400, sr) * ex(d, 0.04) * 1.4) * g;
-        else if (surf === 'water') v += (svf(s, k, n, 900 + 1400 * Math.min(1, d / 0.08), 1.4, sr).b * fsin(Math.PI * Math.min(1, d / 0.12)) * (d < 0.12 ? 1.3 : 0)) * g;
-        else v += (lpf(s, k, n, 1100, sr) * ex(d, 0.045) * 2 + (Math.random() < 0.06 * ex(d, 0.05) ? (Math.random() - 0.5) * 0.8 : 0)) * g;
+        // the body of every step: a short low thump and a muffled scuff
+        let w = fsin(TAU * thumpF * d) * ex(d, 0.03) * (surf === 'water' ? 0.2 : 0.9) + lpf(s, k3, n, 260, sr) * ex(d, 0.025) * 1.4;
+        if (surf === 'stone') w += svf(s, k, n, 2200, 1.4, sr).b * ex(d, 0.01) * 1.1 + lpf(s, k2, n, 900, sr) * ex(d, 0.015) * 0.8;
+        else if (surf === 'metal') w += (svf(s, k, n, 520, 3, sr).b * ex(d, 0.06) * 1.6 + fsin(TAU * 830 * d) * ex(d, 0.05) * 0.35 + fsin(TAU * 1270 * d) * ex(d, 0.035) * 0.25);
+        else if (surf === 'wood') w += svf(s, k, n, 420, 2.6, sr).b * ex(d, 0.045) * 1.8 + fsin(TAU * 165 * d) * ex(d, 0.05) * 0.7;
+        else if (surf === 'grass') w += svf(s, k, n, 1700, 1.2, sr).b * fsin(Math.PI * Math.min(1, d / 0.06)) * (d < 0.06 ? 0.45 : 0) + (Math.random() < 0.05 * ex(d, 0.06) ? (Math.random() - 0.5) * 0.5 : 0);
+        else if (surf === 'sand') w += svf(s, k, n, 1100, 0.9, sr).b * fsin(Math.PI * Math.min(1, d / 0.08)) * (d < 0.08 ? 0.5 : 0);
+        else if (surf === 'water') w += svf(s, k, n, 700 + 1300 * Math.min(1, d / 0.08), 1.6, sr).b * fsin(Math.PI * Math.min(1, d / 0.12)) * (d < 0.12 ? 1.4 : 0) + lpf(s, k2, n, 300, sr) * ex(d, 0.05) * 0.8;
+        else w += lpf(s, k, n, 900, sr) * ex(d, 0.03) * 1.2 + (Math.random() < 0.07 * ex(d, 0.05) ? (Math.random() - 0.5) * 0.7 : 0);
+        v += w * g;
       }
       return v;
     }, 0.9);
@@ -447,15 +472,20 @@ function* soundJobs(B) {
     return lpf(s, 't', n, 600, sr) * ex(t, 0.02) * 2.4 + svf(s, 'b', n, 1200, 0.8, sr).b * ex(t, 0.01);
   }));
   yield;
-  const swoosh = (dur, f0, f1, g) => mk2(dur, (t, s, sr) => {
-    const n = Math.random() * 2 - 1, u = t / dur;
-    return svf(s, 'w', n, f0 + (f1 - f0) * u, 1.2, sr).b * fsin(Math.PI * u) * g + lpf(s, 'l', n, 200, sr) * ex(t, 0.08) * g * 1.5;
+  // little musical stingers for the UI: two or three notes on a bright pluck
+  const sting = (notes, step, dur) => mk2(dur, (t) => {
+    let v = 0;
+    notes.forEach((f, i) => {
+      const d = t - i * step;
+      if (d > 0) v += (fsin(TAU * f * d) + 0.45 * fsin(TAU * f * 2 * d) + 0.2 * fsin(TAU * f * 3 * d)) * ex(d, 0.28) * Math.min(1, d / 0.004);
+    });
+    return v;
   }, 0.7);
-  B.cap = [swoosh(0.45, 500, 2200, 1)];
+  B.cap = [sting([784, 1175], 0.07, 0.45)];
   yield;
-  B.ready = [swoosh(0.6, 400, 1800, 1)];
+  B.ready = [sting([659, 880, 1319], 0.08, 0.6)];
   yield;
-  B.level = [swoosh(0.7, 300, 2400, 1)];
+  B.level = [sting([1047, 1319, 1568, 2093], 0.055, 0.7)];
   yield;
   B.heart = [mk2(0.6, (t) => {
     const a = fsin(TAU * 52 * t) * ex(t, 0.05), d = t - 0.24, b = d > 0 ? fsin(TAU * 46 * d) * ex(d, 0.06) : 0;
@@ -549,8 +579,24 @@ function* soundJobs(B) {
   yield;
   B.edit = [foley(0.16, [[0, 'click', 0.8], [0.05, 'clack', 0.6]])];
   // loot
-  B.pickup = [foley(0.3, [[0, 'rustle', 0.7], [0.08, 'clack', 0.8], [0.1, 'click', 0.5]])];
-  B.pickupSmall = [foley(0.2, [[0, 'rustle', 0.6], [0.06, 'click', 0.4]])];
+  // picking up a weapon: a quick swish, the clack of it in your hands and a bright little chirp
+  B.pickup = [mk2(0.32, (t, s, sr) => {
+    const n = Math.random() * 2 - 1, u = Math.min(1, t / 0.09);
+    let v = svf(s, 'w', n, 900 + 2600 * u, 1.3, sr).b * fsin(Math.PI * u) * (t < 0.09 ? 0.6 : 0);
+    const d = t - 0.08;
+    if (d > 0) v += svf(s, 'c', n, 1300, 0.8, sr).b * ex(d, 0.012) * 1.6 + lpf(s, 'l', n, 300, sr) * ex(d, 0.02) * 1.6 + (fsin(TAU * 1760 * d) + 0.4 * fsin(TAU * 2637 * d)) * ex(d, 0.07) * 0.35;
+    return v;
+  }, 0.85)];
+  // ammo and materials: a soft clack and rattle
+  B.pickupSmall = [mk2(0.2, (t, s, sr) => {
+    const n = Math.random() * 2 - 1;
+    let v = svf(s, 'c', n, 1600, 0.8, sr).b * ex(t, 0.01) * 1.2 + lpf(s, 'l', n, 400, sr) * ex(t, 0.025) * 1.4;
+    for (const q of [0.035, 0.06, 0.09]) {
+      const d = t - q;
+      if (d > 0) v += svf(s, 'r' + q, n, 3000 + q * 20000, 3, sr).b * ex(d, 0.006) * 0.6;
+    }
+    return v;
+  }, 0.8)];
   yield;
   // a chest calling out: a shimmering cluster of little bells
   B.chestCue = [mk2(1.2, (t) => {
@@ -687,6 +733,7 @@ export class AudioSystem {
     this.brassT = 0;
     this.menu = true;
     this.lastPlay = new Map();
+    this.music = new Music(this);
     for (const ev of ['pointerdown', 'mousedown', 'touchend', 'keydown', 'click']) window.addEventListener(ev, () => this.unlock(), { capture: true });
     document.addEventListener('visibilitychange', () => {
       if (!document.hidden) this.unlock();
@@ -1084,9 +1131,11 @@ export class AudioSystem {
         this.snd('horn', P({ vol: 0.6, ref: 60 }));
         return;
       case 'victory':
-        this.tones([523, 659, 784, 1046, 1318], 0.14, 0.7, 0.3);
+        if (this.music && this.music.setup()) this.music.fanfare();
+        else this.tones([523, 659, 784, 1046, 1318], 0.14, 0.7, 0.3);
         return;
       case 'defeat':
+        if (this.music) this.music.play(null);
         this.tones([440, 392, 330, 262], 0.18, 0.5, 0.25);
         return;
       case 'ui':
