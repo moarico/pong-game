@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { VEHICLE } from './config.js';
-import { truckGeometry, modelMaterial } from './zh/models.js';
+import { truckGeometry, truckWheelGeometry, TRUCK, modelMaterial } from './zh/models.js';
 import { clamp } from './util.js';
 
 const COLORS = ['#4a5a3a', '#7a2a22', '#2f4f6f', '#c9a23a', '#3a3f45', '#d8d8d0'];
@@ -10,15 +10,40 @@ export class Vehicle {
     this.kind = 'vehicle';
     this.spawn = spot;
     this.color = color;
-    this.mesh = new THREE.Mesh(truckGeometry(color), modelMaterial());
+    const mat = modelMaterial();
+    this.mesh = new THREE.Mesh(truckGeometry(color), mat);
     this.mesh.castShadow = true;
     this.mesh.receiveShadow = true;
+    // wheels: an outer group that steers (and faces the rim outward), an inner mesh that rolls
+    this.wheels = TRUCK.wheels.map(([x, z]) => {
+      const group = new THREE.Group();
+      group.position.set(x, TRUCK.wheelY, z);
+      const spin = new THREE.Mesh(truckWheelGeometry(), mat);
+      spin.castShadow = true;
+      group.add(spin);
+      this.mesh.add(group);
+      return { group, spin, left: x < 0, front: z < 0 };
+    });
+    // see-through windshield
+    const G = TRUCK.glass;
+    const glass = new THREE.Mesh(new THREE.PlaneGeometry(G.w, G.h), Vehicle.glassMat());
+    glass.position.set(0, G.y, G.z);
+    glass.rotation.x = G.tilt;
+    glass.renderOrder = 2;
+    this.mesh.add(glass);
     this.root = new THREE.Group();
     this.root.add(this.mesh);
+    this.steer = 0;
+    this.roll = 0;
     game.scene.add(this.root);
     this.pos = new THREE.Vector3();
     this.collider = null;
     this.reset();
+  }
+
+  static glassMat() {
+    if (!Vehicle._glass) Vehicle._glass = new THREE.MeshStandardMaterial({ color: 0x9fb8c8, transparent: true, opacity: 0.22, roughness: 0.05, metalness: 0.1, side: THREE.DoubleSide, depthWrite: false, envMapIntensity: 1.5 });
+    return Vehicle._glass;
   }
 
   reset() {
@@ -55,10 +80,12 @@ export class Vehicle {
     return new THREE.Vector3(-Math.sin(this.yaw), 0, -Math.cos(this.yaw));
   }
 
+  // The driver sits on the left seat, behind the wheel.
   seatPosition(out) {
     const f = this.forward();
     const r = new THREE.Vector3(Math.cos(this.yaw), 0, -Math.sin(this.yaw));
-    return out.copy(this.pos).addScaledVector(r, -0.45).addScaledVector(f, -0.6).add(new THREE.Vector3(0, 0.55, 0));
+    const [x, y, z] = TRUCK.seat;
+    return out.copy(this.pos).addScaledVector(r, x).addScaledVector(f, -z).add(new THREE.Vector3(0, y, 0));
   }
 
   enter(actor) {
@@ -121,7 +148,9 @@ export class Vehicle {
     if (d && !d.alive) this.exit();
     const I = this.driver ? this.driver.intent : null;
     const throttle = I ? I.mz : 0;
-    const steer = I ? I.mx : 0;
+    // the wheel turns toward the stick over a moment instead of snapping
+    this.steer += ((I ? I.mx : 0) - this.steer) * Math.min(1, dt * 7);
+    const steer = this.steer;
     if (throttle > 0.05) {
       if (this.speed < 0) this.speed += VEHICLE.brake * dt;
       else this.speed += VEHICLE.accel * throttle * dt;
@@ -136,7 +165,9 @@ export class Vehicle {
     const onRoad = this.game.terrain.distToRoad(this.pos.x, this.pos.z) < 5;
     const maxF = onRoad ? VEHICLE.maxSpeed : VEHICLE.maxSpeed * 0.7;
     this.speed = clamp(this.speed, -VEHICLE.reverse, maxF);
-    this.yaw -= steer * VEHICLE.turn * clamp(this.speed / 8, -1, 1) * dt;
+    // turning tightens at low speed and relaxes near top speed
+    const sp = Math.abs(this.speed) / VEHICLE.maxSpeed;
+    this.yaw -= steer * VEHICLE.turn * clamp(this.speed / 6, -1, 1) * (1 - 0.35 * sp) * dt;
     if (Math.abs(this.speed) > 0.01) {
       const f = this.forward();
       const nx = this.pos.x + f.x * this.speed * dt, nz = this.pos.z + f.z * this.speed * dt;
@@ -198,7 +229,7 @@ export class Vehicle {
     }
   }
 
-  syncMesh() {
+  syncMesh(dt) {
     const T = this.game.terrain;
     const f = this.forward();
     const r = new THREE.Vector3(Math.cos(this.yaw), 0, -Math.sin(this.yaw));
@@ -207,10 +238,18 @@ export class Vehicle {
     const hL = T.heightAt(this.pos.x - r.x * 1, this.pos.z - r.z * 1);
     const hR = T.heightAt(this.pos.x + r.x * 1, this.pos.z + r.z * 1);
     const pitch = clamp(Math.atan2(hF - hB, 3.6), -0.5, 0.5);
-    const roll = clamp(Math.atan2(hR - hL, 2), -0.4, 0.4);
+    // body roll: the slope, plus a lean out of the turn
+    const lean = -this.steer * clamp(Math.abs(this.speed) / VEHICLE.maxSpeed, 0, 1) * 0.07;
+    this.roll += (clamp(Math.atan2(hR - hL, 2), -0.4, 0.4) - lean - this.roll) * Math.min(1, (dt || 0.016) * 8);
     this.root.position.copy(this.pos);
     this.root.rotation.set(0, this.yaw, 0);
-    this.mesh.rotation.set(pitch, 0, -roll);
+    this.mesh.rotation.set(pitch, 0, -this.roll);
+    // roll the wheels and steer the front pair
+    this.spin = (this.spin || 0) + (this.speed * (dt || 0)) / TRUCK.wheelR;
+    for (const w of this.wheels) {
+      w.group.rotation.y = (w.left ? Math.PI : 0) + (w.front ? -this.steer * 0.5 : 0);
+      w.spin.rotation.x = w.left ? this.spin : -this.spin;
+    }
   }
 }
 
