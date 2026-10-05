@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { GeoBuilder, worldMaterial, tagSurface, SURF } from './geobuilder.js';
 import { buildingMaterial } from './buildingmat.js';
 import { POIS, LAKE, ROAD_HALF_WIDTH } from './island.js';
+import { furnishFloor } from './interiors.js';
 import { makeRng, clamp, lerp } from '../util.js';
 
 // Local building frame rotated by multiples of 90 degrees so every box stays axis aligned.
@@ -70,9 +71,9 @@ export class Structures {
 
   // ---------- emit helpers ----------
 
-  box(F, lx0, y0, lz0, lx1, y1, lz1, color, solid = true, owner = null) {
+  box(F, lx0, y0, lz0, lx1, y1, lz1, color, solid = true, owner = null, bottom = false) {
     const [x0, z0, x1, z1] = F.rect(lx0, lz0, lx1, lz1);
-    this.gb.box(x0, y0, z0, x1, y1, z1, color);
+    this.gb.box(x0, y0, z0, x1, y1, z1, color, !bottom);
     if (solid) return this.W.box(x0, y0, z0, x1, y1, z1, owner);
     return null;
   }
@@ -120,13 +121,14 @@ export class Structures {
   }
 
   // Slab covering [x0,x1]x[z0,z1] minus an optional rectangular hole.
+  // Floors and ceilings: drawn with their undersides, so a room has a ceiling when you look up.
   slab(F, x0, z0, x1, z1, yTop, th, color, hole) {
-    if (!hole) return this.box(F, x0, yTop - th, z0, x1, yTop, z1, color);
+    if (!hole) return this.box(F, x0, yTop - th, z0, x1, yTop, z1, color, true, null, true);
     const [hx0, hz0, hx1, hz1] = hole;
-    if (hz0 > z0) this.box(F, x0, yTop - th, z0, x1, yTop, hz0, color);
-    if (hz1 < z1) this.box(F, x0, yTop - th, hz1, x1, yTop, z1, color);
-    if (hx0 > x0) this.box(F, x0, yTop - th, hz0, hx0, yTop, hz1, color);
-    if (hx1 < x1) this.box(F, hx1, yTop - th, hz0, x1, yTop, hz1, color);
+    if (hz0 > z0) this.box(F, x0, yTop - th, z0, x1, yTop, hz0, color, true, null, true);
+    if (hz1 < z1) this.box(F, x0, yTop - th, hz1, x1, yTop, z1, color, true, null, true);
+    if (hx0 > x0) this.box(F, x0, yTop - th, hz0, hx0, yTop, hz1, color, true, null, true);
+    if (hx1 < x1) this.box(F, hx1, yTop - th, hz0, x1, yTop, hz1, color, true, null, true);
   }
 
   windowsFor(len, count, wW, y0, y1, glass) {
@@ -203,6 +205,10 @@ export class Structures {
   // Generic enterable building. Door on local +Z, stairs along local -Z wall.
   house(poi, o) {
     const rng = this.rng;
+    if ((o.type === undefined || o.type === 'house') && !o.stilts) {
+      // ordinary homes vary: a porch, shutters, a chimney
+      o = { ...o, porch: o.porch ?? (o.w >= 7 && rng.chance(0.5)), shutters: o.shutters ?? rng.chance(0.55), chimney: o.chimney ?? rng.chance(0.45) };
+    }
     const F = new Frame(o.x, o.z, o.rot || 0);
     const w = o.w, d = o.d, floors = o.floors || 1, fh = o.fh || 3.2, T = 0.3;
     const x0 = -w / 2, x1 = w / 2, z0 = -d / 2, z1 = d / 2;
@@ -239,6 +245,9 @@ export class Structures {
     const stairFloors = floors - 1 + (o.roofAccess ? 1 : 0);
     const doorW = o.doorW || 1.6, doorH = o.doorH || 2.4;
     const doorX = o.doorX ?? (w > 8 ? clamp((rng() - 0.5) * (w - 6), -w / 2 + 2, w / 2 - 2) : 0);
+    const floorOps = [];
+    const glazed = o.glass ?? o.type !== 'barn';
+    const dressed = o.sills ?? (o.type === undefined || o.type === 'house' || o.type === 'shop');
     for (let f = 0; f < floors; f++) {
       const y = base + f * fh;
       // floor slab (ground floor uses the foundation)
@@ -251,7 +260,7 @@ export class Structures {
       const nWinZ = o.windows === false ? 0 : Math.max(1, Math.floor(d / (o.winSpacing || 4)));
       const winW = o.winW || 1.3;
       // front (+Z)
-      let front = this.windowsFor(w, nWinX, winW, winY0, winY1, o.glass);
+      let front = this.windowsFor(w, nWinX, winW, winY0, winY1, glazed);
       if (f === 0) {
         front = front.filter((wd) => Math.abs(wd.c - doorX) > doorW / 2 + winW / 2 + 0.3);
         front.push({ c: doorX, w: doorW, y0: 0, y1: doorH });
@@ -259,10 +268,24 @@ export class Structures {
       }
       this.wallX(F, x0, x1, z1 - T / 2, y, fh, T, front, wall);
       // back (-Z): stairs are here, so only high windows
-      const backOps = f === 0 && o.backDoor ? [{ c: doorX, w: doorW, y0: 0, y1: doorH }] : this.windowsFor(w, nWinX, winW, Math.max(winY0, 1.6), winY1, o.glass);
+      const backOps = f === 0 && o.backDoor ? [{ c: doorX, w: doorW, y0: 0, y1: doorH }] : this.windowsFor(w, nWinX, winW, Math.max(winY0, 1.6), winY1, glazed);
       this.wallX(F, x0, x1, z0 + T / 2, y, fh, T, backOps, wall);
-      this.wallZ(F, z0 + T, z1 - T, x0 + T / 2, y, fh, T, this.windowsFor(d - 2 * T, nWinZ, winW, winY0, winY1, o.glass).map((q) => ({ ...q, c: q.c })), wall);
-      this.wallZ(F, z0 + T, z1 - T, x1 - T / 2, y, fh, T, this.windowsFor(d - 2 * T, nWinZ, winW, winY0, winY1, o.glass), wall);
+      const sideOps = this.windowsFor(d - 2 * T, nWinZ, winW, winY0, winY1, glazed);
+      this.wallZ(F, z0 + T, z1 - T, x0 + T / 2, y, fh, T, sideOps, wall);
+      this.wallZ(F, z0 + T, z1 - T, x1 - T / 2, y, fh, T, sideOps, wall);
+      const span = (ops) => ops.map((q) => [q.c - q.w / 2, q.c + q.w / 2]);
+      floorOps.push({ front: span(front), back: span(backOps), side: span(sideOps) });
+      if (dressed || o.porch || o.shutters) {
+        this.facade(F, front, x0, x1, z1, y, o, f);
+        this.dressWall(F, backOps, 'z0', x0, x1, z0, z1, y, o);
+        this.dressWall(F, sideOps, 'x0', x0, x1, z0, z1, y, o);
+        this.dressWall(F, sideOps, 'x1', x0, x1, z0, z1, y, o);
+      }
+      // a light ceiling under this floor's slab (the stair hole left open)
+      if (f > 0) {
+        const lane = lanes[(f - 1) % 2];
+        this.ceiling(F, x0 + T, z0 + T, x1 - T, z1 - T, y - 0.25, [sx, lane[0], sx + L, lane[1]], o.ceilingColor || (o.ceilingColor = rng.pick(['#f0ece4', '#e8e4dc', '#f2f2ee'])));
+      }
       // trim band
       this.box(F, x0 - 0.05, y + fh - 0.25, z0 - 0.05, x1 + 0.05, y + fh, z0 + 0.02, trim, false);
       this.box(F, x0 - 0.05, y + fh - 0.25, z1 - 0.02, x1 + 0.05, y + fh, z1 + 0.05, trim, false);
@@ -285,42 +308,14 @@ export class Structures {
         const [bx, bz] = F.tw(lowX, lzc), [tx, tz] = F.tw(highX, lzc);
         b.stairs.push({ bottom: [bx, y, bz], top: [tx, y + fh, tz] });
       }
-      // loot spots on this floor
-      const spots = [];
-      const nLoot = o.lootPerFloor ?? 1;
-      for (let i = 0; i < nLoot * 4 && spots.length < nLoot; i++) {
-        const lx = lerp(x0 + 1.2, x1 - 1.2, rng());
-        const lz = lerp(z0 + T + 2 * laneW + 0.8, z1 - 1.2, rng());
-        if (lz > z1 - 2.2 && Math.abs(lx - doorX) < 1.5) continue;
-        if (spots.some(([ax, az]) => Math.hypot(ax - lx, az - lz) < 1.8)) continue;
-        spots.push([lx, lz]);
-      }
-      for (const [lx, lz] of spots) {
-        const [wx, wz] = F.tw(lx, lz);
-        this.lootSpots.push({ x: wx, y: y + 0.05, z: wz, poi, building: b, floor: f });
-      }
     }
-    // chest: against the +X side wall on a random floor
-    if (o.chest !== false) {
-      const f = Math.floor(rng() * floors);
-      const y = base + f * fh;
-      const lz = lerp(z0 + T + 2 * laneW + 0.6, z1 - 1.6, rng());
-      const [cx, cz] = F.tw(x1 - T - 0.55, lz);
-      this.chestSpots.push({ x: cx, y, z: cz, yaw: F.yaw + Math.PI / 2, poi, building: b, floor: f });
-    }
-    // furniture: a low cabinet against the -X wall on each floor (out of the walking lanes)
-    if (o.furniture !== false && d > 7) {
-      for (let f = 0; f < floors; f++) {
-        const y = base + f * fh;
-        const lz = lerp(z0 + T + 2 * laneW + 0.6, z1 - 2, 0.5);
-        this.box(F, x0 + T, y, lz - 0.9, x0 + T + 0.6, y + 0.9, lz + 0.9, rng.pick(['#7a5236', '#5b6b7d', '#8a4f4f', '#4f7a5b']));
-      }
-    }
+    this.interior(b, o, { F, x0, x1, z0, z1, T, floors, fh, base, doorX, doorW, laneW, sx, L, stairFloors, floorOps, wall });
     // roof
     const top = base + floors * fh;
     const hole = o.roofAccess ? [sx, lanes[(floors - 1) % 2][0], sx + L, lanes[(floors - 1) % 2][1]] : null;
     const roofType = o.roof || 'gable';
     this.slab(F, x0, z0, x1, z1, top + 0.25, 0.3, roofType === 'flat' ? '#7c7a76' : FLOOR, hole);
+    this.ceiling(F, x0 + T, z0 + T, x1 - T, z1 - T, top - 0.05, hole, o.ceilingColor || (o.ceilingColor = rng.pick(['#f0ece4', '#e8e4dc', '#f2f2ee'])));
     if (roofType === 'flat') {
       const ph = 0.9;
       this.box(F, x0, top + 0.25, z0, x1, top + 0.25 + ph, z0 + 0.25, wall);
@@ -342,6 +337,11 @@ export class Structures {
       // Ridge axis in world space: local X maps to world X for rot 0/2, to world Z for rot 1/3.
       const worldAxis = (alongX ? F.rot % 2 === 0 : F.rot % 2 === 1) ? 'x' : 'z';
       this.gb.gable(gx0, gz0, gx1, gz1, ry, rh, worldAxis, roofC, wall);
+      if (o.chimney) {
+        const cx = alongX ? x1 - 1.4 : 0.6, cz = alongX ? 0.6 : z1 - 1.4;
+        this.box(F, cx - 0.4, top, cz - 0.4, cx + 0.4, ry + rh + 0.7, cz + 0.4, '#8d4b3b', false);
+        this.box(F, cx - 0.48, ry + rh + 0.6, cz - 0.48, cx + 0.48, ry + rh + 0.78, cz + 0.48, '#6b5a48', false);
+      }
       const half = span / 2 + ov;
       this.surface(F, x0 - ov, z0 - ov, x1 + ov, z1 + ov, ry, ry + rh, (lx, lz) => {
         const off = alongX ? Math.abs(lz) : Math.abs(lx);
@@ -378,6 +378,271 @@ export class Structures {
       this.box(F, doorX - 1, g.min - 1, z1, doorX + 1, base - 0.02, z1 + 1.1, FOUNDATION);
     }
     return b;
+  }
+
+  // Front of a house: window sills and shutters, a frame round the door, and on the ground floor a porch.
+  facade(F, front, x0, x1, z1, y, o, f) {
+    const rng = this.rng;
+    const trim = o.trimColor || (o.trimColor = rng.pick(['#f2efe8', '#e8e0d0', '#4a4038', '#2f3a4a']));
+    for (const op of front) {
+      if (op.y0 >= 0.05) continue;
+      const a = op.c - op.w / 2, b = op.c + op.w / 2;
+      this.box(F, a - 0.14, y, z1, a, y + op.y1 + 0.14, z1 + 0.07, trim, false);
+      this.box(F, b, y, z1, b + 0.14, y + op.y1 + 0.14, z1 + 0.07, trim, false);
+      this.box(F, a - 0.14, y + op.y1, z1, b + 0.14, y + op.y1 + 0.16, z1 + 0.07, trim, false);
+    }
+    this.dressWall(F, front, 'z1', x0, x1, -z1, z1, y, o);
+    if (f !== 0 || !o.porch) return;
+    // porch: a plank deck in front of the door with a roof on two posts, a low rail and steps
+    const door = front.find((op) => op.y0 < 0.05);
+    if (!door) return;
+    const pw = Math.min(x1 - x0 - 1, 5.2), pa = clamp(door.c - pw / 2, x0 + 0.3, x1 - 0.3 - pw), pb = pa + pw, dep = 2.3;
+    const roofC = o.roofColor || '#5a6470';
+    this.box(F, pa, y - 0.35, z1, pb, y, z1 + dep, WOOD);
+    for (const px of [pa + 0.1, pb - 0.25]) this.box(F, px, y, z1 + dep - 0.25, px + 0.15, y + 2.7, z1 + dep - 0.1, trim, false);
+    this.box(F, pa - 0.2, y + 2.7, z1, pb + 0.2, y + 2.86, z1 + dep + 0.25, roofC);
+    for (const [ra, rb] of [[pa + 0.25, door.c - 0.8], [door.c + 0.8, pb - 0.25]]) {
+      if (rb - ra < 0.3) continue;
+      this.box(F, ra, y + 0.85, z1 + dep - 0.2, rb, y + 0.92, z1 + dep - 0.13, trim, false);
+      for (let x = ra; x <= rb; x += 0.3) this.box(F, x - 0.025, y, z1 + dep - 0.19, x + 0.025, y + 0.85, z1 + dep - 0.14, trim, false);
+    }
+    const gy = this.T.heightAt(...F.tw(door.c, z1 + dep + 0.6));
+    const rise = y - gy;
+    const n = clamp(Math.ceil(rise / 0.3), 1, 4);
+    for (let k = 0; k < n; k++) this.box(F, door.c - 0.8, gy - 0.4, z1 + dep + k * 0.3, door.c + 0.8, y - ((k + 1) * rise) / (n + 1), z1 + dep + (k + 1) * 0.3, FOUNDATION);
+  }
+
+  // Windows on one wall: a sill, a head trim, a cross of glazing bars and (on some houses) louvered shutters.
+  // side: which wall ('z1' front, 'z0' back, 'x0'/'x1' sides); along-wall coordinates are local x or z.
+  dressWall(F, ops, side, x0, x1, z0, z1, y, o) {
+    const trim = o.trimColor || (o.trimColor = this.rng.pick(['#f2efe8', '#e8e0d0', '#4a4038', '#2f3a4a']));
+    const shut = o.shutterColor || (o.shutterColor = this.rng.pick(['#2f4a6a', '#3a5a3a', '#6a2f2f', '#2b2b2b', '#5a4a3a']));
+    // (along a0..a1, out o0..o1) -> local rect
+    const R = (a0, a1, o0, o1) => {
+      if (side === 'z1') return [a0, z1 + o0, a1, z1 + o1];
+      if (side === 'z0') return [a0, z0 - o1, a1, z0 - o0];
+      if (side === 'x0') return [x0 - o1, a0, x0 - o0, a1];
+      return [x1 + o0, a0, x1 + o1, a1];
+    };
+    const B = (a0, a1, o0, o1, ya, yb, c) => {
+      const r = R(Math.min(a0, a1), Math.max(a0, a1), o0, o1);
+      this.box(F, r[0], ya, r[1], r[2], yb, r[3], c, false);
+    };
+    for (const op of ops) {
+      if (op.y0 < 0.05) continue;
+      const a = op.c - op.w / 2, b = op.c + op.w / 2;
+      B(a - 0.1, b + 0.1, 0, 0.14, y + op.y0 - 0.08, y + op.y0, trim);
+      B(a - 0.06, b + 0.06, 0, 0.06, y + op.y1, y + op.y1 + 0.1, trim);
+      if (op.glass) {
+        B(op.c - 0.025, op.c + 0.025, -0.18, -0.12, y + op.y0, y + op.y1, trim);
+        B(a, b, -0.18, -0.12, (2 * y + op.y0 + op.y1) / 2 - 0.025, (2 * y + op.y0 + op.y1) / 2 + 0.025, trim);
+      }
+      if (o.shutters) {
+        for (const sd of [-1, 1]) {
+          const e = sd < 0 ? a - 0.08 : b + 0.08;
+          B(e, e + sd * 0.42, 0, 0.05, y + op.y0, y + op.y1, shut);
+          for (let k = 1; k < 5; k++) {
+            const ly = y + op.y0 + ((op.y1 - op.y0) * k) / 5;
+            B(e + sd * 0.03, e + sd * 0.39, 0.05, 0.07, ly - 0.015, ly + 0.015, '#1c1c1c');
+          }
+        }
+      }
+    }
+  }
+
+  // A thin plastered ceiling panel (visual only) with an optional hole.
+  ceiling(F, x0, z0, x1, z1, y, hole, color) {
+    const P = (a, b, c, d) => this.box(F, a, y - 0.03, b, c, y, d, color, false, null, true);
+    if (!hole) return P(x0, z0, x1, z1);
+    const [hx0, hz0, hx1, hz1] = hole;
+    if (hz0 > z0) P(x0, z0, x1, Math.min(z1, hz0));
+    if (hz1 < z1) P(x0, Math.max(z0, hz1), x1, z1);
+    if (hx0 > x0) P(x0, Math.max(z0, hz0), Math.min(x1, hx0), Math.min(z1, hz1));
+    if (hx1 < x1) P(Math.max(x0, hx1), Math.max(z0, hz0), x1, Math.min(z1, hz1));
+  }
+
+  // Rooms, furniture, the loot spots and the chest for a building (pieces in interiors.js).
+  interior(b, o, c) {
+    const rng = this.rng, poi = b.poi;
+    const { F, x0, x1, z0, z1, T, floors, fh, base, doorX, laneW, stairFloors, floorOps } = c;
+    const hasStairs = stairFloors > 0 || floors > 1;
+    const ix0 = x0 + T, ix1 = x1 - T, iz0 = z0 + T, iz1 = z1 - T;
+    const roomZ0 = hasStairs ? iz0 + 2 * laneW + 0.8 : iz0;
+    const w = x1 - x0;
+    const type = o.type || 'house';
+    const furnish = o.furniture !== false && iz1 - roomZ0 > 1.5 && type !== 'barn';
+    b.partitions = [];
+    // a partition wall splits wide buildings into two rooms
+    let px = null, gz = null;
+    if (furnish && w >= 7.5 && type !== 'shop' && iz1 - roomZ0 >= 2.3) {
+      const cands = [];
+      for (let t = 0.36; t <= 0.64; t += 0.02) cands.push(x0 + w * t);
+      cands.sort(() => rng() - 0.5);
+      for (const cand of cands) {
+        if (Math.abs(cand - doorX) < 1.8) continue;
+        const hits = floorOps.some((fo) => fo.front.some(([a, bb]) => cand > a - 0.3 && cand < bb + 0.3) || (!hasStairs && fo.back.some(([a, bb]) => cand > a - 0.3 && cand < bb + 0.3)));
+        if (hits) continue;
+        px = cand;
+        break;
+      }
+    }
+    const inner = o.innerColor || rng.pick(['#ece6da', '#e2e6ea', '#efe4d4', '#dfe8dc', '#e8dce0']);
+    if (px !== null) {
+      gz = hasStairs ? roomZ0 - 0.6 : (iz0 + iz1) / 2;
+      for (let f = 0; f < floors; f++) {
+        const y = base + f * fh;
+        if (hasStairs) this.box(F, px - 0.075, y, roomZ0, px + 0.075, y + fh, iz1, inner);
+        else {
+          this.box(F, px - 0.075, y, iz0, px + 0.075, y + fh, gz - 0.6, inner);
+          this.box(F, px - 0.075, y, gz + 0.6, px + 0.075, y + fh, iz1, inner);
+          this.box(F, px - 0.075, y + 2.2, gz - 0.6, px + 0.075, y + fh, gz + 0.6, inner);
+        }
+      }
+      b.partitions.push({ px, za: hasStairs ? roomZ0 : iz0, zb: iz1, gap: [px, gz], open: hasStairs ? null : [gz - 0.55, gz + 0.55] });
+    }
+    // what each floor holds
+    const kindsFor = (f) => {
+      if (type === 'shop') return ['shop'];
+      if (type === 'keep') return ['study', 'storage'];
+      if (type === 'tower') {
+        if (f === 0) return [rng.pick(['shop', 'office'])];
+        if (px === null) return ['office'];
+        const k = rng.int(0, 2);
+        return k === 0 ? ['office', 'office'] : k === 1 ? ['living', 'kitchen'] : ['bedroom', 'study'];
+      }
+      if (f === 0) return px !== null ? ['living', 'kitchen'] : [w < 7.5 ? rng.pick(['bedroom', 'studio']) : 'studio'];
+      return px !== null ? ['bedroom', rng.pick(['bath', 'kids', 'study', 'bedroom'])] : [rng.pick(['bedroom', 'kids'])];
+    };
+    const wallsOf = (R, fo, left, right) => {
+      const walls = [{ side: 'z1', from: R.x0, to: R.x1, wins: fo.front, solidWall: true }];
+      if (!hasStairs) walls.push({ side: 'z0', from: R.x0, to: R.x1, wins: fo.back, solidWall: true });
+      walls.push({ side: 'x0', from: R.z0, to: R.z1, wins: left ? fo.side : [], solidWall: true });
+      walls.push({ side: 'x1', from: R.z0, to: R.z1, wins: right ? fo.side : [], solidWall: true });
+      return walls;
+    };
+    const perFloor = [];
+    for (let f = 0; f < floors; f++) {
+      const y = base + f * fh;
+      const fo = floorOps[f];
+      const res = { tops: [], chestSpots: [], floorSpots: [] };
+      if (furnish) {
+        const kinds = kindsFor(f);
+        let rooms;
+        if (px !== null) {
+          const A = { x0: ix0, z0: roomZ0, x1: px - 0.075, z1: iz1 }, B = { x0: px + 0.075, z0: roomZ0, x1: ix1, z1: iz1 };
+          // the room with the front door is the living room
+          const doorInA = doorX < px;
+          A.kind = doorInA ? kinds[0] : kinds[1] || kinds[0];
+          B.kind = doorInA ? kinds[1] || kinds[0] : kinds[0];
+          A.walls = wallsOf(A, fo, true, false);
+          B.walls = wallsOf(B, fo, false, true);
+          rooms = [A, B];
+        } else {
+          const R = { x0: ix0, z0: roomZ0, x1: ix1, z1: iz1, kind: kinds[0] };
+          R.walls = wallsOf(R, fo, true, true);
+          rooms = [R];
+        }
+        const keep = [];
+        if (f === 0) {
+          keep.push([doorX - 1.0, iz1 - 2.0, doorX + 1.0, iz1]);
+          if (hasStairs) keep.push([doorX - 0.75, roomZ0, doorX + 0.75, iz1]);
+          if (o.backDoor) keep.push([-doorX - 1, iz0, -doorX + 1, iz0 + 2]);
+        }
+        if (px !== null && !hasStairs) keep.push([px - 1.2, gz - 0.9, px + 1.2, gz + 0.9]);
+        if (type === 'shop' || (type === 'tower' && rooms[0].kind === 'shop')) this.shopAisles(F, y, rooms[0], keep);
+        for (const R of rooms) if (R.kind === 'office') this.deskRows(F, y, R, keep);
+        Object.assign(res, furnishFloor(this, { F, y, rooms, keep, rng }));
+      }
+      perFloor.push(res);
+      // loot: on furniture tops and open floor, or anywhere in the room band when unfurnished
+      const nLoot = o.lootPerFloor ?? 1;
+      const cands = [...res.tops.sort(() => rng() - 0.5), ...res.floorSpots];
+      const chosen = [];
+      for (const cnd of cands) {
+        if (chosen.length >= nLoot) break;
+        if (chosen.some(([ax, az]) => Math.hypot(ax - cnd[0], az - cnd[1]) < 1.6)) continue;
+        if (cnd[2] === 0 && rng() < 0.3 && res.tops.length > chosen.length) continue;
+        chosen.push(cnd);
+      }
+      for (let i = 0; i < nLoot * 4 && chosen.length < nLoot; i++) {
+        const lx = lerp(ix0 + 0.9, ix1 - 0.9, rng()), lz = lerp(roomZ0 + 0.5, iz1 - 0.9, rng());
+        if (lz > iz1 - 2 && Math.abs(lx - doorX) < 1.5) continue;
+        if (px !== null && Math.abs(lx - px) < 0.6) continue;
+        if (chosen.some(([ax, az]) => Math.hypot(ax - lx, az - lz) < 1.8)) continue;
+        chosen.push([lx, lz, 0]);
+      }
+      for (const [lx, lz, h] of chosen) {
+        const [wx, wz] = F.tw(lx, lz);
+        this.lootSpots.push({ x: wx, y: y + h + 0.05, z: wz, poi, building: b, floor: f });
+      }
+    }
+    // the chest: most buildings have one, somewhere different each time
+    if (o.chest === false) return;
+    const odds = poi.loot === 'high' ? 0.9 : poi.loot === 'medium' ? 0.8 : 0.68;
+    if (o.chest !== true && rng() > odds) return;
+    const floorsWith = perFloor.map((r, f) => [r, f]).filter(([r]) => r.chestSpots.length);
+    if (floorsWith.length) {
+      const [r, f] = rng.pick(floorsWith);
+      const sp = rng.pick(r.chestSpots);
+      const [cx, cz] = F.tw(sp.lx, sp.lz);
+      this.chestSpots.push({ x: cx, y: base + f * fh, z: cz, yaw: F.yaw + sp.yaw, poi, building: b, floor: f });
+    } else {
+      const f = Math.floor(rng() * floors);
+      const lz = lerp(roomZ0 + 0.6, iz1 - 1.6, rng());
+      const [cx, cz] = F.tw(ix1 - 0.55, lz);
+      this.chestSpots.push({ x: cx, y: base + f * fh, z: cz, yaw: F.yaw + Math.PI / 2, poi, building: b, floor: f });
+    }
+  }
+
+  // Back-to-back desks down the middle of an office floor, each with a screen and a chair.
+  deskRows(F, y, R, keep) {
+    const rng = this.rng;
+    const w = R.x1 - R.x0, d = R.z1 - R.z0;
+    if (w < 6 || d < 5) return;
+    const top = rng.pick(['#ece8e0', '#c8ccd0', '#8b5e3c']);
+    for (let z = R.z0 + 2.4; z < R.z1 - 2.0; z += 3.2) {
+      for (let x = R.x0 + 2.2; x < R.x1 - 2.2; x += 1.6) {
+        const r = [x - 0.75, z - 0.75, x + 0.75, z + 0.75];
+        if (keep.some((k) => r[0] < k[2] && r[2] > k[0] && r[1] < k[3] && r[3] > k[1])) continue;
+        this.box(F, x - 0.75, y + 0.72, z - 0.7, x + 0.75, y + 0.76, z + 0.7, top, false);
+        this.box(F, x - 0.72, y, z - 0.05, x + 0.72, y + 1.15, z + 0.05, '#7a8a9a');
+        const [wx0, wz0, wx1, wz1] = F.rect(x - 0.75, z - 0.7, x + 0.75, z + 0.7);
+        this.W.box(wx0, y, wz0, wx1, y + 0.76, wz1);
+        for (const s of [-1, 1]) {
+          this.box(F, x - 0.25, y + 0.78, z + s * 0.35 - 0.02, x + 0.25, y + 1.08, z + s * 0.35 + 0.02, '#22252a', false);
+          this.box(F, x - 0.22, y + 0.44, z + s * 1.0 - 0.22, x + 0.22, y + 0.5, z + s * 1.0 + 0.22, '#2b2d30', false);
+          this.box(F, x - 0.22, y + 0.5, z + s * 1.22 - 0.03, x + 0.22, y + 1.0, z + s * 1.22 + 0.03, '#2b2d30', false);
+        }
+        keep.push([r[0] - 0.4, r[1] - 0.6, r[2] + 0.4, r[3] + 0.6]);
+      }
+    }
+  }
+
+  // Store aisles down the middle of a shop floor.
+  shopAisles(F, y, R, keep) {
+    const rng = this.rng;
+    const w = R.x1 - R.x0, d = R.z1 - R.z0;
+    if (w < 6 || d < 4.5) return;
+    const len = Math.min(4.2, w - 3.6);
+    for (let z = R.z0 + 2.0; z < R.z1 - 1.8; z += 2.3) {
+      const cx = (R.x0 + R.x1) / 2 + (rng() - 0.5) * 0.6;
+      const r = [cx - len / 2, z - 0.45, cx + len / 2, z + 0.45];
+      if (keep.some((k) => r[0] < k[2] && r[2] > k[0] && r[1] < k[3] && r[3] > k[1])) continue;
+      const cols = ['#d84a3a', '#3a8ad8', '#f0c040', '#4ab05a', '#e87a2a', '#ffffff'];
+      this.box(F, r[0], y, r[1], r[2], y + 1.5, r[3], '#d8d8d4');
+      for (let k = 0; k < 3; k++) {
+        const yy = y + 0.12 + k * 0.48;
+        for (const [za, zb] of [[r[1] - 0.06, r[1] + 0.08], [r[3] - 0.08, r[3] + 0.06]]) {
+          let x = r[0] + 0.06;
+          while (x < r[2] - 0.2) {
+            const gw = 0.12 + rng() * 0.18;
+            this.box(F, x, yy, za, x + gw, yy + 0.15 + rng() * 0.2, zb, rng.pick(cols), false);
+            x += gw + 0.02;
+          }
+        }
+      }
+      keep.push([r[0] - 0.9, r[1] - 0.9, r[2] + 0.9, r[3] + 0.9]);
+    }
   }
 
   // Simple solid prop with collider (crates, containers, machinery).
@@ -507,7 +772,11 @@ export class Structures {
       const b = this.house(poi, { ...site, w: 14, d: 9, floors: 1, fh: 3.6, roof: 'flat', glass: true, winW: 3, wall: rng.pick(WALLS), lootPerFloor: 2, type: 'shop' });
       // awning
       const F = b.frame;
-      this.box(F, -6, b.baseY + 2.6, 4.5, 6, b.baseY + 2.8, 6.2, rng.pick(['#d24b4b', '#3c8dd2', '#e0a030', '#3fae6a']), false);
+      const c = rng.pick(['#d24b4b', '#3c8dd2', '#e0a030', '#3fae6a', '#8a4ac8']);
+      this.box(F, -6, b.baseY + 2.6, 4.5, 6, b.baseY + 2.8, 6.2, c, false);
+      for (let k = 0; k < 6; k++) this.box(F, -6 + k * 2, b.baseY + 2.81, 4.5, -5 + k * 2, b.baseY + 2.83, 6.2, '#f2f2ee', false);
+      this.box(F, -4, b.baseY + 3.0, 4.5, 4, b.baseY + 3.55, 4.65, c, false);
+      this.box(F, -3.7, b.baseY + 3.1, 4.65, 3.7, b.baseY + 3.45, 4.7, '#f2f2ee', false);
     }
     for (let i = 0; i < 6; i++) {
       const a = rng() * Math.PI * 2;
@@ -956,12 +1225,48 @@ export class Structures {
       this.gb.box(gx + ox - 0.25, y - 0.2, gz + oz - 0.25, gx + ox + 0.25, y + 4.5, gz + oz + 0.25, '#e8e8e8');
       this.W.box(gx + ox - 0.25, y - 0.2, gz + oz - 0.25, gx + ox + 0.25, y + 4.5, gz + oz + 0.25);
     }
-    this.gb.box(gx - 7, y + 4.5, gz - 4.5, gx + 7, y + 5.3, gz + 4.5, '#d24b3c');
+    const brand = rng.pick(['#d24b3c', '#2f6dd0', '#2f9a5a']), brand2 = '#f2c230';
+    this.gb.box(gx - 7, y + 4.5, gz - 4.5, gx + 7, y + 5.3, gz + 4.5, '#efefea', false);
+    this.gb.box(gx - 7.05, y + 4.95, gz - 4.55, gx + 7.05, y + 5.3, gz + 4.55, brand);
+    this.gb.box(gx - 7.06, y + 4.85, gz - 4.56, gx + 7.06, y + 4.95, gz + 4.56, brand2);
     this.W.box(gx - 7, y + 4.5, gz - 4.5, gx + 7, y + 5.3, gz + 4.5);
-    this.reserve(gx - 7, gz - 5, gx + 7, gz + 5);
+    // lights under the canopy
+    for (const lx of [-4.5, -1.5, 1.5, 4.5]) for (const lz of [-2.5, 2.5]) this.gb.box(gx + lx - 0.5, y + 4.42, gz + lz - 0.3, gx + lx + 0.5, y + 4.5, gz + lz + 0.3, '#fffbe8', false);
+    // forecourt and two pump islands with a pair of pumps each
+    this.gb.box(gx - 8, y - 0.3, gz - 5.5, gx + 8, y + 0.04, gz + 5.5, '#8e9196');
+    for (const ix of [-2.6, 2.6]) {
+      this.gb.box(gx + ix - 0.6, y, gz - 2.4, gx + ix + 0.6, y + 0.2, gz + 2.4, '#b6b2a8');
+      this.W.box(gx + ix - 0.55, y, gz - 1.7, gx + ix + 0.55, y + 1.6, gz + 1.7);
+      for (const pz of [-1.1, 1.1]) {
+        const px = gx + ix, z = gz + pz;
+        this.gb.box(px - 0.32, y + 0.2, z - 0.2, px + 0.32, y + 1.65, z + 0.2, '#f2f2ee');
+        this.gb.box(px - 0.33, y + 1.45, z - 0.21, px + 0.33, y + 1.75, z + 0.21, brand);
+        for (const sd of [-1, 1]) {
+          this.gb.box(px + sd * 0.33, y + 0.95, z - 0.12, px + sd * 0.34, y + 1.3, z + 0.12, '#1c2a3a');
+          this.gb.box(px + sd * 0.33, y + 0.55, z - 0.06, px + sd * 0.42, y + 0.85, z + 0.06, '#2b2b2b');
+        }
+        this.gb.box(px - 0.04, y + 0.85, z + 0.2, px + 0.04, y + 1.45, z + 0.24, '#1a1a1a');
+      }
+      for (const pz of [-2.25, 2.25]) this.gb.cylinder(gx + ix, y + 0.2, gz + pz, 0.12, 0.12, 0.9, 8, brand2);
+    }
+    // price sign on a pole
+    const sx = gx + 8.5, sz = gz - 5.5;
+    this.gb.cylinder(sx, y - 0.2, sz, 0.16, 0.16, 6.4, 8, '#9aa3ad');
+    this.gb.box(sx - 1.1, y + 4.2, sz - 0.18, sx + 1.1, y + 6.6, sz + 0.18, brand);
+    this.gb.box(sx - 1.0, y + 5.7, sz - 0.2, sx + 1.0, y + 6.45, sz + 0.2, '#f2f2ee');
+    for (let k = 0; k < 3; k++) this.gb.box(sx - 0.9, y + 4.35 + k * 0.42, sz - 0.21, sx + 0.9, y + 4.68 + k * 0.42, sz + 0.21, '#1a1a1a');
+    this.W.box(sx - 0.2, y, sz - 0.2, sx + 0.2, y + 6.4, sz + 0.2);
+    this.reserve(gx - 8, gz - 5.5, gx + 9, gz + 5.5);
     this.lootSpots.push({ x: gx, y: y + 5.35, z: gz, poi, building: null, floor: 0, high: true });
     const shop = this.findSite(poi, 12, 8, 12, poi.r, { gap: 4, faceCenter: true });
-    if (shop) this.house(poi, { ...shop, w: 12, d: 8, floors: 1, fh: 3.6, roof: 'flat', glass: true, winW: 2.6, wall: '#efe4cf', lootPerFloor: 3 });
+    if (shop) {
+      const b = this.house(poi, { ...shop, w: 12, d: 8, floors: 1, fh: 3.6, roof: 'flat', glass: true, winW: 2.6, wall: '#efe4cf', lootPerFloor: 3, type: 'shop' });
+      // a shop sign over the door and an ice chest outside
+      const F = b.frame;
+      this.box(F, -3, b.baseY + 3.0, 4.0, 3, b.baseY + 3.6, 4.2, brand, false);
+      this.box(F, -2.8, b.baseY + 3.15, 4.2, 2.8, b.baseY + 3.45, 4.25, '#f2f2ee', false);
+      this.box(F, 4.2, b.baseY, 4.2, 5.6, b.baseY + 1.2, 4.9, '#e8f2f8');
+    }
     for (let i = 0; i < 3; i++) {
       const site = this.findSite(poi, 7, 6, 14, poi.r, { gap: 4 });
       if (site) this.house(poi, { ...site, w: 7, d: 6, floors: 1, roof: 'flat', wall: rng.pick(['#c98b5a', '#d9a066']), lootPerFloor: 1 });

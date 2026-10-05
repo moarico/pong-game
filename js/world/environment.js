@@ -8,7 +8,7 @@ export const SKY_HORIZON = 0xbfe2f7;
 export class Environment {
   constructor(scene, quality, renderer) {
     this.scene = scene;
-    this.hemi = new THREE.HemisphereLight(0xcfe8ff, 0x5d6a3e, 0.35);
+    this.hemi = new THREE.HemisphereLight(0xcfe8ff, 0x67654f, 0.35);
     scene.add(this.hemi);
     this.sun = new THREE.DirectionalLight(0xfff0d8, 3);
     scene.add(this.sun);

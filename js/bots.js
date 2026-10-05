@@ -226,7 +226,35 @@ export class BotBrain {
       }
     }
     route.push(new THREE.Vector3(x, y, z));
-    return route;
+    return this.threadPartitions(route);
+  }
+
+  // Inside a building with a partition wall, walk round through the gap (the hallway or the inner doorway)
+  // instead of into the wall.
+  threadPartitions(route) {
+    const out = [];
+    let prev = this.a.pos;
+    for (const p of route) {
+      for (const b of this.game.structures.buildings) {
+        if (!b.partitions || !b.partitions.length) continue;
+        if (Math.abs(prev.y - p.y) > 1.5) continue;
+        const inside = (q) => q.x > b.x0 && q.x < b.x1 && q.z > b.z0 && q.z < b.z1 && q.y > b.baseY - 0.6 && q.y < b.roofY;
+        if (!inside(prev) || !inside(p)) continue;
+        for (const pt of b.partitions) {
+          const [ax, az] = b.frame.tl(prev.x, prev.z), [bx, bz] = b.frame.tl(p.x, p.z);
+          if ((ax - pt.px) * (bx - pt.px) >= 0) continue;
+          const cz = az + ((bz - az) * (pt.px - ax)) / (bx - ax);
+          if (cz < pt.za - 0.2 || cz > pt.zb + 0.2) continue;
+          if (pt.open && cz > pt.open[0] && cz < pt.open[1]) continue;
+          const [gx, gz] = b.frame.tw(pt.gap[0], pt.gap[1]);
+          out.push(new THREE.Vector3(gx, Math.min(prev.y, p.y), gz));
+        }
+        break;
+      }
+      out.push(p);
+      prev = p;
+    }
+    return out;
   }
 
   // Crossing a castle wall? Go through the gate that makes the shortest trip.
