@@ -1,6 +1,6 @@
 # Stormdrop
 
-A browser battle royale built with Three.js. You ride the Sky Coach (a bus under a hot-air balloon) over a 1 km island, drop and glide to one of 15 named areas, then loot, build and fight 19-29 bots while the storm closes in. The last one standing wins.
+A browser battle royale built with Three.js. You ride the Sky Coach (a bus under a hot-air balloon) over a 1 km island, drop and glide to one of 19 named areas, then loot, build and fight 19-29 bots while the storm closes in. The last one standing wins.
 
 Everything in the game is original: the island, logo, art, outfits and sounds are generated in code. There are no external assets apart from the vendored Three.js build and the Google Fonts in `index.html`.
 
@@ -26,7 +26,7 @@ Open the page, click **Press to start**, then **Play**. Click the game once if t
 | Fire / use | Left mouse | RT |
 | Aim down sights | Right mouse | LT |
 | Next / previous weapon | Mouse wheel, 1-5, H (harvesting tool) | RB / LB, D-pad down (tool) |
-| Jump / open glider | Space | A |
+| Jump / open or close glider | Space | A |
 | Crouch | Ctrl | B |
 | Reload / interact | R / E | X (interacts when something is near, otherwise reloads) |
 | Build | Q wall, F floor, C ramp, V roof | Y |
@@ -40,7 +40,7 @@ Open the page, click **Press to start**, then **Play**. Click the game once if t
 
 ## What's in the game
 
-**Scale.** The island is 1000 x 1000 m. Players are 1.8 m tall with a 0.4 m capsule radius. Walk/sprint/crouch speeds are 5/7.5/2.5 m/s, and a jump reaches about 1.2 m. Freefall is 50 m/s down; the glider moves 15 m/s forward and 6 m/s down and opens on its own 85 m above the ground. The bus flies at 560 m.
+**Scale.** The island is 1000 x 1000 m. Players are 1.8 m tall with a 0.4 m capsule radius. Walk/sprint/crouch speeds are 5/7.5/2.5 m/s, and a jump reaches about 1.2 m. Freefall is 50 m/s down; the glider moves 15 m/s forward and 6 m/s down and opens on its own 85 m above the ground. Jump folds it back into a dive and opens it again (folded, it still opens by itself just above the ground). Fall damage starts at a drop of about three floors and ramps gently; running down a hillside is not a fall. The bus flies at 560 m.
 
 **Storm.** It has the seven phases from the design table (waits, shrink times and damage per second). The first circle covers the whole island. Each next circle is 50-60% of the previous radius, with its center somewhere inside the old circle. After phase 7 the eye closes completely. Storm damage skips shields. The storm speed setting (normal, fast or very fast) gives roughly 24, 12 or 6 minute matches.
 
@@ -58,6 +58,8 @@ Open the page, click **Press to start**, then **Play**. Click the game once if t
 **Weapons.**
 - KR-4 Carbine (assault rifle), Mastiff 12 (pump shotgun), Vespa-9 (SMG), X9 Sidearm (pistol), Kodiak .338 (bolt sniper), RPG-9 (rocket launcher) and the Brute M6 LMG, with the damage, fire rate, magazine and reload values from the design table.
 - The gun models, hands, first-person feel and sounds come from Zero Hour: guns are built in parts, so mags drop out and slap back in, pumps rack, bolts cycle, pistol slides lock back, and brass flies out of the port. Recoil climbs the muzzle and kicks the view, and springs settle everything.
+- Guns change finish with rarity: plain black for common, green, blue and purple furniture with tinted metal, and full gold for legendary, in your hands, on other players, on the floor and in the inventory.
+- The KR-4 and Vespa-9 optics show a glowing red dot when you aim.
 - The pump loads one shell at a time and can fire between shells.
 - Rarity adds 8% damage per tier (a gold gun hits about a third harder than a gray one), and headshots do 1.5x-2x. Bots hit softer than players, depending on difficulty.
 - Spread grows while moving and shrinks while aiming.
@@ -65,15 +67,16 @@ Open the page, click **Press to start**, then **Play**. Click the game once if t
 
 **Inventory and loot.**
 - 5 slots, and healing items take slots too. In the inventory, drag a slot onto another to swap, drag it out to drop it, or select one and press 1-5 to move it; Auto-sort puts weapons first. Ammo caps are light 250, medium 200, heavy 30, shells 50 and rockets 12.
-- Ground items glow in their rarity color.
-- Each building has one gold chest that plays a shimmer when you are close.
+- Floor loot floats over a glow in its rarity color with a light beam (taller for better rarity), and shows a name card when you are close. Epic and legendary loot sparkles.
+- Chests have pulsing gold trim and drifting sparkles, hum when you are close, and burst open with a flash. Most buildings have one, in a different spot each time.
+- Loot lies on beds, tables and counters as well as on the floor.
 - Floor loot is denser in the high-loot areas.
 - A supply drop falls every 2-3 minutes under a balloon, marked by a red flare.
 - Eliminated players drop everything they carried.
 
 **Camera.** First person by default, with Zero Hour's feel: the eye height eases over steps and crouches, the head bobs with your stride, landings dip the view, strafing rolls it slightly, and the gun lags behind your aim. Aiming zooms by a fixed 1.95x through the gun's own sights (4.2x for the scope). Skydiving, gliding, the bus, vehicles and emotes switch to the chase camera. Third person (Z) is over the shoulder: 0.7 m right, 0.4 m up and 3 m back, with switchable shoulders.
 
-**Sound.** Zero Hour's synthesized sound engine. Each gunshot layers a supersonic crack, muzzle blast, chest thump, the action cycling, wall reflections and a rolling tail, with several variants per gun and a separate distant version. Sounds are positioned in 3D (HRTF), arrive late from far away, and your own shots briefly duck the world. Reloads, pumps and bolts make their sounds in time with the hands. Footsteps change with the surface (grass, stone, wood, metal, sand, water), and bullet impacts, ricochets, near-miss whizzes, brass and explosion debris all have their own sounds. The island has wind, waves, birds, the storm's roar and rushing air while you fall.
+**Sound and music.** Zero Hour's synthesized sound engine. Each gunshot layers a supersonic crack, muzzle blast, chest thump, the action cycling, wall reflections and a rolling tail, with several variants per gun and a separate distant version. Sounds are positioned in 3D (HRTF), arrive late from far away, and your own shots briefly duck the world. Reloads, pumps and bolts make their sounds in time with the hands. Footsteps change with the surface (grass, stone, wood, metal, sand, water), and bullet impacts, ricochets, near-miss whizzes, brass and explosion debris all have their own sounds. Body hits tick, headshots ring a bell, eliminations land with a chime, and a breaking shield showers glass. The island has wind, waves, birds, the storm's roar and rushing air while you fall. Live music plays in the lobby and on the Sky Coach ride, and a fanfare plays when you win (Settings > Music).
 
 **HUD.**
 - Health and shield bars bottom left; hotbar, ammo and materials bottom right.
@@ -84,15 +87,17 @@ Open the page, click **Press to start**, then **Play**. Click the game once if t
 **Island.**
 - A ragged coastline with a lagoon on the west side and three small islands offshore.
 - Snowy peaks in the east, desert with red rock buttes in the south and south-east, autumn woods in the west, dark forest and farmland in the north, and the city in the middle.
-- 17 named areas with different biomes and loot levels.
+- 19 named areas with different biomes and loot levels.
   - **High loot:** Neon Heights (city), Crown Citadel (castle on a hill), Rustbelt Works (factory) and Skyline Observatory (mountain top).
-  - **Medium:** Frostpeak Lodge, Mirage Mesa, Murkwater Bayou, Golden Acres, Glimmer Lake and Voltage Yard.
-  - **Low:** Harbor Point, Timberline Camp, Amberwood Hollow, Sunscorch Outpost, Coral Cove, Redrock Gulch and Gull Rock (on the north island).
+  - **Medium:** Frostpeak Lodge, Mirage Mesa, Murkwater Bayou, Golden Acres, Glimmer Lake, Voltage Yard and Maple Grove (a fenced suburb round a park).
+  - **Low:** Harbor Point, Timberline Camp, Amberwood Hollow, Sunscorch Outpost and Pit Stop (gas stations), Coral Cove, Redrock Gulch and Gull Rock (on the north island).
 - Four rivers that rise from ponds, a lake, and roads with bridges between the areas.
-- Drivable trucks are parked on the roads.
+- Buildings have rooms: wide ones are split by an inner wall, and each room is furnished for what it is (living rooms, kitchens, bedrooms, bathrooms, studies, shops with aisles and coolers, offices with desk rows). Houses have glass windows with frames and sills, and many have porches, shutters and chimneys.
+- Power lines run along the roads; towns have street lamps, benches, hydrants and bins; houses have picket fences and mailboxes; camps, ruins, lookouts and old trailers dot the wilds.
+- Drivable open-top 4x4s are parked on the roads: you sit behind the wheel, the wheels roll and steer, and the body leans in turns.
 - Landmarks visible from far away: the city spire, the observatory on the snowy peak, the lighthouse and the windmill.
 
-**Bots.** Each bot chooses a drop area and times its jump. Once down, it loots through doors and up stairs, opens chests, and picks a weapon by range. In fights it strafes, aims with skill-based error, builds a panic wall when shot, heals behind cover, gathers materials and rotates ahead of the storm. You can set the bot difficulty.
+**Bots.** Each bot chooses a drop area and times its jump. Once down, it grabs the nearest gun, loots through doors, round inner walls, through castle gates and up stairs, opens chests, and picks a weapon by range. It feels its way round walls and furniture. In fights it strafes, aims with skill-based error that starts shaky, builds a panic wall when shot and ramps toward enemies above it, backs off to reload, heals behind cover, gathers materials and rotates ahead of the storm, and sometimes emotes after a win. You can set the bot difficulty.
 
 **Menus.** Title screen with logo and art. Lobby with Play, Locker, Settings and Controls. The loading screen shows a progress bar, a random tip and key art. You pick your jump from the bus, and the end screen shows your placement (#1 is the victory screen), eliminations, damage and time survived, with Play Again.
 
@@ -107,7 +112,9 @@ Open the page, click **Press to start**, then **Play**. Click the game once if t
 | `js/config.js` | Every tuning number (speeds, storm phases, weapons, heals, loot odds) |
 | `js/world/island.js` | The layout: coastline, islands, bays, mountains, buttes, named areas, biomes, rivers and roads |
 | `js/world/terrain.js` | Heightmap, biomes, river/lake carving, road flattening, map water painting |
-| `js/world/structures.js` | Buildings per area (doors, stairs, loot spots, chests), landmarks |
+| `js/world/structures.js` | Buildings per area (doors, stairs, porches, loot spots, chests), landmarks, the gas station |
+| `js/world/interiors.js` | Rooms and furniture, and where loot and chests go inside |
+| `js/world/details.js` | Power lines, street furniture, yards, and the camps, ruins and lookouts in the wilds |
 | `js/world/props.js` | Instanced trees, rocks, wrecks (harvestable), bushes, crops |
 | `js/physics.js` | Spatial hash, capsule movement with steps and ramps, raycasts |
 | `js/actor.js` | Shared player/bot logic: movement modes, weapons, healing, inventory |
@@ -115,6 +122,7 @@ Open the page, click **Press to start**, then **Play**. Click the game once if t
 | `js/combat.js` | Hitscan, pellets, sniper drop, rockets, harvesting with weak spots |
 | `js/loot.js` | Floor loot, chests, supply drops, death drops |
 | `js/storm.js` | Storm phases and the storm wall shader |
+| `js/music.js` | Live music: lobby theme, bus tune, victory fanfare |
 | `js/bots.js` | Bot AI |
 | `js/controller.js`, `js/input.js` | Keyboard/mouse/gamepad input and the camera |
 | `js/hud.js`, `js/menus.js`, `js/lobby.js`, `js/art.js` | HUD, menus, locker stage, generated key art |
