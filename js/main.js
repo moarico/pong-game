@@ -327,6 +327,7 @@ class Game {
     if (a.mode !== 'bus') return;
     a.mode = 'freefall';
     a.freefallT = 0;
+    a.glideFolded = false;
     a.pos.copy(this.bus.pos).add(new THREE.Vector3((Math.random() - 0.5) * 3, -4, (Math.random() - 0.5) * 3));
     a.vel.copy(this.bus.dir).multiplyScalar(12);
     a.model.root.visible = true;
@@ -522,7 +523,8 @@ class Game {
       p.intent = p.blankIntent();
       if (this.menus.invOpen) {
         const I = this.input;
-        if (I.keyPressed('KeyI') || I.keyPressed('Escape')) this.menus.toggleInventory(false);
+        if (I.keyPressed('KeyI') || I.keyPressed('Tab') || I.keyPressed('Escape')) this.menus.toggleInventory(false);
+        else this.menus.inventoryKeys();
       }
     }
     if (this.state !== 'playing') return; // paused from the controller

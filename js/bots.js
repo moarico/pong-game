@@ -641,7 +641,8 @@ export class BotBrain {
       if (this.aimErrT <= 0) {
         this.aimErrT = 0.12 + this.rng() * 0.12;
         // Angular error grows with distance; a moving target adds a reaction-lag offset.
-        const base = lerp(0.04, 0.008, this.skill) * dist;
+        // plus a floor, so point-blank shots are not perfect either
+        const base = lerp(0.04, 0.008, this.skill) * dist + lerp(0.38, 0.14, this.skill);
         const moving = Math.hypot(t.vel.x, t.vel.z) * lerp(0.15, 0.04, this.skill);
         const s = base + moving + (t.mode === 'ground' ? 0 : 0.6);
         this.aimErr.set((this.rng() - 0.5) * 2 * s, (this.rng() - 0.5) * 1.6 * s, (this.rng() - 0.5) * 2 * s);

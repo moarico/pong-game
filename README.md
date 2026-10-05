@@ -31,11 +31,11 @@ Open the page, click **Press to start**, then **Play**. Click the game once if t
 | Reload / interact | R / E | X (interacts when something is near, otherwise reloads) |
 | Build | Q wall, F floor, C ramp, V roof | Y |
 | In build mode | Left mouse place, G or right mouse edit, T material | RT place, LT edit, X/B/Y/A wall/floor/ramp/roof, D-pad right material |
-| Inventory | I | D-pad up |
+| Inventory | Tab or I | D-pad up |
 | Emote | B | D-pad left |
 | First / third person | Z (or Settings > Camera) | Settings > Camera |
 | Switch shoulder (third person) | X | Right stick click |
-| Map | Tab or M | Select (View) |
+| Map | M | Select (View) |
 | Menu | Esc | Start (Menu) |
 
 ## What's in the game
@@ -59,12 +59,12 @@ Open the page, click **Press to start**, then **Play**. Click the game once if t
 - KR-4 Carbine (assault rifle), Mastiff 12 (pump shotgun), Vespa-9 (SMG), X9 Sidearm (pistol), Kodiak .338 (bolt sniper), RPG-9 (rocket launcher) and the Brute M6 LMG, with the damage, fire rate, magazine and reload values from the design table.
 - The gun models, hands, first-person feel and sounds come from Zero Hour: guns are built in parts, so mags drop out and slap back in, pumps rack, bolts cycle, pistol slides lock back, and brass flies out of the port. Recoil climbs the muzzle and kicks the view, and springs settle everything.
 - The pump loads one shell at a time and can fire between shells.
-- Rarity adds 5% damage per tier, and headshots do 1.5x-2x.
+- Rarity adds 8% damage per tier (a gold gun hits about a third harder than a gray one), and headshots do 1.5x-2x. Bots hit softer than players, depending on difficulty.
 - Spread grows while moving and shrinks while aiming.
 - Rifles are hitscan. The sniper fires a projectile with bullet drop, and rockets do splash and heavy structure damage.
 
 **Inventory and loot.**
-- 5 slots, and healing items take slots too. Ammo caps are light 250, medium 200, heavy 30, shells 50 and rockets 12.
+- 5 slots, and healing items take slots too. In the inventory, drag a slot onto another to swap, drag it out to drop it, or select one and press 1-5 to move it; Auto-sort puts weapons first. Ammo caps are light 250, medium 200, heavy 30, shells 50 and rockets 12.
 - Ground items glow in their rarity color.
 - Each building has one gold chest that plays a shimmer when you are close.
 - Floor loot is denser in the high-loot areas.

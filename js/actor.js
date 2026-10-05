@@ -432,8 +432,16 @@ export class Actor {
       const res = W.moveBody(this.body, this.vel.x * dt, this.vel.y * dt, this.vel.z * dt);
       const ground = W.groundAt(this.pos.x, this.pos.z, this.pos.y + 0.1);
       const above = this.pos.y - Math.max(ground, 0);
-      if (this.mode === 'freefall' && ((I.jump && this.freefallT > 0.6) || above < PLAYER.autoGlideHeight)) {
+      // Jump toggles the glider: fold it to drop faster, open it again any time. Folded, it still opens
+      // by itself just above the ground so nobody hits the ground at full speed.
+      if (this.mode === 'glide' && I.jump && this.freefallT > 0.35 && above > 14) {
+        this.mode = 'freefall';
+        this.glideFolded = true;
+        this.freefallT = 0;
+        if (!this.isBot) this.game.audio.play('whoosh', this.pos);
+      } else if (this.mode === 'freefall' && ((I.jump && this.freefallT > (this.glideFolded ? 0.3 : 0.6)) || above < (this.glideFolded ? 12 : PLAYER.autoGlideHeight))) {
         this.mode = 'glide';
+        this.freefallT = 0;
         this.vel.y = Math.max(this.vel.y, -15);
         if (!this.isBot) this.game.audio.play('glider', this.pos);
       }
@@ -493,7 +501,7 @@ export class Actor {
         impact = -(this.vel.x * n.x + impactVy * n.y + this.vel.z * n.z);
       }
       if (!this.onGround && impact > PLAYER.fallDamageSpeed) {
-        const dmg = Math.round((impact - PLAYER.fallDamageSpeed) * 7);
+        const dmg = Math.round((impact - PLAYER.fallDamageSpeed) * PLAYER.fallDamagePerMs);
         this.takeDamage(dmg, null, { ignoreShield: true, cause: 'fell' });
       }
       if (!this.onGround && impactVy < -8) {

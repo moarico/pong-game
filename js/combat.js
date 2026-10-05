@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { WEAPONS, GATHER } from './config.js';
+import { WEAPONS, GATHER, BOT_DAMAGE } from './config.js';
 import { weaponDamage, headDamage } from './items.js';
 import { clamp, lerp } from './util.js';
 import { makeGlowTexture } from './world/structures.js';
@@ -215,6 +215,7 @@ export class Combat {
 
   damageActor(target, amount, shooter, cause, head = false, point = null, shieldHit = false) {
     const g = this.game;
+    if (shooter && shooter.isBot && shooter !== target) amount *= BOT_DAMAGE[g.settings.difficulty] ?? BOT_DAMAGE[1];
     amount = Math.round(amount);
     if (amount <= 0 || !target.alive) return;
     const wasAlive = target.alive;

@@ -1,7 +1,7 @@
 import { OUTFITS } from './character.js';
 import { RARITY, TIPS, GAME_TITLE, WEAPONS, HEALS, AMMO_NAMES } from './config.js';
 import { paintArt } from './art.js';
-import { iconFor, iconUrl, itemName } from './items.js';
+import { iconFor, iconUrl, itemName, weaponDamage } from './items.js';
 import { PAD } from './input.js';
 import { fmtTime } from './util.js';
 
@@ -110,16 +110,16 @@ export class Menus {
         <tr><td>Fire / use</td><td>Left mouse</td><td>RT</td></tr>
         <tr><td>Aim down sights</td><td>Right mouse</td><td>LT</td></tr>
         <tr><td>Next / previous weapon</td><td>Mouse wheel, 1-5, H (harvesting tool)</td><td>RB / LB, D-pad down (tool)</td></tr>
-        <tr><td>Jump / open glider</td><td>Space</td><td>A</td></tr>
+        <tr><td>Jump / open or close glider</td><td>Space</td><td>A</td></tr>
         <tr><td>Crouch</td><td>Ctrl</td><td>B</td></tr>
         <tr><td>Reload / interact</td><td>R / E</td><td>X</td></tr>
         <tr><td>Build mode</td><td>Q wall &middot; F floor &middot; C ramp &middot; V roof</td><td>Y</td></tr>
         <tr><td>In build mode</td><td>Left mouse place &middot; G or right mouse edit &middot; T material</td><td>RT place &middot; LT edit &middot; X/B/Y/A wall/floor/ramp/roof &middot; D-pad right material</td></tr>
-        <tr><td>Inventory</td><td>I</td><td>D-pad up</td></tr>
+        <tr><td>Inventory</td><td>Tab or I</td><td>D-pad up</td></tr>
         <tr><td>Emote</td><td>B</td><td>D-pad left</td></tr>
         <tr><td>First / third person</td><td>Z</td><td>Settings menu</td></tr>
         <tr><td>Switch shoulder (third person)</td><td>X</td><td>Right stick click</td></tr>
-        <tr><td>Map</td><td>Tab or M</td><td>Select (View)</td></tr>
+        <tr><td>Map</td><td>M</td><td>Select (View)</td></tr>
         <tr><td>Menu</td><td>Esc</td><td>Start (Menu)</td></tr>
       </table></div>`;
     for (const b of controls.querySelectorAll('[data-go]')) b.onclick = () => this.show(b.dataset.go);
@@ -342,39 +342,121 @@ export class Menus {
       let detail = '';
       if (s && s.kind === 'weapon') {
         const d = WEAPONS[s.type];
-        detail = `${Math.round(d.damage * (1 + 0.05 * s.rarity))} dmg &middot; ${d.rate}/s &middot; ${s.ammo}/${d.mag}`;
+        detail = `${Math.round(weaponDamage(s))} dmg &middot; ${d.rate}/s &middot; ${s.ammo}/${d.mag}`;
       } else if (s && s.kind === 'heal') {
         const d = HEALS[s.type];
         detail = d.hp ? `+${d.hp} HP (max ${d.cap}) &middot; ${d.time}s` : `+${d.shield} shield (max ${d.cap}) &middot; ${d.time}s`;
       }
-      return `<button class="islot ${i === this.invSel ? 'sel' : ''}" data-nav data-i="${i}" style="--rar:${r}">
-        <div class="sicon">${iconUrl(s) ? `<img src="${iconUrl(s)}" alt="">` : s ? iconFor(s) : ''}</div><div class="iname">${s ? itemName(s) : 'Empty'}</div><div class="idet">${detail}</div></button>`;
+      return `<button class="islot ${i === this.invSel ? 'sel' : ''} ${s ? 'r' + s.rarity : 'empty'}" data-nav data-i="${i}" style="--rar:${r}">
+        <div class="ikey">${i + 1}</div><div class="sicon">${iconUrl(s) ? `<img src="${iconUrl(s)}" alt="" draggable="false">` : s ? iconFor(s) : ''}</div><div class="iname">${s ? itemName(s) : 'Empty'}</div><div class="idet">${detail}</div></button>`;
     }).join('');
     const ammo = Object.entries(a.ammo).map(([k, v]) => `<div><b>${v}</b><span>${AMMO_NAMES[k]}</span></div>`).join('');
     const mats = Object.entries(a.mats).map(([k, v]) => `<div class="m ${k}"><b>${v}</b><span>${k}</span></div>`).join('');
+    const pad = g.input.lastDevice === 'pad';
     this.inv.innerHTML = `<div class="panel inv-panel"><h2>INVENTORY</h2><div class="islots">${slots}</div>
-      <div class="inv-help">Click a slot to select it, click another to swap. ${g.input.lastDevice === 'pad' ? 'A select/swap &middot; Y drop &middot; B close' : 'Drop removes the selected item.'}</div>
-      <div class="row"><button class="btn red" data-nav id="inv-drop">DROP</button><button class="btn" data-nav id="inv-close">CLOSE</button></div>
+      <div class="inv-help">${pad ? 'A pick up a slot, A again on another to swap &middot; Y drop &middot; B close' : 'Drag a slot onto another to swap, or out of this panel to drop it. Or click a slot and press 1-5 to move it there.'}</div>
+      <div class="row"><button class="btn" data-nav id="inv-sort">AUTO-SORT</button><button class="btn red" data-nav id="inv-drop">DROP</button><button class="btn" data-nav id="inv-close">CLOSE</button></div>
       <h3>Ammo</h3><div class="inv-grid">${ammo}</div><h3>Materials</h3><div class="inv-grid">${mats}</div></div>`;
     for (const b of this.inv.querySelectorAll('.islot')) {
+      const i = +b.dataset.i;
       b.onclick = () => {
-        const i = +b.dataset.i;
-        if (this.invSel >= 0 && this.invSel !== i) {
-          const tmp = a.slots[i];
-          a.slots[i] = a.slots[this.invSel];
-          a.slots[this.invSel] = tmp;
-          a.cancelReload();
-          a.cancelHeal();
-          this.invSel = i;
-          a.sel = a.slots[a.sel] || a.sel === -1 ? a.sel : -1;
-        } else this.invSel = i;
+        if (this.dragMoved) return;
+        if (this.invSel >= 0 && this.invSel !== i && (a.slots[i] || a.slots[this.invSel])) this.swapSlots(this.invSel, i);
+        else this.invSel = i;
         g.audio.play('ui');
         this.renderInventory();
       };
+      b.onpointerdown = (e) => {
+        if (e.button !== 0 || !a.slots[i]) return;
+        this.startDrag(i, b, e);
+      };
     }
+    $('#inv-sort', this.inv).onclick = () => this.autoSort();
     $('#inv-drop', this.inv).onclick = () => this.dropSelected();
     $('#inv-close', this.inv).onclick = () => this.toggleInventory(false);
     this.focusFirst(this.inv);
+  }
+
+  // Swap two slots; whatever you were holding stays in your hands.
+  swapSlots(i, j) {
+    const a = this.game.player;
+    if (i === j) return;
+    [a.slots[i], a.slots[j]] = [a.slots[j], a.slots[i]];
+    a.cancelReload();
+    a.cancelHeal();
+    if (a.sel === i) a.sel = j;
+    else if (a.sel === j) a.sel = i;
+    if (a.sel >= 0 && !a.slots[a.sel]) a.sel = -1;
+    this.invSel = j;
+  }
+
+  // Weapons first in the usual order (rifles, shotguns, SMGs, snipers...), better rarity first, then heals.
+  autoSort() {
+    const a = this.game.player;
+    const held = a.sel >= 0 ? a.slots[a.sel] : null;
+    const order = { ar: 0, lmg: 1, shotgun: 2, smg: 3, sniper: 4, rocket: 5, pistol: 6 };
+    const healOrder = { big: 0, mini: 1, medkit: 2, bandage: 3 };
+    const key = (s) => (!s ? 99 : s.kind === 'weapon' ? (order[s.type] ?? 7) * 10 - s.rarity : 80 + (healOrder[s.type] ?? 4));
+    a.slots.sort((x, y) => key(x) - key(y));
+    a.sel = held ? a.slots.indexOf(held) : a.sel;
+    this.game.audio.play('ui');
+    this.renderInventory();
+  }
+
+  // Drag a slot with the mouse: drop it on another slot to swap, or outside the panel to throw it out.
+  startDrag(i, el, e) {
+    const g = this.game;
+    this.dragMoved = false;
+    const x0 = e.clientX, y0 = e.clientY;
+    let ghost = null;
+    const move = (ev) => {
+      if (!ghost && Math.hypot(ev.clientX - x0, ev.clientY - y0) < 6) return;
+      if (!ghost) {
+        this.dragMoved = true;
+        ghost = el.cloneNode(true);
+        ghost.classList.add('drag-ghost');
+        ghost.style.width = el.offsetWidth + 'px';
+        document.body.appendChild(ghost);
+        el.classList.add('dragging');
+      }
+      ghost.style.left = ev.clientX - el.offsetWidth / 2 + 'px';
+      ghost.style.top = ev.clientY - el.offsetHeight / 2 + 'px';
+      for (const b of this.inv.querySelectorAll('.islot')) b.classList.toggle('drop-target', b !== el && b.contains(document.elementFromPoint(ev.clientX, ev.clientY)));
+    };
+    const up = (ev) => {
+      removeEventListener('pointermove', move);
+      removeEventListener('pointerup', up);
+      if (!ghost) return;
+      ghost.remove();
+      const over = document.elementFromPoint(ev.clientX, ev.clientY);
+      const target = over && over.closest('.islot');
+      const panel = this.inv.querySelector('.inv-panel');
+      if (target && +target.dataset.i !== i) {
+        this.swapSlots(i, +target.dataset.i);
+        g.audio.play('ui');
+      } else if (!target && panel && !panel.contains(over)) {
+        this.invSel = i;
+        this.dropSelected();
+        return;
+      }
+      this.renderInventory();
+      setTimeout(() => (this.dragMoved = false), 0);
+    };
+    addEventListener('pointermove', move);
+    addEventListener('pointerup', up);
+  }
+
+  // Number keys while the inventory is open move the selected slot there.
+  inventoryKeys() {
+    const g = this.game, inp = g.input;
+    if (!this.invOpen || this.invSel < 0) return;
+    for (let k = 0; k < 5; k++) {
+      if (inp.keyPressed('Digit' + (k + 1)) && k !== this.invSel) {
+        this.swapSlots(this.invSel, k);
+        g.audio.play('ui');
+        this.renderInventory();
+      }
+    }
   }
 
   dropSelected() {

@@ -176,11 +176,43 @@ export class ViewModel {
         { g: CYL, s: [0.036, 0.018, 0.036], p: V3a(wL, [-0.02, -0.03, 0.045]), r: [0.9, 0, 0.4], c: 0x151515 }, Sp(0.014, 0.005, 0.014, ...V3a(wL, [-0.036, -0.01, 0.05]), 0x1e2a30)]), this.mat));
       hL.userData.home = hL.position.clone();
     }
+    // red dot optics: a faintly tinted lens with a lit dot in the middle, bright enough to bloom
+    if (d.dot) root.add(this.redDot(d.dot));
     root.visible = false;
     this.root.add(root);
     const it = { root, parts, hR, hL, d, key };
     this.items.set(key, it);
     return it;
+  }
+
+  redDot(dot) {
+    if (!this.dotMats) {
+      const glow = document.createElement('canvas');
+      glow.width = glow.height = 64;
+      const c = glow.getContext('2d');
+      const gr = c.createRadialGradient(32, 32, 0, 32, 32, 32);
+      gr.addColorStop(0, 'rgba(255,255,255,1)');
+      gr.addColorStop(0.18, 'rgba(255,90,60,0.9)');
+      gr.addColorStop(0.5, 'rgba(255,30,10,0.25)');
+      gr.addColorStop(1, 'rgba(255,0,0,0)');
+      c.fillStyle = gr;
+      c.fillRect(0, 0, 64, 64);
+      const tex = new THREE.CanvasTexture(glow);
+      tex.colorSpace = THREE.SRGBColorSpace;
+      this.dotMats = {
+        lens: new THREE.MeshBasicMaterial({ color: 0x9fc4ff, transparent: true, opacity: 0.16, depthWrite: false, toneMapped: false }),
+        dot: new THREE.MeshBasicMaterial({ map: tex, color: new THREE.Color(5, 0.5, 0.3), transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, toneMapped: false }),
+      };
+    }
+    const g = new THREE.Group();
+    g.position.set(dot.p[0], dot.p[1], dot.p[2] + 0.004);
+    const lens = new THREE.Mesh(new THREE.CircleGeometry(dot.r, 24), this.dotMats.lens);
+    const lit = new THREE.Mesh(new THREE.PlaneGeometry(dot.r * 0.6, dot.r * 0.6), this.dotMats.dot);
+    lit.position.z = 0.0008;
+    lens.renderOrder = 5;
+    lit.renderOrder = 6;
+    g.add(lens, lit);
+    return g;
   }
 
   ejectShell(it, shotgun) {

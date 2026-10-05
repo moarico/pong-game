@@ -101,8 +101,8 @@ export class PlayerController {
     const pp = (b) => inp.padPressed(b);
     const build = a.buildMode;
     // Menus / overlays
-    if (kp('Tab') || kp('KeyM') || pp(PAD.SELECT)) g.hud.toggleMap();
-    if (kp('KeyI') || pp(PAD.UP)) g.menus.toggleInventory();
+    if (kp('KeyM') || pp(PAD.SELECT)) g.hud.toggleMap();
+    if (kp('Tab') || kp('KeyI') || pp(PAD.UP)) g.menus.toggleInventory();
     if (pp(PAD.START)) {
       g.pause();
       return;

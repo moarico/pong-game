@@ -36,7 +36,8 @@ export const PLAYER = {
   autoGlideHeight: 85, // glider opens on its own this high above ground
   maxHealth: 100,
   maxShield: 100,
-  fallDamageSpeed: 17, // impact speed (m/s) above which landing hurts
+  fallDamageSpeed: 19, // impact speed (m/s) above which landing hurts (a drop of about 3 floors)
+  fallDamagePerMs: 4.5, // damage per m/s of impact above that
 };
 
 export const CAMERA = {
@@ -109,7 +110,9 @@ export const RARITY = [
   { name: 'Epic', color: '#b25cff' },
   { name: 'Legendary', color: '#ffb22e' },
 ];
-export const RARITY_DAMAGE_STEP = 0.05; // +5% damage per tier above common
+export const RARITY_DAMAGE_STEP = 0.08; // +8% damage per tier above common: a gold gun hits a third harder than a gray one
+// Bots hit softer than players, by difficulty (easy, normal, hard).
+export const BOT_DAMAGE = [0.5, 0.68, 0.85];
 
 // Common-tier weapon values. falloff: [full damage until, reaches mul at, mul].
 export const WEAPONS = {
@@ -120,8 +123,8 @@ export const WEAPONS = {
     recoil: 0.9, rec: [0.62, 0.28], adsTime: 0.18, slot: 'rifle',
   },
   shotgun: {
-    name: 'Mastiff 12 Pump', short: 'PUMP', damage: 90, headDamage: 200, pellets: 10, rate: 0.7, mag: 5,
-    reload: 5, ammo: 'shells', range: 55, falloff: [8, 45, 0.15], spreadHip: 6, spreadAds: 4.2,
+    name: 'Mastiff 12 Pump', short: 'PUMP', damage: 78, headDamage: 125, pellets: 10, rate: 0.7, mag: 5,
+    reload: 5, ammo: 'shells', range: 55, falloff: [5, 32, 0.15], spreadHip: 6, spreadAds: 4.2,
     bloom: 0, bloomMax: 0, moveSpread: 1, structure: 70, rarities: [0, 4], kind: 'pellets',
     recoil: 4, rec: [3.2, 0.9], adsTime: 0.18, slot: 'shotgun',
   },

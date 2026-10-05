@@ -296,7 +296,10 @@ export class HUD {
       busText = g.bus.doorsOpen
         ? `<div class="big">${pad ? 'Press <kbd class="pad a">A</kbd>' : 'Press <kbd>SPACE</kbd>'} to jump</div><div>Auto-drop in ${fmtTime(left)}</div>`
         : '<div class="big">The doors open soon...</div>';
-    } else if (a.mode === 'freefall') busText = `<div>${pad ? '<kbd class="pad a">A</kbd>' : '<kbd>SPACE</kbd>'} open glider &middot; altitude ${Math.round(a.pos.y - g.terrain.heightAt(a.pos.x, a.pos.z))} m</div>`;
+    } else if (a.mode === 'freefall' || a.mode === 'glide') {
+      const key = pad ? '<kbd class="pad a">A</kbd>' : '<kbd>SPACE</kbd>';
+      busText = `<div>${key} ${a.mode === 'glide' ? 'close' : 'open'} glider &middot; altitude ${Math.round(a.pos.y - Math.max(0, g.terrain.heightAt(a.pos.x, a.pos.z)))} m</div>`;
+    }
     this.set('bus', busText, (v) => {
       this.busUi.innerHTML = v;
       this.busUi.classList.toggle('on', !!v);

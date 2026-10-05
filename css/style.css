@@ -390,6 +390,11 @@ canvas.art { position: absolute; inset: 0; width: 100%; height: 100%; }
 .iname { font-weight: 800; font-size: 16px; margin-top: 6px; }
 .idet { font-size: 14px; color: var(--muted); }
 .inv-help { color: var(--muted); margin-top: 10px; font-size: 16px; }
+.islot { position: relative; touch-action: none; user-select: none; }
+.islot .ikey { position: absolute; top: 6px; left: 8px; font-weight: 800; font-size: 14px; color: rgba(255, 255, 255, 0.7); }
+.islot.dragging { opacity: 0.35; }
+.islot.drop-target { outline: 3px dashed #fff; outline-offset: -6px; }
+.drag-ghost { position: fixed; z-index: 1000; pointer-events: none; transform: rotate(-3deg) scale(1.04); box-shadow: 0 12px 30px rgba(0, 0, 0, 0.5); opacity: 0.92; }
 .inv-grid { display: flex; gap: 10px; flex-wrap: wrap; }
 .inv-grid div { background: rgba(0, 0, 0, 0.3); padding: 6px 14px; border-radius: 6px; min-width: 90px; }
 .inv-grid b { display: block; font-size: 24px; }
