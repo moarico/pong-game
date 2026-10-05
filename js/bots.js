@@ -141,6 +141,12 @@ export class BotBrain {
     }
   }
 
+  // Now and then a bot celebrates a win with a quick emote, if nobody else is around.
+  onKill(victim) {
+    if (this.target === victim) this.target = null;
+    if (this.rng() < 0.35) this.celebrateAt = this.game.time + 0.6 + this.rng() * 0.8;
+  }
+
   hear(pos) {
     if (this.target || this.state === 'storm') return;
     if (this.rng() < 0.5 + this.skill * 0.3) this.investigate = pos.clone();
@@ -345,7 +351,7 @@ export class BotBrain {
     if (this.detourT > 0) {
       this.detourT -= dt;
       yaw = this.detourYaw;
-    }
+    } else yaw += this.avoid(dt, yaw, Math.hypot(wp.x - a.pos.x, wp.z - a.pos.z));
     this.turnTo(yaw, dt, 7);
     a.pitch *= 0.9;
     I.mz = 1;
@@ -373,6 +379,38 @@ export class BotBrain {
       } else this.stuckCount = Math.max(0, this.stuckCount - 1);
     }
     return false;
+  }
+
+  // Feelers: a few short rays ahead at knee and chest height. If the way is blocked, lean toward the clearer
+  // side for a moment instead of walking into the wall, fence or sofa.
+  avoid(dt, yaw, toGoal) {
+    this.feelT = (this.feelT || 0) - dt;
+    if (this.feelT > 0) return this.steerOff || 0;
+    this.feelT = 0.15 + this.rng() * 0.05;
+    const a = this.a, W = this.game.collision;
+    const look = Math.min(2.2, Math.max(0.6, toGoal - 0.4));
+    const ray = (off) => {
+      const yy = yaw + off, dx = -Math.sin(yy), dz = -Math.cos(yy);
+      let best = look;
+      for (const h of [0.55, 1.3]) {
+        const hit = W.raycast(a.pos.x, a.pos.y + h, a.pos.z, dx, 0, dz, look, null, true);
+        if (hit) best = Math.min(best, hit.t);
+      }
+      return best;
+    };
+    const ahead = ray(0);
+    if (ahead >= look - 0.01) {
+      this.steerOff *= 0.5;
+      return this.steerOff || 0;
+    }
+    const L = ray(0.7), R = ray(-0.7);
+    if (Math.max(L, R) < 0.5) {
+      this.steerOff = (this.steerOff || 0) * 0.5;
+      return this.steerOff;
+    }
+    this.steerOff = L > R ? 0.75 : -0.75;
+    if (Math.max(L, R) < 1.0) this.steerOff *= 1.6;
+    return this.steerOff;
   }
 
   turnTo(yaw, dt, rate) {
@@ -407,7 +445,10 @@ export class BotBrain {
       best = o;
     }
     if (best) {
-      if (best !== this.target) this.reactT = lerp(0.8, 0.25, this.skill) + this.rng() * 0.3;
+      if (best !== this.target) {
+        this.reactT = lerp(0.8, 0.25, this.skill) + this.rng() * 0.3;
+        this.engagedAt = g.time;
+      }
       this.target = best;
       this.targetSeenAt = g.time;
       this.targetLastPos.copy(best.pos);
@@ -464,6 +505,20 @@ export class BotBrain {
       this.decide();
     }
     if (this.state !== 'harvest') this.harvestAim = null;
+    if (this.celebrateAt && g.time > this.celebrateAt) {
+      this.celebrateAt = null;
+      if (!this.target && a.mode === 'ground' && !a.emote) {
+        I.emote = true;
+        this.emoteUntil = g.time + 2.5 + this.rng() * 2;
+        return;
+      }
+    }
+    if (this.emoteUntil && a.emote) {
+      if (g.time < this.emoteUntil && !this.target) return;
+      this.emoteUntil = null;
+      I.emote = true;
+      return;
+    }
     switch (this.state) {
       case 'fight': this.doFight(dt); break;
       case 'heal': this.doHeal(dt); break;
@@ -632,11 +687,30 @@ export class BotBrain {
     if (!type) return;
     const def = WEAPONS[type];
     if (held.ammo <= 0) {
+      // reloading in the open: back off and keep moving
       I.reload = true;
+      I.mz = dist < want + 10 ? -1 : 0;
+      I.mx = this.strafe;
       return;
+    }
+    // somebody up high and close: ramp up toward them
+    if (a.mode === 'ground' && t.pos.y - a.pos.y > 2.6 && dist < 26 && this.buildCd <= 0 && this.rng() < 0.25 + this.skill * 0.5) {
+      if (a.mats.wood + a.mats.stone + a.mats.metal >= BUILD.cost && a.autoMaterial()) {
+        this.buildCd = 0.9 + this.rng() * 0.6;
+        const piece = a.buildPiece, pitch = a.pitch;
+        a.buildPiece = 'ramp';
+        a.pitch = 0;
+        this.game.build.tryPlace(a);
+        a.buildPiece = piece;
+        a.pitch = pitch;
+        I.mz = 1;
+        I.sprint = true;
+      }
     }
     this.reactT -= dt;
     I.aim = dist > 15 && type !== 'shotgun';
+    // long shots from a crouch
+    I.crouch = I.aim && dist > 45 && (type === 'ar' || type === 'sniper' || type === 'lmg') && this.skill > 0.3;
     if (type === 'sniper') I.mx *= 0.2;
     if (this.reactT > 0 || yawErr > 0.25 || dist > def.range * 0.9) return;
     // Ease off the strafe while shooting so spread stays reasonable.
@@ -672,7 +746,9 @@ export class BotBrain {
         // plus a floor, so point-blank shots are not perfect either
         const base = lerp(0.04, 0.008, this.skill) * dist + lerp(0.38, 0.14, this.skill);
         const moving = Math.hypot(t.vel.x, t.vel.z) * lerp(0.15, 0.04, this.skill);
-        const s = base + moving + (t.mode === 'ground' ? 0 : 0.6);
+        // the first second of a fight is shaky, then they settle onto the target
+        const settle = 1 + 1.4 * Math.max(0, 1 - (g.time - (this.engagedAt ?? -99)) / 1.1);
+        const s = (base + moving + (t.mode === 'ground' ? 0 : 0.6)) * settle;
         this.aimErr.set((this.rng() - 0.5) * 2 * s, (this.rng() - 0.5) * 1.6 * s, (this.rng() - 0.5) * 2 * s);
       }
       const visible = g.time - this.targetSeenAt < 0.6;

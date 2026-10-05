@@ -389,6 +389,7 @@ class Game {
     let text;
     if (killer && killer !== victim) {
       killer.kills++;
+      if (killer.brain) killer.brain.onKill(victim);
       text = `<b>${killer.name}</b> eliminated <b>${victim.name}</b> <small>${cause}</small>`;
     } else if (cause === 'storm') text = `<b>${victim.name}</b> was lost in the storm`;
     else if (cause === 'fell') text = `<b>${victim.name}</b> fell to their elimination`;
