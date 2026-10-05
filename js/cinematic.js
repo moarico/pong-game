@@ -33,12 +33,15 @@ export class TitleCinematic {
     this.active = true;
     this.t = 0;
     this.game.scene.add(this.group);
+    // no storm before the match
+    if (this.game.storm) this.game.storm.mesh.visible = false;
   }
 
   stop() {
     if (!this.active) return;
     this.active = false;
     this.game.scene.remove(this.group);
+    if (this.game.storm) this.game.storm.mesh.visible = true;
   }
 
   update(dt) {

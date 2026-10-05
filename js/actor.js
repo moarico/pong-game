@@ -486,8 +486,14 @@ export class Actor {
     const impactVy = this.vel.y;
     const res = W.moveBody(this.body, this.vel.x * dt, this.vel.y * dt, this.vel.z * dt, this.onGround && !jumped && this.vel.y <= 0);
     if (res.onGround) {
-      if (!this.onGround && impactVy < -PLAYER.fallDamageSpeed) {
-        const dmg = Math.round((-impactVy - PLAYER.fallDamageSpeed) * 7);
+      // Landing on a hillside only hurts as hard as you hit it: running down a steep face is not a fall.
+      let impact = -impactVy;
+      if (!this.onGround && impact > PLAYER.fallDamageSpeed && Math.abs(W.terrain.heightAt(this.pos.x, this.pos.z) - this.pos.y) < 0.1) {
+        const n = W.terrain.normalAt(this.pos.x, this.pos.z, this._n || (this._n = new THREE.Vector3()));
+        impact = -(this.vel.x * n.x + impactVy * n.y + this.vel.z * n.z);
+      }
+      if (!this.onGround && impact > PLAYER.fallDamageSpeed) {
+        const dmg = Math.round((impact - PLAYER.fallDamageSpeed) * 7);
         this.takeDamage(dmg, null, { ignoreShield: true, cause: 'fell' });
       }
       if (!this.onGround && impactVy < -8) {

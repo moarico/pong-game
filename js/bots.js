@@ -202,6 +202,10 @@ export class BotBrain {
       if (cur.door.mid) push(cur.door.mid);
       push(cur.door.out);
     }
+    if (cur !== building || !building) {
+      const goal = building ? building.door.out : [x, y, z];
+      this.throughGates(route, goal[0], goal[2]);
+    }
     if (building && cur !== building) {
       this.addCorners(route, building, route.length ? route[route.length - 1] : this.a.pos);
       push(building.door.out);
@@ -223,6 +227,27 @@ export class BotBrain {
     }
     route.push(new THREE.Vector3(x, y, z));
     return route;
+  }
+
+  // Crossing a castle wall? Go through the gate that makes the shortest trip.
+  throughGates(route, x, z) {
+    const from = route.length ? route[route.length - 1] : this.a.pos;
+    for (const e of this.game.structures.enclosures || []) {
+      const inside = (px, pz) => px > e.x0 && px < e.x1 && pz > e.z0 && pz < e.z1;
+      const a = inside(from.x, from.z), b = inside(x, z);
+      if (a === b || !e.gates.length) continue;
+      let best = null, bd = Infinity;
+      for (const gt of e.gates) {
+        const d = Math.hypot(gt.in[0] - from.x, gt.in[1] - from.z) + Math.hypot(gt.out[0] - x, gt.out[1] - z);
+        if (d < bd) {
+          bd = d;
+          best = gt;
+        }
+      }
+      const y = this.game.terrain.heightAt(best.in[0], best.in[1]);
+      const p1 = a ? best.in : best.out, p2 = a ? best.out : best.in;
+      route.push(new THREE.Vector3(p1[0], y, p1[1]), new THREE.Vector3(p2[0], y, p2[1]));
+    }
   }
 
   // Walk around a building instead of into its wall on the way to the door.
@@ -275,6 +300,18 @@ export class BotBrain {
       else break;
     }
     if (!this.route.length) return true;
+    // Give up on a waypoint that is taking far too long, or that sits right above or below us out of reach.
+    if (this.route[0] !== this.wpRef) {
+      this.wpRef = this.route[0];
+      this.wpT = 0;
+      this.wpMax = 4 + Math.hypot(this.wpRef.x - a.pos.x, this.wpRef.z - a.pos.z) / 2.5;
+    }
+    this.wpT += dt;
+    if (this.wpT > this.wpMax || (this.wpT > 2.5 && Math.hypot(this.wpRef.x - a.pos.x, this.wpRef.z - a.pos.z) < 1.3)) {
+      this.route.shift();
+      this.wpRef = null;
+      if (!this.route.length) return true;
+    }
     const wp = this.route[0];
     let yaw = angleTo(a.pos.x, a.pos.z, wp.x, wp.z);
     if (this.detourT > 0) {
@@ -425,9 +462,21 @@ export class BotBrain {
       return;
     }
     if (visibleTarget && !hasWeapon) {
-      // Run away from danger toward safety.
+      // Unarmed with someone in sight: grab a gun if one is close, otherwise run (toward the safe zone when it is closing).
+      if (!urgent) {
+        const lt = this.state === 'loot' && this.lootTarget ? this.lootTarget : this.findLoot();
+        if (lt && Math.hypot(lt.pos.x - a.pos.x, lt.pos.z - a.pos.z) < 30) {
+          if (this.lootTarget !== lt) {
+            this.lootTarget = lt;
+            const floor = lt.building ? this.floorOf(lt.building, lt.pos.y) : 0;
+            this.setRoute(this.routeTo(lt.pos.x, lt.pos.y, lt.pos.z, lt.building, floor), 'loot');
+          }
+          this.state = 'loot';
+          return;
+        }
+      }
       this.state = 'storm';
-      this.planSafeRoute(true);
+      this.planSafeRoute(!urgent);
       return;
     }
     if (healSlot >= 0 && total < 160 && this.healCd <= 0 && a.mode === 'ground' && !(outside && a.health < 40 && storm.dps > 2) && g.time - (this.underFire || -99) > 3) {
@@ -782,7 +831,8 @@ export class BotBrain {
       return;
     }
     if (this.followRoute(dt, d > 15)) {
-      if (d > 2.5) this.ignore.add(t.ref);
+      // route done but not in reach (too far, or right above/below it with no way there): try something else
+      if (d > 2.5 || Math.abs(t.pos.y - a.pos.y) >= 1.6) this.ignore.add(t.ref);
       this.lootTarget = null;
     }
   }

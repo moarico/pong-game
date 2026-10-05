@@ -58,6 +58,8 @@ export class Structures {
     this.lootSpots = [];
     this.chestSpots = [];
     this.footprints = [];
+    // walled areas (the castle) and their gates, so bots can find their way in and out
+    this.enclosures = [];
     this.animated = [];
     this.metalSpots = [];
     this.vehicleSpots = [];
@@ -528,6 +530,8 @@ export class Structures {
       { axis: 'z', fixed: -half, from: -half + tw, to: half - tw },
       { axis: 'z', fixed: half, from: -half + tw, to: half - tw },
     ];
+    const encl = { x0: cx - half, z0: cz - half, x1: cx + half, z1: cz + half, gates: [] };
+    this.enclosures.push(encl);
     for (const s of sides) {
       // gates where roads cross
       const ops = [];
@@ -538,6 +542,13 @@ export class Structures {
         }
       }
       if (s.axis === 'x' && s.fixed === -half && ops.length === 0) ops.push({ c: 0, w: 8, y0: 0, y1: 5 });
+      // the south wall always gets a gate too, so the courtyard has two ways out
+      if (s.axis === 'x' && s.fixed === half && ops.length === 0) ops.push({ c: 0, w: 8, y0: 0, y1: 5 });
+      const inward = -Math.sign(s.fixed);
+      for (const o of ops) {
+        const at = (k) => (s.axis === 'x' ? F.tw(o.c, s.fixed + inward * k) : F.tw(s.fixed + inward * k, o.c));
+        encl.gates.push({ in: at(5), out: at(-5) });
+      }
       if (s.axis === 'x') this.wallX(F, s.from, s.to, s.fixed, gy, H, th, ops, STONE);
       else this.wallZ(F, s.from, s.to, s.fixed, gy, H, th, ops, STONE);
       // crenellations
@@ -846,9 +857,11 @@ export class Structures {
   gen_harbor(poi) {
     const rng = this.rng;
     // Lighthouse on the seaward side
+    const sea = poi.sea ?? Math.PI;
+    const sx0 = Math.cos(sea), sz0 = Math.sin(sea);
     let lh = null;
     for (let tries = 0; tries < 30 && !lh; tries++) {
-      const a = Math.PI + (rng() - 0.5) * 1.2;
+      const a = sea + (rng() - 0.5) * 1.2;
       const x = poi.x + Math.cos(a) * rng.range(20, 36), z = poi.z + Math.sin(a) * rng.range(20, 36);
       if (this.T.heightAt(x, z) > 1.5 && this.rectClear(x - 4, z - 4, x + 4, z + 4, 2, {})) lh = { x, z };
     }
@@ -869,15 +882,18 @@ export class Structures {
       const site = this.findSite(poi, 8, 7, 10, poi.r, { gap: 4, faceCenter: true });
       if (site) this.house(poi, { ...site, w: 8, d: 7, floors: rng.chance(0.5) ? 2 : 1, roof: 'gable', lootPerFloor: 1 });
     }
-    // Docks out to sea (westward)
+    // Docks out to sea
     for (let i = 0; i < 3; i++) {
-      const zOff = (i - 1) * 16;
-      let sx = poi.x - 10, sz = poi.z + zOff;
-      // walk west until the water starts
-      for (let k = 0; k < 80 && this.T.heightAt(sx, sz) > 0.3; k++) sx -= 1;
+      const off = (i - 1) * 16;
+      let sx = poi.x + sx0 * 10 - sz0 * off, sz = poi.z + sz0 * 10 + sx0 * off;
+      // walk seaward until the water starts
+      for (let k = 0; k < 80 && this.T.heightAt(sx, sz) > 0.3; k++) {
+        sx += sx0;
+        sz += sz0;
+      }
       if (this.T.heightAt(sx, sz) > 0.3) continue;
-      this.dock(sx + 4, sz, sx - 22, sz, 3);
-      this.outdoorLoot(poi, sx - 18, sz, 1);
+      this.dock(sx - sx0 * 4, sz - sz0 * 4, sx + sx0 * 22, sz + sz0 * 22, 3);
+      this.outdoorLoot(poi, sx + sx0 * 18, sz + sz0 * 18, 1);
     }
     for (let i = 0; i < 4; i++) {
       const site = this.findSite(poi, 7, 7, 8, poi.r, { gap: 2 });

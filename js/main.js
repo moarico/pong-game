@@ -25,8 +25,9 @@ import { AudioSystem } from './zh/sound.js';
 import { ViewModel } from './zh/viewmodel.js';
 import { fabricMat } from './zh/soldier.js';
 import { PostChain, hdrSupported } from './zh/post.js';
-import { DAY } from './zh/atmos.js';
+import { DAY, ATM } from './zh/atmos.js';
 import { GrassField } from './world/grass.js';
+import { foliageMaterials } from './world/foliage.js';
 import { TitleCinematic } from './cinematic.js';
 
 const SETTINGS_KEY = 'stormdrop-settings-v1';
@@ -149,13 +150,12 @@ class Game {
     await step(0.48, 'Planting trees...');
     this.props = new Props(this.terrain, this.collision, this.structures);
     this.props.generate();
-    await step(0.6, 'Painting the map...');
+    await step(0.6, 'Placing the landmarks...');
     this.scene.add(this.terrain.buildMesh());
     this.scene.add(this.terrain.buildRoadMesh());
     this.scene.add(this.structures.group);
     this.scene.add(this.props.group);
     buildAnimatedProps(this.structures, this.scene);
-    this.mapCanvas = this.terrain.buildMapCanvas(1024, this.structures.footprints);
     await step(0.7, 'Fueling the Sky Coach...');
     this.env = new Environment(this.scene, this.settings.quality, this.renderer);
     // the sky lights and reflects off everything: ground, buildings, guns, gear and fabric
@@ -166,6 +166,13 @@ class Game {
     if (this.post) {
       this.post.setAtmos(DAY);
       this.post.setQuality(this.settings.quality);
+    }
+    await step(0.8, 'Drawing the map...');
+    try {
+      this.mapCanvas = this.renderMapImage(this.settings.quality === 'low' ? 1024 : 2048);
+    } catch (e) {
+      console.warn('top-down map render failed, painting it instead', e);
+      this.mapCanvas = this.terrain.buildMapCanvas(1024, this.structures.footprints);
     }
     this.viewmodel = new ViewModel(this);
     this.viewmodel.setEnvironment(this.envTex);
@@ -189,6 +196,49 @@ class Game {
     // Compile shaders once so the first frames of the match don't hitch.
     this.renderer.compile(this.scene, this.camera);
     this.worldReady = true;
+  }
+
+  // The map is a straight-down photo of the island itself (towns, trees, roads, mountains), taken once at
+  // load with an orthographic camera, with the sea, rivers and lakes painted over it.
+  renderMapImage(px) {
+    const T = this.terrain, r = this.renderer;
+    const cam = new THREE.OrthographicCamera(-T.half, T.half, T.half, -T.half, 10, 1000);
+    cam.position.set(0, 700, 0);
+    cam.up.set(0, 0, -1);
+    cam.lookAt(0, 0, 0);
+    cam.updateMatrixWorld();
+    const size = r.getSize(new THREE.Vector2()), ratio = r.getPixelRatio();
+    const camSave = { ...ATM.cam };
+    Object.assign(ATM.cam, { x: 0, y: 700, z: 0 });
+    for (const c of this.props.treeChunks || []) {
+      if (!c.leaves) continue;
+      c.leaves.visible = true;
+      c.leavesFar.visible = false;
+    }
+    this.env.water.visible = false;
+    // from that high up the leaf textures are deep in their mip chain: let more of each card through
+    const leaves = ['broad', 'needle', 'frond', 'willow'].map((k) => foliageMaterials()[k]);
+    for (const m of leaves) m.alphaTest = 0.1;
+    const cv = document.createElement('canvas');
+    cv.width = cv.height = px;
+    const ctx = cv.getContext('2d', { willReadFrequently: true });
+    try {
+      r.setPixelRatio(1);
+      r.setSize(px, px, false);
+      r.setRenderTarget(null);
+      r.toneMappingExposure = 0.6;
+      r.render(this.scene, cam);
+      ctx.drawImage(r.domElement, 0, 0, px, px);
+    } finally {
+      for (const m of leaves) m.alphaTest = 0.45;
+      r.toneMappingExposure = 1;
+      r.setPixelRatio(ratio);
+      r.setSize(size.x, size.y, false);
+      this.env.water.visible = true;
+      Object.assign(ATM.cam, camSave);
+    }
+    T.paintMapWater(ctx, px);
+    return cv;
   }
 
   // ---------- match flow ----------

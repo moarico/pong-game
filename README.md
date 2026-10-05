@@ -78,14 +78,17 @@ Open the page, click **Press to start**, then **Play**. Click the game once if t
 **HUD.**
 - Health and shield bars bottom left; hotbar, ammo and materials bottom right.
 - Minimap with the storm top right; players left, eliminations and storm timer at the top, under a compass strip.
-- Damage numbers, hit markers, damage direction, kill feed, and a full map with area names.
+- Damage numbers, hit markers, damage direction, kill feed, and a full map with area names and a grid.
+- The map is a top-down render of the island itself (towns, trees, roads, mountains), taken once while loading, with the sea, rivers and lakes painted in by depth.
 
 **Island.**
-- 15 named areas with different biomes and loot levels.
-  - **High loot:** Neon Heights (city), Crown Citadel (castle), Rustbelt Works (factory) and Skyline Observatory (mountain top).
+- A ragged coastline with a lagoon on the west side and three small islands offshore.
+- Snowy peaks in the east, desert with red rock buttes in the south and south-east, autumn woods in the west, dark forest and farmland in the north, and the city in the middle.
+- 17 named areas with different biomes and loot levels.
+  - **High loot:** Neon Heights (city), Crown Citadel (castle on a hill), Rustbelt Works (factory) and Skyline Observatory (mountain top).
   - **Medium:** Frostpeak Lodge, Mirage Mesa, Murkwater Bayou, Golden Acres, Glimmer Lake and Voltage Yard.
-  - **Low:** Harbor Point, Timberline Camp, Amberwood Hollow, Sunscorch Outpost and Coral Cove.
-- Two rivers, a lake, and roads with bridges between the areas.
+  - **Low:** Harbor Point, Timberline Camp, Amberwood Hollow, Sunscorch Outpost, Coral Cove, Redrock Gulch and Gull Rock (on the north island).
+- Four rivers that rise from ponds, a lake, and roads with bridges between the areas.
 - Drivable trucks are parked on the roads.
 - Landmarks visible from far away: the city spire, the observatory on the snowy peak, the lighthouse and the windmill.
 
@@ -102,8 +105,8 @@ Open the page, click **Press to start**, then **Play**. Click the game once if t
 | File | What it does |
 | --- | --- |
 | `js/config.js` | Every tuning number (speeds, storm phases, weapons, heals, loot odds) |
-| `js/world/island.js` | Named areas, biomes, rivers, roads |
-| `js/world/terrain.js` | Heightmap, biomes, river/lake carving, road flattening, minimap painting |
+| `js/world/island.js` | The layout: coastline, islands, bays, mountains, buttes, named areas, biomes, rivers and roads |
+| `js/world/terrain.js` | Heightmap, biomes, river/lake carving, road flattening, map water painting |
 | `js/world/structures.js` | Buildings per area (doors, stairs, loot spots, chests), landmarks |
 | `js/world/props.js` | Instanced trees, rocks, wrecks (harvestable), bushes, crops |
 | `js/physics.js` | Spatial hash, capsule movement with steps and ramps, raycasts |

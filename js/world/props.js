@@ -99,8 +99,8 @@ export class Props {
     for (const t of TREE_TYPES) trees[t] = [];
     // Trees on a jittered grid
     const step = 9;
-    for (let gx = -480; gx <= 480; gx += step) {
-      for (let gz = -480; gz <= 480; gz += step) {
+    for (let gx = -510; gx <= 510; gx += step) {
+      for (let gz = -510; gz <= 510; gz += step) {
         const x = gx + (rng() - 0.5) * step * 0.9, z = gz + (rng() - 0.5) * step * 0.9;
         const h = this.T.heightAt(x, z);
         if (h < 0.4) continue;
@@ -200,8 +200,8 @@ export class Props {
   generateRocks() {
     const rng = this.rng;
     const list = [];
-    for (let gx = -470; gx <= 470; gx += 20) {
-      for (let gz = -470; gz <= 470; gz += 20) {
+    for (let gx = -500; gx <= 500; gx += 20) {
+      for (let gz = -500; gz <= 500; gz += 20) {
         const x = gx + (rng() - 0.5) * 18, z = gz + (rng() - 0.5) * 18;
         const h = this.T.heightAt(x, z);
         if (h < 0.8) continue;

@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { MAP } from '../config.js';
-import { POIS, LAKE, MOUNTAIN, BIOMES, RIVERS, ROADS, ROAD_HALF_WIDTH, BIOME_COLORS } from './island.js';
+import { POIS, LAKE, MOUNTAINS, MESAS, COAST, ISLETS, BAYS, PONDS, BIOMES, RIVERS, ROADS, ROAD_HALF_WIDTH, BIOME_COLORS } from './island.js';
 import { makeNoise2D, fbm, smoothstep, lerp, clamp, resamplePolyline, distToSegment } from '../util.js';
 import { GeoBuilder } from './geobuilder.js';
 import { terrainMaterial } from './terrainmat.js';
@@ -71,6 +71,8 @@ const C = {
   dirt: hexToRgb('#8d6f4a'),
   courtyard: hexToRgb('#b6a27c'),
   mud: hexToRgb('#6b5a3c'),
+  redRock: hexToRgb('#a9553a'),
+  redSand: hexToRgb('#cf7444'),
 };
 const mix3 = (a, b, t) => [lerp(a[0], b[0], t), lerp(a[1], b[1], t), lerp(a[2], b[2], t)];
 // Splat channels for the detail textures (see groundtex.js).
@@ -134,23 +136,64 @@ export class Terrain {
     return w;
   }
 
+  // Coast radius at angle a: a smooth loop through the hand-set radii in island.js.
+  coastRadius(a) {
+    const n = COAST.length;
+    const f = ((((a / (Math.PI * 2)) * n) % n) + n) % n;
+    const i = Math.floor(f), t = f - i;
+    const p0 = COAST[(i - 1 + n) % n], p1 = COAST[i], p2 = COAST[(i + 1) % n], p3 = COAST[(i + 2) % n];
+    const t2 = t * t, t3 = t2 * t;
+    return 0.5 * (2 * p1 + (p2 - p0) * t + (2 * p0 - 5 * p1 + 4 * p2 - p3) * t2 + (3 * p1 - p0 - 3 * p2 + p3) * t3);
+  }
+
+  // Normalized distance to the shore: below 0.82 is full land, 1 is the waterline, above is sea.
   coastDistance(x, z) {
     const r = Math.hypot(x, z);
     const a = Math.atan2(z, x);
-    const coast = 440 + 30 * this.n1(Math.cos(a) * 1.2 + 3, Math.sin(a) * 1.2 + 3) + 14 * this.n2(Math.cos(a) * 3 + 9, Math.sin(a) * 3 + 9);
-    return r / coast;
+    const ca = Math.cos(a), sa = Math.sin(a);
+    let coast = this.coastRadius(a) + 16 * this.n1(ca * 1.6 + 3, sa * 1.6 + 3) + 13 * this.n2(ca * 5 + 9, sa * 5 + 9);
+    // small coves and points along the shore
+    coast += 15 * this.n3(x / 44 + 5, z / 44 + 5) + 6 * this.n1(x / 16 + 21, z / 16 + 21);
+    let d = r / coast;
+    for (const b of BAYS) d = Math.max(d, 1.15 - (0.33 * Math.hypot(x - b.x, z - b.z)) / b.r);
+    for (const s of ISLETS) {
+      const ds = Math.hypot(x - s.x, z - s.z);
+      if (ds > s.r * 2.2) continue;
+      const rr = s.r * (1 + 0.2 * this.n1(x / 18 + s.x * 0.01, z / 18));
+      d = Math.min(d, 0.5 + (0.5 * ds) / rr);
+    }
+    return d;
   }
 
   baseHeight(x, z, w) {
     const d = this.coastDistance(x, z);
     let h = 5.5 + 6 * fbm(this.n2, x / 170, z / 170, 4) + 2.2 * fbm(this.n3, x / 45, z / 45, 2);
     h = Math.max(h, 2.2);
-    const md = Math.hypot(x - MOUNTAIN.x, z - MOUNTAIN.z);
     const ridge = 1 - Math.abs(this.n2(x / 70, z / 70));
-    h += MOUNTAIN.height * Math.exp(-(md * md) / (2 * MOUNTAIN.sigma * MOUNTAIN.sigma)) * (0.86 + 0.16 * ridge);
+    for (const m of MOUNTAINS) {
+      const md2 = (x - m.x) * (x - m.x) + (z - m.z) * (z - m.z);
+      if (md2 > 16 * m.sigma * m.sigma) continue;
+      h += m.height * Math.exp(-md2 / (2 * m.sigma * m.sigma)) * (1 - m.ridge + m.ridge * 1.15 * ridge);
+    }
     h = lerp(h, 0.5 + 1.7 * this.n3(x / 26, z / 26), w.swamp);
     h += w.desert * (1.5 * Math.sin(x * 0.09 + z * 0.03 + 2.5 * this.n1(x / 60, z / 60)) + 1.4);
     h = lerp(h, 4.5 + 1.2 * this.n2(x / 90, z / 90), w.farm * 0.75);
+    // red rock buttes: flat tops, steep sides and a rubble skirt
+    for (const m of MESAS) {
+      const dm = Math.hypot(x - m.x, z - m.z);
+      if (dm > m.r * 1.6) continue;
+      const rr = m.r * (1 + 0.16 * this.n1(x / 9 + m.x * 0.01, z / 9));
+      const top = 1 - smoothstep(rr * 0.7, rr * 1.05, dm);
+      const skirt = 0.22 * (1 - smoothstep(rr, rr * 1.55, dm));
+      h += m.h * Math.max(top, skirt) + top * 0.5 * this.n3(x / 6, z / 6);
+    }
+    // islands: a low plateau each
+    for (const s of ISLETS) {
+      const ds = Math.hypot(x - s.x, z - s.z);
+      if (ds > s.r * 1.4) continue;
+      const hi = 2.6 + s.h * (1 - smoothstep(s.r * 0.35, s.r * 0.8, ds)) + 0.8 * this.n3(x / 12, z / 12);
+      h = lerp(h, hi, 1 - smoothstep(s.r * 0.9, s.r * 1.3, ds));
+    }
     if (d > 1) return lerp(-2.5, MAP.seaFloor, smoothstep(1.0, 1.2, d));
     return lerp(h, -2.5, smoothstep(0.82, 1.0, d));
   }
@@ -185,11 +228,19 @@ export class Terrain {
 
   buildRiverIndex() {
     const idx = new SegmentIndex(32, 70);
-    for (const river of RIVERS) {
-      const pts = resamplePolyline(river.points, 10);
+    RIVERS.forEach((river, ri) => {
+      const base = resamplePolyline(river.points, 10);
+      // gentle meanders between the hand-placed points
+      const pts = base.map((p, i) => {
+        if (i === 0 || i === base.length - 1) return p.slice();
+        const [ax, az] = base[i - 1], [bx, bz] = base[i + 1];
+        const len = Math.hypot(bx - ax, bz - az) || 1;
+        const off = 9 * this.n1(i * 0.11 + ri * 5.3, 7.7) * Math.min(1, i / 4, (base.length - 1 - i) / 4);
+        return [p[0] - ((bz - az) / len) * off, p[1] + ((bx - ax) / len) * off];
+      });
       river.samples = pts;
       for (let i = 0; i < pts.length - 1; i++) idx.add(pts[i][0], pts[i][1], pts[i + 1][0], pts[i + 1][1], { river });
-    }
+    });
     this.riverIndex = idx;
   }
 
@@ -219,6 +270,10 @@ export class Terrain {
         }
         const ld = Math.hypot(x - LAKE.x, z - LAKE.z);
         if (ld < LAKE.r * 1.2) h = Math.min(h, lerp(h, LAKE.depth, 1 - smoothstep(LAKE.r * 0.55, LAKE.r * 1.08, ld)));
+        for (const pd of PONDS) {
+          const dd = Math.hypot(x - pd.x, z - pd.z) / (1 + 0.15 * this.n2(x / 14, z / 14));
+          if (dd < pd.r * 2.4) h = Math.min(h, lerp(h, -2.4, 1 - smoothstep(pd.r * 0.6, pd.r * 1.1, dd)), lerp(h, 1.2, 1 - smoothstep(pd.r, pd.r * 2.4, dd)));
+        }
         const riv = this.riverIndex.nearest(x, z);
         if (riv) {
           const rv = riv.seg.data.river;
@@ -338,6 +393,17 @@ export class Terrain {
       if (t > 0) for (let i = 0; i < 8; i++) sp[i] /= t;
       else sp[G.grass] = 1;
     }
+    // The southern desert runs to red sand and red rock toward the coast.
+    const red = w.desert * smoothstep(250, 380, z + 40 * this.n2(x / 80, z / 80));
+    if (red > 0) col = mix3(col, C.redSand, red * 0.75);
+    // the buttes are red rock all over, tops included
+    for (const m of MESAS) {
+      const dm = Math.hypot(x - m.x, z - m.z);
+      if (dm > m.r * 1.3) continue;
+      const t = (1 - smoothstep(m.r * 0.95, m.r * 1.3, dm)) * 0.7;
+      col = mix3(col, C.redRock, t);
+      splatTo(sp, G.rock, t * 0.6);
+    }
     // Slope and altitude
     const s = this.slopeAtRaw(x, z);
     if (h > 46) {
@@ -345,19 +411,24 @@ export class Terrain {
       splatTo(sp, G.snow, smoothstep(46, 58, h));
     }
     if (s > 0.75) {
-      col = mix3(col, h > 50 ? C.darkRock : C.rock, smoothstep(0.75, 1.2, s) * 0.85);
+      const rock = w.desert > 0.4 ? C.redRock : h > 50 ? C.darkRock : C.rock;
+      col = mix3(col, rock, smoothstep(0.75, 1.2, s) * 0.85);
       splatTo(sp, G.rock, smoothstep(0.65, 1.1, s));
     }
     // POI ground
     for (const p of POIS) {
       const d = Math.hypot(x - p.x, z - p.z);
       if (d > p.r) continue;
-      const inner = 1 - smoothstep(p.r * 0.75, p.r, d);
+      let inner = 1 - smoothstep(p.r * 0.75, p.r, d);
       let g = null;
       if (p.type === 'city') {
         const gx = Math.abs(((x - p.x + 1000) % 26) - 13), gz = Math.abs(((z - p.z + 1000) % 26) - 13);
         g = gx > 10.5 || gz > 10.5 ? C.street : C.pavement;
-      } else if (p.type === 'factory' || p.type === 'power') g = C.concrete;
+      } else if (p.type === 'factory' || p.type === 'power') {
+        g = C.concrete;
+        const edge = p.r * (0.6 + 0.12 * this.n2(x / 18, z / 18));
+        inner = 1 - smoothstep(edge - 4, edge + 2, d);
+      }
       else if (p.type === 'castle') g = d < p.r * 0.62 ? C.courtyard : null;
       else if (p.type === 'camp' || p.type === 'cabins') g = d < p.r * 0.4 ? C.dirt : null;
       if (g) {
@@ -368,7 +439,7 @@ export class Terrain {
     }
     // Shores, river banks and underwater
     const coast = this.coastDistance(x, z);
-    if (h < 2.4 && (coast > 0.8 || w.desert > 0.5)) {
+    if (h < 2.4 && (coast > 0.8 || w.desert > 0.5) && w.swamp < 0.5) {
       col = mix3(col, C.sand, smoothstep(2.4, 1.0, h));
       splatTo(sp, G.sand, smoothstep(2.4, 1.0, h));
     }
@@ -547,7 +618,50 @@ export class Terrain {
     return mesh;
   }
 
-  // Top-down painted map used by the minimap and the full map.
+  // Finish the top-down render for the map: water by depth (turquoise shallows to deep blue), surf along the
+  // shore, and a little extra color and contrast on land so it reads like a printed map.
+  paintMapWater(ctx, px) {
+    const img = ctx.getImageData(0, 0, px, px), D = img.data;
+    const scale = this.size / px;
+    const shallow = [96, 200, 236], deep = [24, 70, 150], river = [70, 170, 228], foam = [236, 246, 250];
+    for (let y = 0; y < px; y++) {
+      const wz = -this.half + (y + 0.5) * scale;
+      for (let x = 0; x < px; x++) {
+        const wx = -this.half + (x + 0.5) * scale;
+        const h = this.heightAt(wx, wz);
+        const o = (y * px + x) * 4;
+        let r = D[o], g = D[o + 1], b = D[o + 2];
+        // land: relief shading lit from the north-west, more saturation and contrast
+        const shade = clamp(1 + (this.heightAt(wx - 3, wz - 3) - this.heightAt(wx + 3, wz + 3)) * 0.045, 0.72, 1.22);
+        const L = 0.3 * r + 0.59 * g + 0.11 * b;
+        r = ((L + (r - L) * 1.12 - 128) * 1.1 + 122) * shade;
+        g = ((L + (g - L) * 1.12 - 128) * 1.1 + 122) * shade;
+        b = ((L + (b - L) * 1.12 - 128) * 1.1 + 122) * shade;
+        if (h < 0.35) {
+          const inland = this.coastDistance(wx, wz) < 0.86;
+          const t = smoothstep(-1, -7, h);
+          const n = 1 + 0.05 * this.n1(wx / 50, wz / 50);
+          const wc = inland ? river : deep;
+          let wr = lerp(shallow[0], wc[0], inland ? 0.4 : t) * n, wg = lerp(shallow[1], wc[1], inland ? 0.4 : t) * n, wb = lerp(shallow[2], wc[2], inland ? 0.4 : t) * n;
+          const f = smoothstep(-0.9, -0.1, h) * (inland ? 0.3 : 0.75);
+          wr = lerp(wr, foam[0], f);
+          wg = lerp(wg, foam[1], f);
+          wb = lerp(wb, foam[2], f);
+          const k = h < 0 ? 1 : smoothstep(0.35, 0, h);
+          r = lerp(r, wr, k);
+          g = lerp(g, wg, k);
+          b = lerp(b, wb, k);
+        }
+        D[o] = clamp(r, 0, 255);
+        D[o + 1] = clamp(g, 0, 255);
+        D[o + 2] = clamp(b, 0, 255);
+        D[o + 3] = 255;
+      }
+    }
+    ctx.putImageData(img, 0, 0);
+  }
+
+  // Top-down painted map (used when the top-down render is not available).
   buildMapCanvas(px = 512, footprints = []) {
     const cv = document.createElement('canvas');
     cv.width = cv.height = px;
