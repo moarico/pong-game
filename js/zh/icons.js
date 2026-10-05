@@ -48,7 +48,10 @@ export function itemIcons() {
     ICONS[name] = renderer.domElement.toDataURL('image/png');
     scene.remove(m);
   };
-  for (const t of ['ar', 'smg', 'shotgun', 'pistol', 'sniper', 'rocket', 'lmg']) shoot(weaponGeo(t), t);
+  for (const t of ['ar', 'smg', 'shotgun', 'pistol', 'sniper', 'rocket', 'lmg']) {
+    shoot(weaponGeo(t), t);
+    for (let r = 1; r <= 4; r++) shoot(weaponGeo(t, r), t + ':' + r);
+  }
   for (const h of ['bandage', 'medkit', 'mini', 'big']) shoot(healGeo(h), h, [0, -0.5, 0], 1.6);
   shoot(pickaxeGeo(0xffcc33), 'pickaxe', [-0.9, 0, 0], 1.15);
   renderer.dispose();

@@ -36,10 +36,76 @@ export function mrMaterial(opts = {}) {
   return m;
 }
 
+// A box with its edges and corners cut at 45 degrees. The thin chamfers catch the light, so hard parts read
+// as machined and molded pieces instead of raw blocks.
+const CHAMFER = new Map();
+function chamferBox(w, h, d) {
+  const c = Math.min(Math.min(w, h, d) * 0.2, 0.03);
+  const key = w.toFixed(4) + ',' + h.toFixed(4) + ',' + d.toFixed(4);
+  if (CHAMFER.has(key)) return CHAMFER.get(key).clone();
+  const H = [w / 2, h / 2, d / 2];
+  // corner point (signs s) on the face perpendicular to axis a
+  const Q = (s, a) => [0, 1, 2].map((k) => s[k] * (k === a ? H[k] : H[k] - c));
+  const P = [], N = [];
+  const poly = (pts) => {
+    const cx = pts.reduce((t, p) => t + p[0], 0), cy = pts.reduce((t, p) => t + p[1], 0), cz = pts.reduce((t, p) => t + p[2], 0);
+    for (let i = 1; i < pts.length - 1; i++) {
+      let A = pts[0], B = pts[i], C = pts[i + 1];
+      const ux = B[0] - A[0], uy = B[1] - A[1], uz = B[2] - A[2], vx = C[0] - A[0], vy = C[1] - A[1], vz = C[2] - A[2];
+      let nx = uy * vz - uz * vy, ny = uz * vx - ux * vz, nz = ux * vy - uy * vx;
+      if (nx * cx + ny * cy + nz * cz < 0) {
+        [B, C] = [C, B];
+        nx = -nx;
+        ny = -ny;
+        nz = -nz;
+      }
+      const l = Math.hypot(nx, ny, nz) || 1;
+      for (const p of [A, B, C]) {
+        P.push(p[0], p[1], p[2]);
+        N.push(nx / l, ny / l, nz / l);
+      }
+    }
+  };
+  const S = [-1, 1];
+  for (let a = 0; a < 3; a++) {
+    const b = (a + 1) % 3, k = (a + 2) % 3;
+    for (const sa of S) {
+      // face
+      const f = [];
+      for (const [sb, sk] of [[-1, -1], [1, -1], [1, 1], [-1, 1]]) {
+        const s = [0, 0, 0];
+        s[a] = sa;
+        s[b] = sb;
+        s[k] = sk;
+        f.push(Q(s, a));
+      }
+      poly(f);
+      // chamfer strip between this face and the next axis' faces
+      for (const sb of S) {
+        const e = [];
+        for (const sk of [-1, 1]) {
+          const s = [0, 0, 0];
+          s[a] = sa;
+          s[b] = sb;
+          s[k] = sk;
+          e.push(Q(s, a), Q(s, b));
+        }
+        poly([e[0], e[1], e[3], e[2]]);
+      }
+    }
+  }
+  for (const sx of S) for (const sy of S) for (const sz of S) poly([Q([sx, sy, sz], 0), Q([sx, sy, sz], 1), Q([sx, sy, sz], 2)]);
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(P, 3));
+  g.setAttribute('normal', new THREE.Float32BufferAttribute(N, 3));
+  CHAMFER.set(key, g);
+  return g.clone();
+}
+
 function forEachPart(items, fn) {
   const m = new THREE.Matrix4(), q = new THREE.Quaternion(), e = new THREE.Euler(), pv = new THREE.Vector3(), nm = new THREE.Matrix3();
   for (const it of items) {
-    let g = it.g ? it.g.clone() : new THREE.BoxGeometry(it.b[0], it.b[1], it.b[2]);
+    let g = it.g ? it.g.clone() : it.sharp ? new THREE.BoxGeometry(it.b[0], it.b[1], it.b[2]) : chamferBox(it.b[0], it.b[1], it.b[2]);
     if (g.index) {
       const ng = g.toNonIndexed();
       g.dispose();

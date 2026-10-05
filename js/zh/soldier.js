@@ -290,7 +290,7 @@ export class CharacterModel {
 
   // what: { kind:'weapon', type, rarity } | 'pickaxe' | { kind:'heal', type } | 'build' | null
   setHeld(what) {
-    const key = !what ? '' : typeof what === 'string' ? what : `${what.kind}-${what.type}`;
+    const key = !what ? '' : typeof what === 'string' ? what : `${what.kind}-${what.type}-${what.rarity | 0}`;
     if (key === this.heldKey) return;
     this.heldKey = key;
     const hand = this.arms[1].hand;
@@ -300,7 +300,7 @@ export class CharacterModel {
     }
     if (what && what.kind === 'weapon') {
       this.gunType = what.type;
-      this.gun.geometry = weaponGeo(what.type);
+      this.gun.geometry = weaponGeo(what.type, what.rarity);
       const d = gunDefs()[ZH_ID[what.type] || 'ar'];
       const mz = d.muzzle || [0, 0, -0.3];
       this.flash.position.set(mz[0], mz[1], mz[2] - 0.05);

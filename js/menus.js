@@ -424,8 +424,8 @@ export class Menus {
       for (const b of this.inv.querySelectorAll('.islot')) b.classList.toggle('drop-target', b !== el && b.contains(document.elementFromPoint(ev.clientX, ev.clientY)));
     };
     const up = (ev) => {
-      removeEventListener('pointermove', move);
-      removeEventListener('pointerup', up);
+      window.removeEventListener('pointermove', move);
+      window.removeEventListener('pointerup', up);
       if (!ghost) return;
       ghost.remove();
       const over = document.elementFromPoint(ev.clientX, ev.clientY);
@@ -442,8 +442,8 @@ export class Menus {
       this.renderInventory();
       setTimeout(() => (this.dragMoved = false), 0);
     };
-    addEventListener('pointermove', move);
-    addEventListener('pointerup', up);
+    window.addEventListener('pointermove', move);
+    window.addEventListener('pointerup', up);
   }
 
   // Number keys while the inventory is open move the selected slot there.

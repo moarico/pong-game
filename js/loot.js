@@ -5,9 +5,89 @@ import { chestParts, supplyParts, modelMaterial } from './zh/models.js';
 import { makeGlowTexture } from './world/structures.js';
 import { clamp } from './util.js';
 
-const beamGeo = new THREE.CylinderGeometry(0.06, 0.22, 2.6, 6, 1, true);
-beamGeo.translate(0, 1.3, 0);
-const beamMats = RARITY.map((r) => new THREE.MeshBasicMaterial({ color: r.color, transparent: true, opacity: 0.4, blending: THREE.AdditiveBlending, depthWrite: false }));
+// Floor loot effects share one texture: the left half is a soft round glow for the ground, the right half a
+// vertical fade for the light beam. Each rarity gets its own beam height and color.
+let fxTex = null;
+function lootFxTexture() {
+  if (fxTex) return fxTex;
+  const c = document.createElement('canvas');
+  c.width = 128;
+  c.height = 64;
+  const g = c.getContext('2d');
+  const r = g.createRadialGradient(32, 32, 0, 32, 32, 32);
+  r.addColorStop(0, 'rgba(255,255,255,0.95)');
+  r.addColorStop(0.35, 'rgba(255,255,255,0.45)');
+  r.addColorStop(1, 'rgba(255,255,255,0)');
+  g.fillStyle = r;
+  g.fillRect(0, 0, 64, 64);
+  const v = g.createLinearGradient(0, 64, 0, 0);
+  v.addColorStop(0, 'rgba(255,255,255,0.9)');
+  v.addColorStop(0.25, 'rgba(255,255,255,0.45)');
+  v.addColorStop(1, 'rgba(255,255,255,0)');
+  // soft sides on the beam
+  for (let x = 64; x < 128; x++) {
+    const k = Math.sin(((x - 64) / 63) * Math.PI);
+    g.globalAlpha = k * k;
+    g.fillStyle = v;
+    g.fillRect(x, 0, 1, 64);
+  }
+  fxTex = new THREE.CanvasTexture(c);
+  fxTex.colorSpace = THREE.SRGBColorSpace;
+  return fxTex;
+}
+const BEAM_H = [1.4, 2.1, 2.8, 3.8, 5.2];
+const fxGeos = [];
+function lootFxGeometry(rarity) {
+  if (fxGeos[rarity]) return fxGeos[rarity];
+  const P = [], U = [];
+  const quad = (a, b, c, d, ua, ub, uc, ud) => {
+    P.push(...a, ...b, ...c, ...a, ...c, ...d);
+    U.push(...ua, ...ub, ...uc, ...ua, ...uc, ...ud);
+  };
+  // ground glow
+  const R = 0.75 + rarity * 0.12;
+  quad([-R, 0.03, -R], [R, 0.03, -R], [R, 0.03, R], [-R, 0.03, R], [0, 0], [0.5, 0], [0.5, 1], [0, 1]);
+  // two crossed beam planes
+  const h = BEAM_H[rarity], w = 0.16 + rarity * 0.03;
+  for (const [dx, dz] of [[w, 0], [0, w]]) quad([-dx, 0, -dz], [dx, 0, dz], [dx, h, dz], [-dx, h, -dz], [0.5, 0], [1, 0], [1, 1], [0.5, 1]);
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(P, 3));
+  g.setAttribute('uv', new THREE.Float32BufferAttribute(U, 2));
+  g.computeBoundingSphere();
+  fxGeos[rarity] = g;
+  return g;
+}
+let fxMats = null;
+function lootFxMaterials() {
+  if (!fxMats) {
+    fxMats = RARITY.map((r, i) => new THREE.MeshBasicMaterial({
+      map: lootFxTexture(), color: new THREE.Color(r.color).multiplyScalar(i >= 3 ? 1.6 : 1.1), transparent: true, depthWrite: false,
+      blending: THREE.AdditiveBlending, side: THREE.DoubleSide, toneMapped: false,
+    }));
+  }
+  return fxMats;
+}
+
+// Sparkle sprite for chests and the best floor loot.
+let starTex = null;
+function sparkleTexture() {
+  if (starTex) return starTex;
+  const c = document.createElement('canvas');
+  c.width = c.height = 32;
+  const g = c.getContext('2d');
+  const r = g.createRadialGradient(16, 16, 0, 16, 16, 16);
+  r.addColorStop(0, 'rgba(255,255,255,1)');
+  r.addColorStop(0.25, 'rgba(255,255,255,0.5)');
+  r.addColorStop(1, 'rgba(255,255,255,0)');
+  g.fillStyle = r;
+  g.fillRect(0, 0, 32, 32);
+  g.fillStyle = 'rgba(255,255,255,0.9)';
+  g.fillRect(15, 2, 2, 28);
+  g.fillRect(2, 15, 28, 2);
+  starTex = new THREE.CanvasTexture(c);
+  starTex.colorSpace = THREE.SRGBColorSpace;
+  return starTex;
+}
 
 let chestGeo = null, lidGeo = null;
 function chestGeometries() {
@@ -39,6 +119,32 @@ export class LootSystem {
     game.scene.add(this.group);
     this.mat = vmat();
     this.glowTex = makeGlowTexture();
+    // Closed chests: the gold trim glows and pulses (gold picked out by its color), which the camera blooms.
+    this.chestGlow = { value: 1 };
+    this.chestMat = modelMaterial();
+    const base = this.chestMat.onBeforeCompile, glow = this.chestGlow;
+    this.chestMat.onBeforeCompile = (sh) => {
+      base(sh);
+      sh.uniforms.uGoldGlow = glow;
+      sh.fragmentShader = sh.fragmentShader
+        .replace('#include <common>', '#include <common>\nuniform float uGoldGlow;')
+        .replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\n#ifdef USE_COLOR\ntotalEmissiveRadiance += vColor.rgb * smoothstep( 0.25, 0.45, vColor.r - vColor.b ) * uGoldGlow;\n#endif');
+    };
+    this.chestMat.customProgramCacheKey = () => 'chest-gold';
+    // sparkles drifting around nearby chests and the best floor loot
+    const N = 256;
+    const sg = new THREE.BufferGeometry();
+    sg.setAttribute('position', new THREE.BufferAttribute(new Float32Array(N * 3), 3));
+    sg.setAttribute('color', new THREE.BufferAttribute(new Float32Array(N * 3), 3));
+    sg.setDrawRange(0, 0);
+    this.sparkles = new THREE.Points(sg, new THREE.PointsMaterial({
+      map: sparkleTexture(), size: 0.22, vertexColors: true, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, toneMapped: false,
+    }));
+    this.sparkles.frustumCulled = false;
+    this.sparkles.renderOrder = 4;
+    this.group.add(this.sparkles);
+    this.sparkleMax = N;
+    this.bursts = [];
     this.supplyTimer = LOOT.supplyFirst;
     this.cueTimer = 0;
     this.pickTimer = 0;
@@ -81,31 +187,36 @@ export class LootSystem {
 
   addChest(spot, rng) {
     const obj = new THREE.Group();
-    const base = new THREE.Mesh(chestGeo, this.mat);
+    const base = new THREE.Mesh(chestGeo, this.chestMat);
     base.castShadow = true;
     const lid = new THREE.Group();
     lid.position.set(0, 0.5, 0.35);
-    lid.add(new THREE.Mesh(lidGeo, this.mat));
+    const lidMesh = new THREE.Mesh(lidGeo, this.chestMat);
+    lid.add(lidMesh);
     obj.add(base, lid);
-    const glow = new THREE.Sprite(new THREE.SpriteMaterial({ map: this.glowTex, color: 0xffcc44, transparent: true, opacity: 0.6, blending: THREE.AdditiveBlending, depthWrite: false }));
-    glow.scale.set(2.2, 1.4, 1);
-    glow.position.y = 0.4;
+    const glow = new THREE.Sprite(new THREE.SpriteMaterial({ map: this.glowTex, color: 0xffc23a, transparent: true, opacity: 0.6, blending: THREE.AdditiveBlending, depthWrite: false }));
+    glow.scale.set(3.2, 2.2, 1);
+    glow.position.y = 0.45;
     obj.add(glow);
     obj.position.set(spot.x, spot.y, spot.z);
     obj.rotation.y = spot.yaw;
     this.group.add(obj);
-    this.chests.push({ pos: obj.position, obj, lid, glow, opened: false, spot, quality: spot.poi.loot === 'high' ? 'chest' : 'high', open: 0 });
+    this.chests.push({ pos: obj.position, obj, base, lid, lidMesh, glow, opened: false, spot, quality: spot.poi.loot === 'high' ? 'chest' : 'high', open: 0, seed: Math.random() * 100 });
   }
 
   addItem(item, pos, vel = null, settled = false) {
     const obj = new THREE.Group();
     const model = itemModel(item);
     obj.add(model);
-    const beam = new THREE.Mesh(beamGeo, beamMats[item.rarity || 0]);
-    if (item.kind === 'weapon' || item.kind === 'heal') obj.add(beam);
+    let fx = null;
+    if (item.kind === 'weapon' || item.kind === 'heal') {
+      fx = new THREE.Mesh(lootFxGeometry(item.rarity || 0), lootFxMaterials()[item.rarity || 0]);
+      fx.renderOrder = 3;
+      obj.add(fx);
+    }
     obj.position.copy(pos);
     this.group.add(obj);
-    const it = { item, obj, model, pos: obj.position, vel: vel ? vel.clone() : new THREE.Vector3(), settled, spin: Math.random() * 6, born: this.game.time };
+    const it = { item, obj, model, fx, pos: obj.position, vel: vel ? vel.clone() : new THREE.Vector3(), settled, spin: Math.random() * 6, born: this.game.time };
     this.items.push(it);
     return it;
   }
@@ -139,6 +250,9 @@ export class LootSystem {
     if (chest.opened) return;
     chest.opened = true;
     chest.glow.visible = false;
+    chest.base.material = this.mat;
+    chest.lidMesh.material = this.mat;
+    this.burst(chest.pos.clone().add(new THREE.Vector3(0, 0.6, 0)), 0xffd060);
     const rng = this.game.rng;
     const w = randomWeapon(rng, chest.quality);
     const loot = [w, makeAmmo(WEAPONS[w.type].ammo), randomHeal(rng), makeMat('wood', 30)];
@@ -146,6 +260,45 @@ export class LootSystem {
     const p = chest.pos.clone();
     loot.forEach((it, i) => this.toss(it, p, i, loot.length, chest.obj.rotation.y));
     if (!actor.isBot || this.game.isNearPlayer(p, 30)) this.game.audio.play('chestOpen', p);
+  }
+
+  // A flash of light where a chest or supply drop bursts open.
+  burst(pos, color) {
+    const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: this.glowTex, color: new THREE.Color(color).multiplyScalar(3), transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false }));
+    sprite.position.copy(pos);
+    this.group.add(sprite);
+    this.bursts.push({ sprite, t: 0 });
+  }
+
+  // Sparkles: a few motes rising around each closed chest near the camera, and around epic and legendary loot.
+  updateSparkles(t, cam) {
+    const pos = this.sparkles.geometry.attributes.position, col = this.sparkles.geometry.attributes.color;
+    let n = 0;
+    const emit = (x, y, z, r, g, b, count, seed, radius, height) => {
+      for (let i = 0; i < count && n < this.sparkleMax; i++) {
+        const h = (seed * 13.37 + i * 7.91) % 1;
+        const ph = (t * 0.32 + i / count + h) % 1;
+        const a = h * 6.283 + t * 0.6 + i;
+        const rr = radius * (0.6 + 0.4 * Math.sin(h * 40 + t));
+        pos.setXYZ(n, x + Math.cos(a) * rr, y + 0.1 + ph * height, z + Math.sin(a) * rr);
+        const f = Math.sin(ph * Math.PI) * (0.6 + 0.4 * Math.sin(t * 9 + i * 3));
+        col.setXYZ(n, r * f, g * f, b * f);
+        n++;
+      }
+    };
+    for (const c of this.chests) {
+      if (c.opened || Math.abs(c.pos.x - cam.x) + Math.abs(c.pos.z - cam.z) > 40) continue;
+      emit(c.pos.x, c.pos.y, c.pos.z, 3, 2.3, 0.8, 10, c.seed, 0.75, 1.5);
+    }
+    for (const it of this.items) {
+      const r = it.item.rarity || 0;
+      if (r < 3 || !it.settled || Math.abs(it.pos.x - cam.x) + Math.abs(it.pos.z - cam.z) > 30) continue;
+      const c = r === 4 ? [3, 2, 0.5] : [2, 0.9, 3];
+      emit(it.pos.x, it.pos.y, it.pos.z, c[0], c[1], c[2], 6, it.spin, 0.5, 1.2);
+    }
+    this.sparkles.geometry.setDrawRange(0, n);
+    pos.needsUpdate = true;
+    col.needsUpdate = true;
   }
 
   // ---------- supply drops ----------
@@ -201,6 +354,7 @@ export class LootSystem {
     const w = randomWeapon(rng, 'supply');
     const loot = [w, makeAmmo(WEAPONS[w.type].ammo, AMMO_PICKUP[WEAPONS[w.type].ammo] * 2), makeHeal(rng.chance(0.5) ? 'big' : 'medkit'), makeMat('wood', 100), makeMat('stone', 100), makeMat('metal', 100)];
     loot.forEach((it, i) => this.toss(it, d.pos, i, loot.length));
+    this.burst(d.pos.clone().add(new THREE.Vector3(0, 1, 0)), 0x7ab8ff);
     this.game.audio.play('chestOpen', d.pos);
     this.group.remove(d.obj);
     this.game.scene.remove(d.column);
@@ -271,19 +425,38 @@ export class LootSystem {
           it.settled = true;
         }
       }
-      const near = Math.abs(it.pos.x - camPos.x) + Math.abs(it.pos.z - camPos.z) < 220;
+      const md = Math.abs(it.pos.x - camPos.x) + Math.abs(it.pos.z - camPos.z);
+      const near = md < 200;
       it.obj.visible = near;
       if (near) {
-        it.model.rotation.y = t * 1.2 + it.spin;
-        it.model.position.y = 0.15 + Math.sin(t * 2 + it.spin) * 0.06;
+        it.model.rotation.y = t * 0.9 + it.spin;
+        it.model.position.y = 0.2 + Math.sin(t * 2 + it.spin) * 0.07;
+        if (it.fx) it.fx.visible = md < 140;
       }
     }
+    // chest trim shimmer
+    this.chestGlow.value = 0.55 + 0.35 * Math.sin(t * 3.2) + 0.15 * Math.sin(t * 7.9);
     for (const c of this.chests) {
       if (c.opened && c.open < 1) {
-        c.open = Math.min(1, c.open + dt * 4);
-        c.lid.rotation.x = -c.open * 1.9;
+        // the lid flies open past its stop and settles back
+        c.open = Math.min(1, c.open + dt * 3);
+        const e = c.open;
+        c.lid.rotation.x = -(1.95 * (1 - Math.pow(1 - e, 3)) + Math.sin(e * Math.PI) * 0.35);
       }
-      if (!c.opened) c.glow.material.opacity = 0.45 + Math.sin(t * 4 + c.pos.x) * 0.2;
+      if (!c.opened) c.glow.material.opacity = 0.5 + Math.sin(t * 3.2 + c.seed) * 0.22;
+    }
+    this.updateSparkles(t, camPos);
+    for (let i = this.bursts.length - 1; i >= 0; i--) {
+      const b = this.bursts[i];
+      b.t += dt;
+      const k = b.t / 0.6;
+      b.sprite.scale.setScalar(0.6 + k * 4.5);
+      b.sprite.material.opacity = Math.max(0, 1 - k);
+      if (k >= 1) {
+        this.group.remove(b.sprite);
+        b.sprite.material.dispose();
+        this.bursts.splice(i, 1);
+      }
     }
     // Chest shimmer cue for the human player.
     this.cueTimer -= dt;

@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { WEAPONS, HEALS, RARITY, RARITY_DAMAGE_STEP, RARITY_ODDS, WEAPON_SPAWN_WEIGHTS, AMMO_PICKUP, AMMO_NAMES } from './config.js';
-import { GeoBuilder } from './world/geobuilder.js';
-import { weaponGeo, pickaxeGeo, healGeo, gunMaterial } from './zh/guns.js';
+import { weaponGeo, pickaxeGeo, healGeo, gunMaterial, cachedGeo } from './zh/guns.js';
+import { Bx, Cyl } from './zh/parts.js';
 import { itemIcons } from './zh/icons.js';
 import { clamp } from './util.js';
 
@@ -74,7 +74,6 @@ export function randomHeal(rng) {
 // ---------- 3D models ----------
 // Guns, the harvesting tool and consumables are Zero Hour-style part models (see zh/guns.js).
 
-const geoCache = new Map();
 const matCache = new Map();
 
 function lambert(key, opts) {
@@ -86,8 +85,8 @@ export function vertexMaterial() {
   return lambert('vertex', { vertexColors: true });
 }
 
-export function weaponModel(type) {
-  const m = new THREE.Mesh(weaponGeo(type), gunMaterial());
+export function weaponModel(type, rarity = 0) {
+  const m = new THREE.Mesh(weaponGeo(type, rarity), gunMaterial());
   m.castShadow = true;
   return m;
 }
@@ -104,29 +103,53 @@ export function healModel(type) {
   return m;
 }
 
-const AMMO_COLORS = { light: '#7f97b5', medium: '#5d9a5a', heavy: '#4a4f57', shells: '#c64a3a', rockets: '#6e7a48' };
-const MAT_COLORS = { wood: '#b07c4a', stone: '#9a9a96', metal: '#b9c3cc' };
+// Ammo: a small olive can with a colored band and a row of rounds standing in an open tray on top.
+function ammoGeometry(type) {
+  return cachedGeo('ammo-' + type, () => {
+    const band = { light: 0x7f97b5, medium: 0x5d9a5a, heavy: 0x4a4f57, shells: 0xc64a3a, rockets: 0x6e7a48 }[type];
+    const P = [Bx(0.34, 0.16, 0.2, 0, 0.08, 0, 0x4a4d3a), Bx(0.345, 0.04, 0.205, 0, 0.1, 0, band), Bx(0.34, 0.02, 0.2, 0, 0.17, 0, 0x3a3c30), Bx(0.12, 0.02, 0.03, 0, 0.19, 0, 0x2b2b2b)];
+    const tip = type === 'shells' ? 0xc64a3a : 0xb89a4a;
+    const n = type === 'rockets' ? 2 : type === 'heavy' ? 3 : 5;
+    for (let i = 0; i < n; i++) {
+      const x = (i - (n - 1) / 2) * (type === 'rockets' ? 0.14 : 0.06);
+      if (type === 'rockets') P.push(Cyl(0.035, 0.18, x, 0.27, 0.05, 0x6e7a48, 'y'), Cyl(0.02, 0.06, x, 0.39, 0.05, 0x3a3c30, 'y', 0.001));
+      else if (type === 'shells') P.push(Cyl(0.022, 0.07, x, 0.215, 0.05, tip, 'y'), Cyl(0.023, 0.02, x, 0.19, 0.05, 0xb89a4a, 'y'));
+      else P.push(Cyl(0.012, 0.06, x, 0.21, 0.05, 0xb89a4a, 'y'), Cyl(0.012, 0.03, x, 0.25, 0.05, type === 'heavy' ? 0x3a3a3a : 0xc8a050, 'y', 0.002));
+    }
+    return P;
+  });
+}
 
-function smallBoxGeometry(key, color, w, h, d, stripe) {
-  if (geoCache.has(key)) return geoCache.get(key);
-  const gb = new GeoBuilder();
-  gb.jitter = 0;
-  gb.box(-w / 2, 0, -d / 2, w / 2, h, d / 2, color);
-  if (stripe) gb.box(-w / 2 - 0.005, h * 0.4, -d / 2 - 0.005, w / 2 + 0.005, h * 0.6, d / 2 + 0.005, stripe);
-  const g = gb.build();
-  geoCache.set(key, g);
-  return g;
+// Materials: a stack of planks, a pile of cut stone, or a stack of steel sheets.
+function matGeometry(type) {
+  return cachedGeo('mat-' + type, () => {
+    const P = [];
+    if (type === 'wood') {
+      for (let l = 0; l < 3; l++) for (let i = 0; i < 3 - (l === 2 ? 1 : 0); i++) {
+        const w = l % 2 ? 0.48 : 0.1, d = l % 2 ? 0.1 : 0.48;
+        const off = (i - 1) * 0.12 + (l === 2 ? 0.06 : 0);
+        P.push(Bx(w, 0.06, d, l % 2 ? 0 : off, 0.03 + l * 0.062, l % 2 ? off : 0, [0xb07c4a, 0x9a6a3c, 0xc08a52][(i + l) % 3]));
+      }
+    } else if (type === 'stone') {
+      const bricks = [[-0.12, 0, -0.06], [0.12, 0, -0.06], [0, 0, 0.1], [-0.06, 1, 0.0], [0.08, 1, 0.02]];
+      bricks.forEach(([x, l, z], i) => P.push(Bx(0.2, 0.11, 0.14, x, 0.055 + l * 0.11, z, [0x9a9a96, 0x8a8a86, 0xa8a6a0][i % 3], 0, i * 0.4, 0)));
+    } else {
+      for (let l = 0; l < 4; l++) P.push(Bx(0.46, 0.025, 0.3, (l % 2) * 0.02, 0.013 + l * 0.027, (l % 2) * -0.015, l % 2 ? 0xb9c3cc : 0x8a8e92, 0, l * 0.06, 0));
+      P.push(Bx(0.06, 0.03, 0.32, -0.2, 0.12, 0, 0x6a6c70), Bx(0.06, 0.03, 0.32, 0.2, 0.12, 0, 0x6a6c70));
+    }
+    return P;
+  });
 }
 
 export function itemModel(item) {
   let mesh;
   if (item.kind === 'weapon') {
-    mesh = weaponModel(item.type);
+    mesh = weaponModel(item.type, item.rarity);
     mesh.rotation.y = Math.PI / 2;
     mesh.position.y = 0.12;
     const g = new THREE.Group();
     g.add(mesh);
-    g.scale.setScalar(1.35);
+    g.scale.setScalar(1.7);
     return g;
   }
   if (item.kind === 'heal') {
@@ -137,8 +160,8 @@ export function itemModel(item) {
     g.scale.setScalar(2.2);
     return g;
   }
-  else if (item.kind === 'ammo') mesh = new THREE.Mesh(smallBoxGeometry('a-' + item.type, AMMO_COLORS[item.type], 0.34, 0.2, 0.22, '#e8d36a'), vertexMaterial());
-  else mesh = new THREE.Mesh(smallBoxGeometry('m-' + item.type, MAT_COLORS[item.type], 0.5, 0.25, 0.3, null), vertexMaterial());
+  else if (item.kind === 'ammo') mesh = new THREE.Mesh(ammoGeometry(item.type), gunMaterial());
+  else mesh = new THREE.Mesh(matGeometry(item.type), gunMaterial());
   const g = new THREE.Group();
   g.add(mesh);
   g.scale.setScalar(1.6);
@@ -149,7 +172,7 @@ export function itemModel(item) {
 export function iconUrl(item) {
   if (!item) return null;
   const icons = itemIcons();
-  if (item.kind === 'weapon') return icons[item.type] || null;
+  if (item.kind === 'weapon') return icons[item.type + ':' + (item.rarity | 0)] || icons[item.type] || null;
   if (item.kind === 'heal') return icons[item.type] || null;
   return null;
 }

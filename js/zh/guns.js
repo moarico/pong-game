@@ -2,7 +2,7 @@
 // charge / warhead) so the first-person view can animate them; world models and icons merge them.
 // Barrels point along -Z with the grip near the origin.
 import * as THREE from 'three';
-import { Bx, Sp, Cyl, Cap, CYL, CYL8, torus, partGeo, mrMaterial, mulC } from './parts.js';
+import { Bx, Sp, Cyl, Cap, CYL, CYL8, torus, partGeo, mrMaterial, mulC, MRTAB } from './parts.js';
 
 export const C_MET = 0x2b2d30, C_BLK = 0x19191b, C_POL = 0x3a3834, C_FDE = 0x8e7c5c, C_WOOD = 0x6a4428, C_STL = 0x7a7e84, C_BRS = 0xb89a4a, C_OD = 0x4a4d3a;
 
@@ -103,24 +103,66 @@ export function gunDefs() {
   return G;
 }
 
-export function gunItems(id) {
+export function gunItems(id, rarity = 0) {
   const d = gunDefs()[id];
   if (!d) return [];
-  return [].concat(d.body, d.mag || [], d.pump || [], d.bolt || [], d.slide || [], d.charge || [], d.war || []);
+  return rarityItems([].concat(d.body, d.mag || [], d.pump || [], d.bolt || [], d.slide || [], d.charge || [], d.war || []), rarity);
+}
+
+// ---------- rarity finishes ----------
+// Common guns are plain black and gunmetal. Each tier up recolors the furniture and tints the metal:
+// green, blue, purple, then a full gold finish for legendary.
+const POLY = [C_POL, 0x45423c, C_FDE, C_OD, 0x5a6a4a, 0x4a5a3a, 0x4a4a3a, 0x3a3a2e, 0x222222];
+const RAR_SWAP = [
+  null,
+  { poly: 0x3f8a3a, met: 0x2c3a2e, rcv: 0x34463a, blk: 0x1d2a1f, stl: null, wood: 0x55753a },
+  { poly: 0x2f66c4, met: 0x26324a, rcv: 0x2c3c5c, blk: 0x1a2030, stl: 0x8fb4e8, wood: 0x2f548e },
+  { poly: 0x7038c4, met: 0x2c2442, rcv: 0x3c2c60, blk: 0x241c32, stl: 0xbb9cf0, wood: 0x5a2f8a },
+  { poly: 0xd8a83c, met: 0xd8a83c, rcv: 0xc89430, blk: 0x6e5420, stl: 0xf4d26e, wood: 0x3a2416 },
+];
+export const RARITY_MR = {
+  0x3f8a3a: [0.15, 0.38], 0x2c3a2e: [0.85, 0.32], 0x1d2a1f: [0.55, 0.4], 0x34463a: [0.8, 0.34], 0x55753a: [0.05, 0.45],
+  0x2f66c4: [0.15, 0.34], 0x26324a: [0.85, 0.3], 0x2c3c5c: [0.8, 0.32], 0x1a2030: [0.55, 0.38], 0x8fb4e8: [1, 0.2], 0x2f548e: [0.05, 0.42],
+  0x7038c4: [0.2, 0.3], 0x2c2442: [0.85, 0.28], 0x3c2c60: [0.8, 0.3], 0x241c32: [0.55, 0.36], 0xbb9cf0: [1, 0.18], 0x5a2f8a: [0.05, 0.4],
+  0xd8a83c: [1, 0.22], 0xc89430: [1, 0.26], 0x6e5420: [1, 0.34], 0xf4d26e: [1, 0.14], 0x3a2416: [0, 0.4],
+};
+Object.assign(MRTAB, RARITY_MR);
+export function rarityItems(items, rarity) {
+  const m = RAR_SWAP[rarity | 0];
+  if (!m) return items;
+  const map = (c) => {
+    if (POLY.includes(c)) return m.poly;
+    if (c === C_MET) return m.met;
+    if (c === 0x33363a) return m.rcv;
+    if (c === C_BLK && m.blk) return m.blk;
+    if ((c === C_STL || c === C_BRS) && m.stl) return m.stl;
+    if ((c === C_WOOD || c === 0x4a2c18) && m.wood) return m.wood;
+    return c;
+  };
+  return items.map((p) => (p.c === undefined ? p : { ...p, c: map(p.c) }));
 }
 
 // ---------- the harvesting tool and consumables, built the same way ----------
 
 // Harvesting tool: hickory haft, forged steel head with a colored wrap. Haft runs along +Y from the grip.
 export function pickaxeItems(accent = 0xffcc33) {
-  const wrap = accent, steel = 0x7a7e84, dark = 0x2b2d30;
-  return [
-    Cyl(0.017, 0.62, 0, 0.2, 0, C_WOOD, 'y', 0.015), Cyl(0.02, 0.14, 0, -0.02, 0, wrap, 'y'), Cyl(0.021, 0.02, 0, -0.1, 0, dark, 'y'),
-    Bx(0.05, 0.06, 0.07, 0, 0.5, 0, dark),
-    Bx(0.034, 0.042, 0.26, 0, 0.5, -0.15, steel, 0.12), Bx(0.022, 0.03, 0.08, 0, 0.476, -0.3, steel, 0.32),
-    Bx(0.04, 0.05, 0.13, 0, 0.51, 0.09, steel, -0.1), Bx(0.044, 0.016, 0.06, 0, 0.535, 0.0, wrap),
+  const wrap = accent, steel = 0x8a8e92, dark = 0x2b2d30, edge = 0xc4c8cc;
+  const taper = (r, h, x, y, z, c, tilt) => ({ g: TAPER, s: [r, h, r], p: [x, y, z], r: [-Math.PI / 2 - tilt, 0, 0], c });
+  const P = [
+    // haft: hickory with a wrapped grip, a pommel and a collar under the head
+    Cyl(0.017, 0.62, 0, 0.2, 0, C_WOOD, 'y', 0.015), Cyl(0.024, 0.03, 0, -0.105, 0, dark, 'y'),
+    Cyl(0.03, 0.06, 0, 0.47, 0, dark, 'y'), Cyl(0.026, 0.02, 0, 0.43, 0, wrap, 'y'),
+    // head: a forged center with a long curved pick in front and a short spike behind
+    Bx(0.05, 0.075, 0.1, 0, 0.5, 0, steel), Bx(0.052, 0.02, 0.102, 0, 0.53, 0, wrap),
+    Bx(0.044, 0.052, 0.1, 0, 0.497, -0.095, steel, 0.06), Bx(0.036, 0.042, 0.09, 0, 0.488, -0.18, steel, 0.16), Bx(0.028, 0.032, 0.08, 0, 0.47, -0.255, steel, 0.3),
+    Bx(0.006, 0.03, 0.2, 0, 0.475, -0.17, edge, 0.17),
+    taper(0.016, 0.07, 0, 0.452, -0.32, edge, 0.42),
+    Bx(0.042, 0.05, 0.06, 0, 0.5, 0.075, steel, -0.08), taper(0.02, 0.06, 0, 0.495, 0.13, steel, Math.PI - 0.1),
   ];
+  for (let i = 0; i < 4; i++) P.push(Cyl(0.0195, 0.022, 0, -0.07 + i * 0.034, 0, i % 2 ? dark : wrap, 'y'));
+  return P;
 }
+const TAPER = new THREE.CylinderGeometry(0.08, 1, 1, 8);
 
 export function healItems(type) {
   switch (type) {
@@ -151,8 +193,8 @@ export function cachedGeo(key, items) {
   return GEO.get(key);
 }
 
-export function weaponGeo(type) {
-  return cachedGeo('gun-' + type, () => gunItems(ZH_ID[type] || 'ar'));
+export function weaponGeo(type, rarity = 0) {
+  return cachedGeo('gun-' + type + ':' + (rarity | 0), () => gunItems(ZH_ID[type] || 'ar', rarity));
 }
 
 export function pickaxeGeo(accentHex) {

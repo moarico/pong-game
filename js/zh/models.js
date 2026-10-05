@@ -176,7 +176,11 @@ export function chestParts() {
   for (let k = 0; k < 4; k++) base.push(Bx(1.09, 0.012, 0.67, 0, 0.1 + k * 0.11, 0, WOOD2));
   // gold bands, corners, feet and the lock plate
   for (const x of [-0.42, 0.42]) base.push(Bx(0.08, 0.5, 0.68, x, 0.26, 0, GOLD));
-  base.push(Bx(1.12, 0.06, 0.7, 0, 0.5, 0, GOLD2), Bx(1.12, 0.06, 0.7, 0, 0.04, 0, GOLD));
+  // a gold rim around the open top (not a lid-sized slab), a dark hold inside, and a gold base plate
+  base.push(Bx(1.12, 0.06, 0.08, 0, 0.5, -0.31, GOLD2), Bx(1.12, 0.06, 0.08, 0, 0.5, 0.31, GOLD2), Bx(0.08, 0.06, 0.56, -0.52, 0.5, 0, GOLD2), Bx(0.08, 0.06, 0.56, 0.52, 0.5, 0, GOLD2));
+  base.push(Bx(0.98, 0.012, 0.54, 0, 0.497, 0, 0x22140a), Bx(1.12, 0.06, 0.7, 0, 0.04, 0, GOLD));
+  // side handles
+  for (const x of [-0.565, 0.565]) base.push(Bx(0.025, 0.05, 0.2, x, 0.34, 0, GOLD2), Bx(0.03, 0.1, 0.025, x, 0.3, -0.09, GOLD), Bx(0.03, 0.1, 0.025, x, 0.3, 0.09, GOLD));
   for (const x of [-0.55, 0.55]) for (const z of [-0.34, 0.34]) base.push(Bx(0.08, 0.5, 0.08, x, 0.26, z, GOLD2));
   base.push(Bx(0.2, 0.22, 0.03, 0, 0.36, -0.345, GOLD2), Sp(0.03, 0.04, 0.02, 0, 0.33, -0.36, 0x2b2b2b));
   for (const x of [-0.3, 0.3]) for (const y of [0.15, 0.38]) base.push(Sp(0.018, 0.018, 0.012, x, y, -0.335, GOLD2));

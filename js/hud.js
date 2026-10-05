@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { WEAPONS, HEALS, RARITY, PLAYER, BUILD } from './config.js';
+import { WEAPONS, HEALS, RARITY, PLAYER, BUILD, AMMO_NAMES } from './config.js';
 import { POIS } from './world/island.js';
 import { iconFor, iconUrl, itemName } from './items.js';
 import { clamp, fmtTime, angleTo, wrapAngle } from './util.js';
@@ -49,6 +49,10 @@ export class HUD {
     this.crosshair = el('div', 'crosshair', root, '<i class="l"></i><i class="r"></i><i class="t"></i><i class="b"></i><i class="dot"></i>');
     this.hitmark = el('div', 'hitmarker', root, '<i></i><i></i><i></i><i></i>');
     this.promptEl = el('div', 'prompt', root);
+    // name cards over loot near you
+    this.labelsEl = el('div', 'itemlabels', root);
+    this.labelPool = [];
+    this._lp = new THREE.Vector3();
     this.progress = el('div', 'progress', root, '<div class="label"></div><div class="bar"><div class="fill"></div></div>');
     this.vitals = el('div', 'vitals', root, `
       <div class="vrow shield"><span class="ico">&#x26E8;</span><div class="vbar"><div class="vfill"></div></div><span class="num">0</span></div>
@@ -276,6 +280,7 @@ export class HUD {
       this.promptEl.innerHTML = v;
       this.promptEl.classList.toggle('on', !!v);
     });
+    this.updateItemLabels(near);
     // crosshair
     const scoped = g.controller.scoped;
     this.crosshair.classList.toggle('hidden', scoped || a.mode !== 'ground' || !a.alive);
@@ -381,6 +386,51 @@ export class HUD {
     c.lineTo(w / 2 + 6, 2);
     c.lineTo(w / 2, 9);
     c.fill();
+  }
+
+  // Floor loot within a few meters gets a card above it: rarity, name and what is in it.
+  updateItemLabels(near) {
+    const g = this.game, a = g.player, cam = g.camera;
+    const show = [];
+    if (a && a.alive && (a.mode === 'ground' || a.mode === 'swim') && !g.menus.invOpen) {
+      for (const it of g.loot.items) {
+        const dx = it.pos.x - a.pos.x, dz = it.pos.z - a.pos.z, dy = it.pos.y - a.pos.y;
+        if (Math.abs(dx) > 7 || Math.abs(dz) > 7 || Math.abs(dy) > 3) continue;
+        const d = Math.hypot(dx, dz);
+        if (d < 7) show.push({ it, d });
+      }
+      show.sort((p, q) => p.d - q.d);
+      show.length = Math.min(show.length, 6);
+    }
+    const W = innerWidth, H = innerHeight;
+    show.forEach(({ it, d }, i) => {
+      let L = this.labelPool[i];
+      if (!L) {
+        L = el('div', 'il', this.labelsEl);
+        this.labelPool.push(L);
+      }
+      const item = it.item;
+      const key = item.uid + ':' + (item.count ?? '') + ':' + (item.ammo ?? '') + ':' + (near && near.ref === it);
+      if (L.dataset.key !== key) {
+        L.dataset.key = key;
+        let sub = '';
+        if (item.kind === 'weapon') sub = `${WEAPONS[item.type].mag} round mag &middot; ${AMMO_NAMES[WEAPONS[item.type].ammo]} ammo`;
+        else if (item.kind === 'heal') sub = HEALS[item.type].hp ? `+${HEALS[item.type].hp} health` : `+${HEALS[item.type].shield} shield`;
+        const name = item.kind === 'weapon' ? WEAPONS[item.type].name : itemName(item);
+        const rar = item.kind === 'weapon' || item.kind === 'heal' ? `<b>${RARITY[item.rarity].name}</b>` : '';
+        L.innerHTML = `${rar}<span>${name}</span>${sub ? `<em>${sub}</em>` : ''}`;
+        L.style.setProperty('--rc', RARITY[item.rarity || 0].color);
+        L.classList.toggle('focus', !!(near && near.ref === it));
+      }
+      const p = this._lp.set(it.pos.x, it.pos.y + 0.75, it.pos.z).project(cam);
+      const on = p.z < 1 && Math.abs(p.x) < 1.1 && Math.abs(p.y) < 1.1;
+      L.style.display = on ? '' : 'none';
+      if (on) {
+        L.style.transform = `translate(${((p.x + 1) / 2) * W}px, ${((1 - p.y) / 2) * H}px) translate(-50%, -100%) scale(${clamp(1.25 - d * 0.08, 0.7, 1.15)})`;
+        L.style.opacity = clamp(1.4 - d / 6, 0.35, 1);
+      }
+    });
+    for (let i = show.length; i < this.labelPool.length; i++) this.labelPool[i].style.display = 'none';
   }
 
   worldToMap(x, z, size, cx, cz, span) {

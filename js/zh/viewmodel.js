@@ -3,7 +3,7 @@
 // and the parts move: mags come out and go back in, pumps rack, bolts cycle, slides blow back, brass flies.
 import * as THREE from 'three';
 import { partGeo, partGeo2, Sp, Cap, Cyl, TL, CYL, mrMaterial, mulC, damp, smooth, rand, TAU } from './parts.js';
-import { gunDefs, ZH_ID, pickaxeItems, healItems, C_BRS } from './guns.js';
+import { gunDefs, ZH_ID, pickaxeItems, healItems, C_BRS, rarityItems } from './guns.js';
 import { zhTextures } from './textures.js';
 import { WEAPONS } from '../config.js';
 
@@ -13,7 +13,7 @@ const sm = (a, b, x) => smooth(clamp((x - a) / (b - a), 0, 1));
 const V3a = (p, q) => [p[0] + q[0], p[1] + q[1], p[2] + q[2]];
 
 // Hip positions per gun (x right, y up, z forward is negative).
-const HIPP = { pis: [0.13, -0.15, -0.38], rpg: [0.2, -0.19, -0.46], pick: [0.21, -0.18, -0.44], heal: [0.14, -0.21, -0.46] };
+const HIPP = { pis: [0.13, -0.15, -0.38], rpg: [0.2, -0.19, -0.46], pick: [0.31, -0.44, -0.52], heal: [0.14, -0.21, -0.46] };
 
 function chain(pts, r, c) {
   const o = [];
@@ -138,8 +138,10 @@ export class ViewModel {
       const big = type === 'medkit' || type === 'big';
       d = { body: healItems(type).map((p) => ({ ...p, p: [p.p[0], p.p[1] + (big ? 0.12 : 0.07), p.p[2] - 0.02] })), grip: [0, 0, 0], rake: 0, fore: big ? [-0.11, 0.05, -0.02] : null, sightY: 0, adsZ: 0.4, hip: big ? [0.17, -0.27, -0.62] : HIPP.heal };
     } else {
-      const id = ZH_ID[key] || 'ar';
+      const [type, rar] = key.split(':');
+      const id = ZH_ID[type] || 'ar';
       d = { ...gunDefs()[id], id, hip: HIPP[id] || [0.2, -0.2, -0.52] };
+      for (const k of ['body', 'mag', 'pump', 'bolt', 'slide', 'charge', 'war']) if (d[k]) d[k] = rarityItems(d[k], +rar || 0);
       pistolGrip = !!d.pistol;
     }
     const root = new THREE.Group(), parts = {};
@@ -285,7 +287,7 @@ export class ViewModel {
     const held = a.held;
     if (a.mode === 'ground' && !a.buildMode) {
       if (a.sel === -1) key = 'pick';
-      else if (held && held.kind === 'weapon') key = held.type;
+      else if (held && held.kind === 'weapon') key = held.type + ':' + (held.rarity | 0);
       else if (held && held.kind === 'heal') key = 'heal-' + held.type;
     }
     if (key !== this.curKey) {
@@ -479,9 +481,10 @@ export class ViewModel {
     }
     // harvesting tool: carried forward at the right hip, head up; wind up over the shoulder and chop
     if (this.curKey === 'pick') {
-      rx -= 1.0;
-      ry -= 0.2;
-      rz += 0.25;
+      // carried upright at the right side, head up and pick pointing forward, out of the middle of the view
+      rx -= 0.45;
+      ry -= 0.3;
+      rz -= 0.06;
       const sw = a.model.swing;
       if (sw > 0) {
         const u = 1 - sw;
