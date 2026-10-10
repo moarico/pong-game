@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 <title>MINECRAFT JS</title>
 <style>
   * { margin:0; padding:0; box-sizing:border-box; }
@@ -85,10 +85,83 @@
   #help .hint { margin-top:9px; font-size:11.5px; color:#444; max-width:520px; }
   #pad { position:absolute; top:8px; right:8px; color:#8f8; font-size:12px; text-shadow:1px 1px 0 #000; background:rgba(0,0,0,.4); padding:3px 8px; display:none; }
   .pslot.pksel { background:#a8a8ff; box-shadow:inset 0 0 0 3px #fff; }
+
+  /* ---------- phones and tablets ---------- */
+  html,body { touch-action:none; -webkit-user-select:none; user-select:none; -webkit-touch-callout:none; -webkit-tap-highlight-color:transparent; overscroll-behavior:none; }
+  body { --tb:0px; }
+  #help,#picker { touch-action:pan-y; }
+  #touch { position:absolute; inset:0; display:none; pointer-events:auto; touch-action:none; }
+  body.touch #touch { display:block; }
+  .tonly { display:none; }
+  body.touch .tonly { display:block; }
+  body.touch .donly { display:none !important; }
+  #tjoy { position:absolute; width:124px; height:124px; margin:-62px 0 0 -62px; border-radius:50%; border:3px solid rgba(255,255,255,.4);
+          background:radial-gradient(rgba(0,0,0,.04),rgba(0,0,0,.3)); opacity:.5; transition:opacity .2s; }
+  #tjoy.on { opacity:1; transition:none; }
+  #tknob { position:absolute; left:50%; top:50%; width:54px; height:54px; margin:-27px 0 0 -27px; border-radius:50%;
+           background:rgba(255,255,255,.35); border:3px solid rgba(255,255,255,.8); box-shadow:0 2px 6px rgba(0,0,0,.4); }
+  .tbtn { position:absolute; width:64px; height:64px; border-radius:50%; background:rgba(15,15,15,.38); border:3px solid rgba(255,255,255,.6);
+          color:#fff; display:flex; flex-direction:column; align-items:center; justify-content:center; font:bold 22px/1 'Courier New',monospace;
+          text-shadow:1px 1px 0 #000; }
+  .tbtn small { font-size:9px; letter-spacing:1px; margin-top:3px; }
+  .tbtn.on { background:rgba(255,255,255,.4); transform:scale(.93); }
+  #tb-jump { width:80px; height:80px; right:calc(14px + env(safe-area-inset-right)); bottom:calc(20px + var(--tb)); }
+  #tb-break { right:calc(106px + env(safe-area-inset-right)); bottom:calc(62px + var(--tb)); }
+  #tb-place { right:calc(24px + env(safe-area-inset-right)); bottom:calc(114px + var(--tb)); }
+  #tb-fly { width:50px; height:50px; font-size:18px; right:calc(112px + env(safe-area-inset-right)); bottom:calc(140px + var(--tb)); }
+  #tb-fly.lit { background:rgba(126,200,80,.6); }
+  #tb-down { width:56px; height:56px; right:calc(178px + env(safe-area-inset-right)); bottom:calc(16px + var(--tb)); display:none; }
+  body.flying #tb-down { display:flex; }
+  #ttop { position:absolute; top:calc(6px + env(safe-area-inset-top)); right:calc(8px + env(safe-area-inset-right)); display:flex; flex-wrap:wrap;
+          justify-content:flex-end; gap:6px; max-width:62vw; }
+  .tsm { width:42px; height:42px; border-radius:8px; background:rgba(15,15,15,.45); border:2px solid rgba(255,255,255,.5); color:#fff;
+         display:flex; align-items:center; justify-content:center; font:bold 18px/1 'Courier New',monospace; text-shadow:1px 1px 0 #000; }
+  .tsm.on { background:rgba(255,255,255,.4); }
+  body.touch #coords { font-size:10px; padding:2px 6px; max-width:36vw; top:calc(6px + env(safe-area-inset-top)); left:calc(6px + env(safe-area-inset-left)); }
+  body.touch #pad { display:none !important; }
+  body.touch #toast { bottom:auto; top:calc(58px + env(safe-area-inset-top)); font-size:15px; width:max-content; max-width:88vw; text-align:center; }
+  body.touch #p1hud .bar2 { pointer-events:auto; bottom:calc(4px + env(safe-area-inset-bottom)); }
+  body.touch .bar2 .slot { width:38px; height:38px; }
+  body.touch .bar2 .slot canvas { width:28px; height:28px; }
+  body.touch .bar2 .slot .num { display:none; }
+  body.touch .hearts2 { bottom:calc(50px + env(safe-area-inset-bottom)); font-size:13px; }
+  body.touch #picker { max-height:94vh; overflow:auto; padding:10px; }
+  body.touch #picker h2 { margin-right:40px; }
+  body.touch #pgrid { grid-template-columns:repeat(9,46px); }
+  body.touch .pslot { width:46px; height:46px; }
+  body.touch .pslot canvas { width:34px; height:34px; }
+  #pclose { position:absolute; top:6px; right:8px; width:36px; height:36px; display:none; align-items:center; justify-content:center;
+            font:bold 20px 'Courier New',monospace; color:#333; background:#9a9a9a; border:2px solid; border-color:#fff #373737 #373737 #fff; }
+  body.touch #pclose { display:flex; }
+  body.touch #help { max-width:96vw; max-height:92vh; }
+  #thelp { font-size:12.5px; color:#2c2c2c; line-height:1.6; max-width:560px; margin-top:6px; }
+  #ctlt { margin-top:18px; color:#bdbdbd; font-size:13px; line-height:1.7; text-shadow:1px 1px 0 #000; text-align:center; }
+  #ctlt b { color:#fff; }
+  @media (orientation:portrait){ body.touch { --tb:56px; } body.touch #pgrid { grid-template-columns:repeat(6,46px); } }
+  @media (max-width:760px),(max-height:520px){
+    #title { font-size:40px; } #splash { font-size:13px; margin-bottom:16px; max-width:86vw; text-align:center; } #ctl { font-size:11.5px; margin-top:14px; }
+    #playbtn { font-size:20px; padding:10px 54px; } #help table { font-size:11px; } #death h1 { font-size:36px; } }
 </style>
 </head>
 <body>
 <div id="hud">
+  <div id="touch">
+    <div id="tjoy"><div id="tknob"></div></div>
+    <div class="tbtn" id="tb-jump">&#9650;<small>JUMP</small></div>
+    <div class="tbtn" id="tb-break">&#9874;<small>BREAK</small></div>
+    <div class="tbtn" id="tb-place">&#9635;<small>PLACE</small></div>
+    <div class="tbtn" id="tb-fly">&#9992;</div>
+    <div class="tbtn" id="tb-down">&#9660;<small>DOWN</small></div>
+    <div id="ttop">
+      <div class="tsm" id="tb-blocks">&#9638;</div>
+      <div class="tsm" id="tb-ride">&#127906;</div>
+      <div class="tsm" id="tb-time">&#9728;</div>
+      <div class="tsm" id="tb-weather">&#9729;</div>
+      <div class="tsm" id="tb-gfx">&#9881;</div>
+      <div class="tsm" id="tb-help">?</div>
+      <div class="tsm" id="tb-pause">&#10074;&#10074;</div>
+    </div>
+  </div>
 
   <div id="coords"></div>
   <div id="toast"></div>
@@ -102,8 +175,16 @@
   <div id="death"><h1>YOU DIED</h1><button id="respawn">RESPAWN</button></div>
   <div id="help">
     <h2>COMMAND CENTER</h2>
-    <div class="sub">Every control &mdash; laptop and Xbox controller</div>
-    <table>
+    <div id="thelp" class="tonly">
+      <b>Left thumb</b> &mdash; move (push the stick past its edge to run)<br>
+      <b>Right thumb</b> &mdash; drag to look, <b>tap</b> to break / hit / shoot, <b>hold still</b> to keep breaking<br>
+      <b>&#9650; JUMP</b> &mdash; hold to swim up, <b>double-tap</b> to fly &nbsp;&middot;&nbsp; <b>&#9992;</b> fly on / off &nbsp;&middot;&nbsp; <b>&#9660;</b> fly down<br>
+      <b>&#9874; BREAK</b> and <b>&#9635; PLACE</b> &mdash; hold to keep going &nbsp;&middot;&nbsp; tap a hotbar slot to use it, double-tap it to swap what is in it<br>
+      Top buttons: <b>&#9638;</b> all blocks &amp; weapons &nbsp;<b>&#127906;</b> ride the coaster &nbsp;<b>&#9728;</b> time of day &nbsp;<b>&#9729;</b> weather &nbsp;<b>&#9881;</b> graphics &nbsp;<b>?</b> help &nbsp;<b>&#10074;&#10074;</b> pause<br>
+      <i>Tap this box to close it.</i>
+    </div>
+    <div class="sub donly">Every control &mdash; laptop and Xbox controller</div>
+    <table class="donly">
       <tr><th>Action</th><th>Keyboard / Mouse</th><th>Xbox Controller</th></tr>
       <tr><td>Move</td><td>WASD or Arrow keys</td><td>Left stick</td></tr>
       <tr><td>Look around</td><td>Mouse</td><td>Right stick</td></tr>
@@ -128,7 +209,7 @@
       <tr><td>Start a fire</td><td>Place the Fire block (E picker)</td><td>LT with Fire selected</td></tr>
       <tr><td>Pause</td><td>Esc</td><td>Menu button</td></tr>
     </table>
-    <div class="hint"><b>2-PLAYER:</b> Press <b>C</b> for split-screen co-op. With one controller, P1 plays on keyboard + mouse and P2 takes the controller. With two controllers, each player gets one. Plug in a second controller and co-op starts on its own.<br>
+    <div class="hint donly"><b>2-PLAYER:</b> Press <b>C</b> for split-screen co-op. With one controller, P1 plays on keyboard + mouse and P2 takes the controller. With two controllers, each player gets one. Plug in a second controller and co-op starts on its own.<br>
     <b>THE COASTER:</b> Underground &mdash; take the shaft by the gold beacon. Lift hill, big drop, a full <b>vertical loop</b> that turns you upside down, hairpin turns, a <b>corkscrew</b>, and a <b>jump</b> where the rails stop and the cart flies through the air (yellow markers show takeoff and landing). There are <b>two carts</b>: in co-op both players ride at once, P1 with <b>R</b>, P2 with <b>X</b>.<br>
     <b>NUKE &amp; TNT x100:</b> Both are in the hotbar (slots 6 and 7). TNT x100 drops a 5&times;4&times;5 block of 100 real TNT &mdash; light any one and they chain-detonate one after another. The NUKE arms with a 3-second countdown and clears 1000&times; the volume of a single TNT. <b>Neither one can hurt you</b> &mdash; the nuke is safe to stand near and watch.<br>
     <b>THE CAVE DRAGON:</b> Look for the huge black ring of pillars with gold spikes on the surface &mdash; it is impossible to miss. Climb down the shaft into the arena and the dragon wakes up. It circles, dives at you and breathes purple fire; shoot the head for big damage. Rockets and the sword work too. Kill it for a pile of gold and diamond.<br>
@@ -138,15 +219,19 @@
   </div>
   <div id="picker">
     <h2>SELECT BLOCK</h2>
+    <div id="pclose">&#10005;</div>
     <div id="pgrid"></div>
-    <div class="hint">Click a block to put it in your selected hotbar slot &nbsp;•&nbsp; E to close</div>
+    <div class="hint donly">Click a block to put it in your selected hotbar slot &nbsp;•&nbsp; E to close</div>
+    <div class="hint tonly">Tap a block to put it in your selected hotbar slot</div>
   </div>
   <div id="overlay" class="bg">
     <div id="ovmsg">PAUSED</div>
     <div id="title">MINE<span>CRAFT</span> JS</div>
     <div id="splash">Shaders on! Flowing water, starry nights &amp; storms</div>
     <button id="playbtn">PLAY</button>
-    <div id="ctl">
+    <div id="ctlt" class="tonly"><b>Left thumb</b> moves &nbsp;&middot;&nbsp; <b>right thumb</b> looks &nbsp;&middot;&nbsp; <b>tap</b> to break &nbsp;&middot;&nbsp; <b>&#9635;</b> places<br>
+      Turn your phone sideways for the best view</div>
+    <div id="ctl" class="donly">
       <b>WASD / Arrow keys</b> move &nbsp; <b>Mouse</b> look &nbsp; <b>Space</b> jump &nbsp; <b>Shift</b> sprint<br>
       <b>Left click</b> break &nbsp; <b>Right click</b> place &nbsp; <b>1–9 / scroll</b> hotbar &nbsp; <b>E</b> blocks<br>
       <b>R</b> ride minecart &nbsp; <b>Double-Space</b> fly &nbsp; <b>H</b> Command Center<br>
@@ -161,6 +246,8 @@
 <script>
 (function(){
 'use strict';
+// phones and tablets: touch controls and lighter graphics
+const MOBILE=(function(){ try{ return matchMedia('(pointer:coarse)').matches&&(('ontouchstart' in window)||navigator.maxTouchPoints>0); }catch(e){ return false; } })();
 
 /* ============================== BLOCKS ============================== */
 const B={AIR:0,GRASS:1,DIRT:2,STONE:3,SAND:4,WATER:5,LOG:6,LEAF:7,PLANK:8,COBBLE:9,GLASS:10,BRICK:11,SNOW:12,BEDROCK:13,COAL:14,IRON:15,DIAMOND:16,GOLD:17,SANDSTONE:18,TNT:19,TNT1K:20,NUKE:21,
@@ -475,7 +562,7 @@ const NOISETEX=makeNoiseTextures();
 const DEPTH=170;                           // solid rock stacked under the surface
 const CH=16, WH=320, SEA=16+DEPTH;         // chunk size, world height, sea level
 const RD_STEPS=[7,11,15,20];               // render distance presets, in chunks
-let RDi=2, RD=RD_STEPS[RDi];               // start on "Far"
+let RDi=MOBILE?0:2, RD=RD_STEPS[RDi];               // start on "Far"
 const CAVEBAND=46;                         // caves only live this far under the surface
 function hash2(x,z){ let n=(Math.imul(x|0,374761393)+Math.imul(z|0,668265263))|0; n=Math.imul(n^(n>>>13),1274126177); n^=n>>>16; return (n>>>0)/4294967296; }
 function smooth(t){ return t*t*(3-2*t); }
@@ -1191,7 +1278,11 @@ vec4 marchClouds(vec3 ro, vec3 rd, float tLimit, float jit, int steps){
   float tA=(uCloud.x-ro.y)/rd.y, tB=(uCloud.y-ro.y)/rd.y;
   float tn=max(min(tA,tB),0.0), tf=min(min(max(tA,tB),tn+2600.0),tLimit);
   if(tf<=tn||tn>14000.0) return vec4(0.0,0.0,0.0,1.0);
+#ifdef CLOUD_CHEAP
+  int n=int(clamp((tf-tn)/60.0,float(steps),float(steps)*1.5));
+#else
   int n=int(clamp((tf-tn)/45.0,float(steps),float(steps)*3.0));
+#endif
   float dt=(tf-tn)/float(n), mu=dot(rd,uSunDir);
   float ph=0.75+mix(hgPhase(mu,0.62),hgPhase(mu,-0.2),0.35)*9.0;
   vec3 ambTop=skyLut(vec3(0.0,1.0,0.0))*1.6+uSunCol*0.12, ambBot=skyLut(normalize(vec3(rd.x,0.05,rd.z)))*0.6+uAmbient*0.25;
@@ -1201,7 +1292,11 @@ vec4 marchClouds(vec3 ro, vec3 rd, float tLimit, float jit, int steps){
     vec3 p=ro+rd*(tn+(float(i)+jit)*dt);
     float d=cloudDens(p);
     if(d>0.0004){
+#ifdef CLOUD_CHEAP
+      float od=cloudDens(p+uSunDir*60.0)*150.0;
+#else
       float od=cloudDens(p+uSunDir*25.0)*25.0+cloudDens(p+uSunDir*70.0)*45.0+cloudDens(p+uSunDir*160.0)*90.0;
+#endif
       float beer=max(exp(-od*1.1),exp(-od*0.25)*0.55);
       float powder=1.0-exp(-d*dt*2.0);
       float hf=(p.y-uCloud.x)/(uCloud.y-uCloud.x);
@@ -1938,7 +2033,7 @@ const rainGeo=new THREE.InstancedBufferGeometry();
 (function(){ const base=new THREE.PlaneGeometry(1,1); rainGeo.setIndex(base.index);
   rainGeo.setAttribute('position',base.attributes.position); rainGeo.setAttribute('uv',base.attributes.uv);
   const sd=new Float32Array(RAIN_N*4); for(let i=0;i<sd.length;i++) sd[i]=Math.random();
-  rainGeo.setAttribute('aSeed',new THREE.InstancedBufferAttribute(sd,4)); rainGeo.instanceCount=RAIN_N; })();
+  rainGeo.setAttribute('aSeed',new THREE.InstancedBufferAttribute(sd,4)); rainGeo.instanceCount=MOBILE?RAIN_N>>1:RAIN_N; })();
 const rainMat=new THREE.ShaderMaterial({uniforms:U,vertexShader:RAIN_VS,fragmentShader:RAIN_FS,transparent:true,depthWrite:false});
 rainMat.userData.atmo=true;
 const rainMesh=new THREE.Mesh(rainGeo,rainMat);
@@ -2081,7 +2176,7 @@ try{
   if(!renderer.capabilities.isWebGL2) throw new Error('WebGL2 is not available');
   renderer.toneMapping=THREE.NoToneMapping;          // tone mapping happens in our own post pass
   renderer.outputEncoding=THREE.LinearEncoding;
-  renderer.setPixelRatio(Math.min(window.devicePixelRatio||1, 2));
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio||1, MOBILE?1.5:2));
   renderer.setSize(window.innerWidth, window.innerHeight);
   renderer.shadowMap.enabled=true; renderer.shadowMap.type=THREE.PCFSoftShadowMap; renderer.shadowMap.autoUpdate=false;
   renderer.autoClear=false;
@@ -2101,7 +2196,7 @@ const hemi=new THREE.HemisphereLight(0x9fc4ff,0x55603e,.6); scene.add(hemi);
 const sun=new THREE.DirectionalLight(0xffffff,3.2); scene.add(sun); scene.add(sun.target);
 sun.castShadow=true; sun.shadow.bias=-0.00025; sun.shadow.normalBias=0.035;
 // a small pool of point lights handed out each frame to explosions, fires and muzzle flashes
-const PLIGHTS=[]; for(let i=0;i<4;i++){ const l=new THREE.PointLight(0xff9a50,0,20,2); scene.add(l); PLIGHTS.push(l); }
+const PLIGHTS=[]; for(let i=0;i<(MOBILE?2:4);i++){ const l=new THREE.PointLight(0xff9a50,0,20,2); scene.add(l); PLIGHTS.push(l); }
 
 // block highlight
 const hl=new THREE.LineSegments(
@@ -2331,7 +2426,7 @@ const Q_PRESETS=[
   {name:'Medium', shadow:1024, shadowR:56,  reflect:0,   clouds:8,  rays:24, vol:10, scaleMax:.85, plants:56,  rd:1},
   {name:'High',   shadow:2048, shadowR:80,  reflect:.45, clouds:12, rays:40, vol:16, scaleMax:1,   plants:80,  rd:2},
   {name:'Ultra',  shadow:4096, shadowR:110, reflect:.65, clouds:18, rays:64, vol:26, scaleMax:1,   plants:112, rd:2}];
-let QI=2; try{ const s=parseInt(localStorage.getItem('mcjs-quality'),10); if(s>=0&&s<4) QI=s; }catch(e){}
+let QI=MOBILE?0:2; try{ const s=parseInt(localStorage.getItem('mcjs-quality'),10); if(s>=0&&s<4) QI=s; }catch(e){}
 let QP=Q_PRESETS[QI], renderScale=QP.scaleMax, scaleLocked=false;
 
 // ----- post-processing passes -----
@@ -2566,12 +2661,12 @@ function sunScreen(cam,out){
 }
 
 const _sunUV=[new THREE.Vector2(),new THREE.Vector2()];
-let lastShake=[0,0], reflFrame=0;
+let lastShake=[0,0], reflFrame=0, lutFrame=0;
 function renderFrame(dt){
   if(NOGL) return;
   adaptDt=Math.min(.1,dt||.016);
   ensureTargets();
-  pass(lutMat,lutRT);
+  if(!MOBILE||(lutFrame++%3)===0) pass(lutMat,lutRT);
   const split=coop, views=split?[P,P2]:[P];
   const W=rtScene.width, H=rtScene.height;
   renderer.setRenderTarget(rtScene); renderer.setClearColor(0x000000,1); renderer.clear(true,true,false);
@@ -2676,7 +2771,9 @@ function applyQuality(i,silent){
     if(sun.shadow.map){ sun.shadow.map.dispose(); sun.shadow.map=null; }
     sun.shadow.mapSize.set(QP.shadow,QP.shadow);
   }
-  cloudMat.defines.CLOUD_STEPS=QP.clouds; cloudMat.needsUpdate=true;
+  cloudMat.defines.CLOUD_STEPS=QP.clouds;
+  if(QI===0) cloudMat.defines.CLOUD_CHEAP=''; else delete cloudMat.defines.CLOUD_CHEAP;
+  cloudMat.needsUpdate=true;
   rayBlurMat.defines.RAY_SAMPLES=Math.max(8,QP.rays); rayBlurMat.needsUpdate=true;
   volMat.defines.VOL_STEPS=Math.max(4,QP.vol); volMat.needsUpdate=true;
   renderScale=Math.min(Math.max(renderScale,.5),QP.scaleMax);
@@ -4049,14 +4146,15 @@ function step(pl,dt){
   dt=Math.min(dt,.05);
   const IN=pl.input;
   let fx=IN.fx, fz=IN.fz;
-  if(pl===P){                                    // player 1 also reads the keyboard
+  if(pl===P){                                    // player 1 also reads the keyboard and the touch stick
     if(keys.KeyW)fz-=1; if(keys.KeyS)fz+=1; if(keys.KeyA)fx-=1; if(keys.KeyD)fx+=1;
+    if(TOUCH.on){ fx+=TOUCH.fx; fz+=TOUCH.fz; }
   }
   const len=Math.max(1,Math.hypot(fx,fz)); fx/=len; fz/=len;
   const sin=Math.sin(pl.yaw), cos=Math.cos(pl.yaw);
   const wx=fx*cos + fz*sin, wz=-fx*sin + fz*cos;
-  const sprint=IN.sprint||(pl===P&&(keys.ShiftLeft||keys.ShiftRight));
-  const jump=IN.jump||(pl===P&&keys.Space);
+  const sprint=IN.sprint||(pl===P&&(keys.ShiftLeft||keys.ShiftRight||(pl.fly?TOUCH.down:TOUCH.sprint)));
+  const jump=IN.jump||(pl===P&&(keys.Space||TOUCH.jump));
   let speed=pl.fly?14:(sprint?5.6:4.3);
   const wasWater=pl.inWater;
   pl.inWater=!!WATERY[getBlock(Math.floor(pl.pos.x),Math.floor(pl.pos.y+.4),Math.floor(pl.pos.z))];
@@ -4340,6 +4438,7 @@ const ovmsg=document.getElementById('ovmsg');
 let playing=false, locked=false, steerMode=false, mouseNX=0, mouseNY=0, lastCX=null, lastCY=null;
 
 function lockPointer(){
+  if(TOUCH.on) return;                              // touch screens look with a thumb, not a locked mouse
   const el=renderer.domElement;
   if(el&&el.requestPointerLock){ try{ el.requestPointerLock(); }catch(e){ steerMode=true; } }
   else steerMode=true;
@@ -4350,6 +4449,11 @@ function startGame(){
   ovmsg.style.display='block';
   document.getElementById('splash').style.display='none';
   lockPointer();
+  if(TOUCH.on){                                     // phones: go full screen and sideways when the browser allows it
+    try{ const de=document.documentElement;
+      if(de.requestFullscreen&&!document.fullscreenElement) de.requestFullscreen({navigationUI:'hide'}).then(function(){
+        try{ screen.orientation.lock('landscape').catch(function(){}); }catch(e){} }).catch(function(){}); }catch(e){}
+  }
   fitView();
   blip(520,.12,'triangle',.2);
   ac(); nextNote=0;
@@ -4427,6 +4531,7 @@ function secondaryAction(pl){
 let mouse1=false, mouse2=false;
 document.addEventListener('mousedown',function(e){
   if(!playing||pickerOpen||P.dead) return;
+  if(performance.now()-TOUCH.lastT<900) return;     // a tap's leftover mouse event, already handled as touch
   if(!locked&&!steerMode) lockPointer();
   if(e.button===0){ mouse1=true; primaryAction(); }
   else if(e.button===2){ mouse2=true; secondaryAction(); }
@@ -4485,6 +4590,110 @@ window.addEventListener('resize',function(){
   renderer.setSize(window.innerWidth,window.innerHeight);
   resizeCams();
 });
+
+/* ============================== TOUCH (phones & tablets) ============================== */
+// left thumb: a stick that appears wherever it lands; right thumb: drag to look, tap to break, hold still to keep breaking
+const TOUCH={on:false, lastT:-1e9, joy:null, jx:0, jy:0, fx:0, fz:0, sprint:false, look:null, lx:0, ly:0, lt:0, moved:0, hold:false,
+  jump:false, down:false, brk:false, plc:false, flyShown:null, slotT:0, slotI:-1};
+const touchEl=document.getElementById('touch'), tjoy=document.getElementById('tjoy'), tknob=document.getElementById('tknob'), flyBtn=document.getElementById('tb-fly');
+function joyIdle(){
+  tjoy.classList.remove('on'); tknob.style.transform='';
+  tjoy.style.left=Math.max(80,innerWidth*.12)+'px';
+  tjoy.style.top=(innerHeight-Math.max(96,innerHeight*.26)-(innerHeight>innerWidth?56:0))+'px';
+}
+function enableTouch(){
+  if(TOUCH.on) return;
+  TOUCH.on=true; steerMode=false;
+  document.body.classList.add('touch'); joyIdle();
+}
+function touchRelease(){
+  TOUCH.joy=null; TOUCH.look=null; TOUCH.fx=TOUCH.fz=0; TOUCH.sprint=TOUCH.hold=TOUCH.jump=TOUCH.down=TOUCH.brk=TOUCH.plc=false;
+  joyIdle(); document.querySelectorAll('.tbtn.on,.tsm.on').forEach(function(b){ b.classList.remove('on'); });
+}
+function toggleFly(pl){ pl=pl||P; pl.fly=!pl.fly; pl.vel.y=0; toast(pl.fly?'Flying ON':'Flying OFF'); blip(pl.fly?700:350,.1,'triangle',.18); }
+function touchTick(){
+  if(!TOUCH.on) return;
+  if(TOUCH.look!==null&&!TOUCH.hold&&TOUCH.moved<14&&performance.now()-TOUCH.lt>420) TOUCH.hold=true;
+  if(TOUCH.flyShown!==P.fly){ TOUCH.flyShown=P.fly; document.body.classList.toggle('flying',P.fly); flyBtn.classList.toggle('lit',P.fly); }
+}
+window.addEventListener('pointerdown',function(e){ if(e.pointerType!=='mouse'){ TOUCH.lastT=performance.now(); enableTouch(); } },true);
+window.addEventListener('pointerup',function(e){ if(e.pointerType!=='mouse') TOUCH.lastT=performance.now(); },true);
+touchEl.addEventListener('pointerdown',function(e){
+  if(e.pointerType==='mouse') return;
+  e.preventDefault();
+  if(!playing||pickerOpen||helpOpen) return;
+  const x=e.clientX, y=e.clientY;
+  if(TOUCH.joy===null&&x<innerWidth*.42&&y>innerHeight*.28){
+    TOUCH.joy=e.pointerId; TOUCH.jx=x; TOUCH.jy=y;
+    tjoy.style.left=x+'px'; tjoy.style.top=y+'px'; tjoy.classList.add('on');
+  }else if(TOUCH.look===null){
+    TOUCH.look=e.pointerId; TOUCH.lx=x; TOUCH.ly=y; TOUCH.lt=performance.now(); TOUCH.moved=0; TOUCH.hold=false;
+  }else return;
+  try{ touchEl.setPointerCapture(e.pointerId); }catch(err){}
+},{passive:false});
+touchEl.addEventListener('pointermove',function(e){
+  if(e.pointerId===TOUCH.joy){
+    let dx=e.clientX-TOUCH.jx, dy=e.clientY-TOUCH.jy; const R=56, d=Math.hypot(dx,dy);
+    TOUCH.sprint=d>R*1.2;                                  // pushed past the rim: run
+    if(d>R){ dx*=R/d; dy*=R/d; }
+    TOUCH.fx=dx/R; TOUCH.fz=dy/R;
+    tknob.style.transform='translate('+dx+'px,'+dy+'px)';
+  }else if(e.pointerId===TOUCH.look){
+    const dx=e.clientX-TOUCH.lx, dy=e.clientY-TOUCH.ly, k=3.3/Math.max(innerWidth,innerHeight);
+    TOUCH.lx=e.clientX; TOUCH.ly=e.clientY; TOUCH.moved+=Math.abs(dx)+Math.abs(dy);
+    P.yaw-=dx*k; P.pitch=Math.max(-1.55,Math.min(1.55,P.pitch-dy*k));
+  }
+},{passive:false});
+function touchEnd(e){
+  if(e.pointerId===TOUCH.joy){ TOUCH.joy=null; TOUCH.fx=TOUCH.fz=0; TOUCH.sprint=false; joyIdle(); }
+  else if(e.pointerId===TOUCH.look){
+    if(!TOUCH.hold&&TOUCH.moved<14&&performance.now()-TOUCH.lt<350&&playing&&!pickerOpen) primaryAction(P);   // a quick tap
+    TOUCH.look=null; TOUCH.hold=false;
+  }
+}
+touchEl.addEventListener('pointerup',touchEnd); touchEl.addEventListener('pointercancel',touchEnd);
+function tbtn(id,down,up){
+  const el=document.getElementById(id);
+  el.addEventListener('pointerdown',function(e){
+    e.preventDefault(); e.stopPropagation(); el.classList.add('on');
+    try{ el.setPointerCapture(e.pointerId); }catch(err){}
+    if(down) down();
+  });
+  const end=function(e){ e.stopPropagation(); el.classList.remove('on'); if(up) up(); };
+  el.addEventListener('pointerup',end); el.addEventListener('pointercancel',end);
+}
+const canAct=function(){ return playing&&!P.dead&&!pickerOpen&&!helpOpen; };
+tbtn('tb-jump',function(){ TOUCH.jump=true; const now=performance.now(); if(now-lastSpace<350&&canAct()) toggleFly(); lastSpace=now; },function(){ TOUCH.jump=false; });
+tbtn('tb-break',function(){ if(canAct()) primaryAction(P); TOUCH.brk=true; },function(){ TOUCH.brk=false; });
+tbtn('tb-place',function(){ if(canAct()) secondaryAction(P); TOUCH.plc=true; },function(){ TOUCH.plc=false; });
+tbtn('tb-fly',function(){ if(canAct()) toggleFly(); });
+tbtn('tb-down',function(){ TOUCH.down=true; },function(){ TOUCH.down=false; });
+tbtn('tb-blocks',function(){ if(playing&&!P.dead) togglePicker(!pickerOpen); });
+tbtn('tb-ride',function(){ if(canAct()) rideToggle(P); });
+tbtn('tb-time',function(){ nextTimeOfDay(); });
+tbtn('tb-weather',function(){ setWeather(WEATHER.state+1); });
+tbtn('tb-gfx',function(){ applyQuality(QI+1); });
+tbtn('tb-help',function(){ toggleHelp(); });
+tbtn('tb-pause',function(){ touchRelease(); if(pickerOpen) togglePicker(false); overlay.style.display='flex'; ovmsg.style.display='block'; playing=false; });
+// tap a hotbar slot to use it, double-tap it to swap what is in it
+P.barEl.addEventListener('pointerdown',function(e){
+  const sl=e.target.closest('.slot'); if(!sl) return;
+  e.preventDefault(); e.stopPropagation();
+  const i=Array.prototype.indexOf.call(P.barEl.children,sl); if(i<0) return;
+  const now=performance.now();
+  if(i===TOUCH.slotI&&now-TOUCH.slotT<350&&playing&&!P.dead){ selectSlot(i,P); togglePicker(true); }
+  else selectSlot(i,P);
+  TOUCH.slotI=i; TOUCH.slotT=now;
+});
+// a tap on the controls must not turn into a click on whatever menu it just opened underneath the finger
+['touchstart','touchend'].forEach(function(t){
+  touchEl.addEventListener(t,function(e){ if(e.cancelable) e.preventDefault(); },{passive:false});
+  P.barEl.addEventListener(t,function(e){ if(e.cancelable) e.preventDefault(); },{passive:false});
+});
+document.getElementById('pclose').addEventListener('click',function(e){ e.stopPropagation(); togglePicker(false); });
+helpEl.addEventListener('click',function(){ if(TOUCH.on&&helpOpen) toggleHelp(false); });
+window.addEventListener('resize',function(){ if(TOUCH.on&&TOUCH.joy===null) joyIdle(); });
+if(MOBILE) enableTouch();
 
 /* ============================== XBOX CONTROLLER ============================== */
 const padEl=document.getElementById('pad');
@@ -4604,7 +4813,7 @@ function updateChunks(){
     buildChunkMesh(cx,cz);
     built++;
     // spend a fixed slice of each frame on terrain instead of a fixed count
-    if(performance.now()-t0>(frame<240?14:7)) break;
+    if(performance.now()-t0>(frame<240?(MOBILE?10:14):(MOBILE?4:7))) break;
   }
   if(frame%90===0){
     chunks.forEach(function(c,key){
@@ -4615,7 +4824,7 @@ function updateChunks(){
         c.meshes=[]; c.built=false;
       }
       // untouched chunks far away can be regenerated later; drop their data
-      if(d2>(RD+9)*(RD+9)&&!c.edited) chunks.delete(key);
+      if(d2>(RD+(MOBILE?4:9))*(RD+(MOBILE?4:9))&&!c.edited) chunks.delete(key);
     });
   }
   if(frame%10===0){                                   // tall grass only near the camera
@@ -4788,9 +4997,10 @@ function tick(dt){
   }
   pollPad(dt);
   shake=Math.max(0,shake-dt*2.2);
+  touchTick();
   if(playing&&!pickerOpen&&!helpOpen&&!P.dead){       // hold to keep firing / placing
-    if(mouse1) primaryAction(P);
-    if(mouse2) secondaryAction(P);
+    if(mouse1||TOUCH.brk||TOUCH.hold) primaryAction(P);
+    if(mouse2||TOUCH.plc) secondaryAction(P);
   }
 
   for(const pl of players){
@@ -4918,7 +5128,7 @@ window.MC={SPAWN:SPAWN, DEPTH:DEPTH, SEA:SEA, WH:WH,
   heightAt:heightAt, chunks:chunks, keys:keys, selectSlot:selectSlot,
   get selSlot(){ return P.selSlot; }, startGame:startGame, updateChunks:updateChunks, NOGL:NOGL,
   U:U, SKY:SKY, applyQuality:applyQuality, get QP(){ return QP; }, setTime:function(t){ tod=t; }, get tod(){ return tod; },
-  setScale:function(v){ renderScale=v; scaleLocked=true; }, forcePlay:function(){ helpShown=true; locked=true; steerMode=false; playing=true; ovmsg.style.display='block'; overlay.style.display='none'; if(helpOpen){ helpOpen=false; helpEl.style.display='none'; } }, fires:fires, ignite:ignite, explosionFX:explosionFX,
+  setScale:function(v){ renderScale=v; scaleLocked=true; }, TOUCH:TOUCH, get MOBILE(){ return MOBILE; }, enableTouch:enableTouch, get playing(){ return playing; }, forcePlay:function(){ helpShown=true; locked=true; steerMode=false; playing=true; ovmsg.style.display='block'; overlay.style.display='none'; if(helpOpen){ helpOpen=false; helpEl.style.display='none'; } }, fires:fires, ignite:ignite, explosionFX:explosionFX,
   PS_ADD:PS_ADD, PS_ALPHA:PS_ALPHA, debris:debris, renderFrame:renderFrame, buildChunkMesh:buildChunkMesh, slopeAt:slopeAt,
   updateWater:updateWater, get WQ(){ return WQ; }, setAurora:function(v){ SKY.aurora=v; U.uAurora.value=v; },
   setWeather:setWeather, WEATHER:WEATHER, strike:strike,
