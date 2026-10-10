@@ -60,6 +60,8 @@ class App {
   }
 
   buildGraphics() {
+    // the stadium's render targets belong to the old renderer, so free them first
+    if (this.stadium) { this.stadium.dispose(); this.stadium = null; }
     if (this.gfx) this.gfx.dispose();
     this.gfx = new GameRenderer(this.container, this.settings.quality);
     this.builtQuality = this.settings.quality;
