@@ -1,14 +1,18 @@
 # Rocket Arena
 
-A Rocket League–style car soccer game that runs in the browser. It has 3D graphics, physics modelled on the real game, CPU opponents, **local 2-player split screen**, and full **Xbox controller** support.
+A Rocket League–style car soccer game that runs in the browser. It has 3D graphics, physics modelled on the real game, CPU opponents, **local 2-player split screen**, and full **Xbox controller** support. Matches are played in a huge **Minecraft-style voxel world**: a block-built stadium surrounded by mountains, oceans, floating islands and waterfalls, with sunsets, day-night cycles and weather.
 
 ![Gameplay at sunset](docs/gameplay-sunset.jpg)
+
+![The voxel world around the stadium](docs/world.jpg)
 
 | Main menu | 2-player split screen |
 | --- | --- |
 | ![Menu](docs/menu.jpg) | ![Split screen](docs/split-screen.jpg) |
 
-![Night stadium](docs/gameplay-night.jpg)
+| Thunderstorm at night | Goal explosion |
+| --- | --- |
+| ![Storm](docs/gameplay-storm.jpg) | ![Goal explosion](docs/goal-explosion.jpg) |
 
 | The cars | Victory cinematic |
 | --- | --- |
@@ -24,13 +28,17 @@ A Rocket League–style car soccer game that runs in the browser. It has 3D grap
   - *2 Players — Versus*: split screen, Player 1 (blue) vs Player 2 (orange). You can fill the teams with bots for 2v2 or 3v3.
   - *2 Players — Co-op*: split screen, both players on blue against CPU opponents.
 - **Match rules.** Kickoff countdown, 3/5/7-minute or unlimited matches, and a golden-goal overtime. Time runs out only once the ball touches the ground. Goal explosions are followed by an instant replay. Supersonic hits demolish cars. The post-game screen shows stats (score, goals, assists, saves, shots, demos) and an MVP.
+- **Minecraft-style voxel world.** The stadium sits in a large landscape built from pixel-art blocks: grassy hills, snowy mountains, beaches, an ocean with islands, floating sky islands with waterfalls and a castle, a lighthouse, forests and airships. The world is up to 4.8 km across. Distant terrain uses coarser blocks, so it stays fast.
+- **A huge block stadium.** Two tiers of stepped stands hold an animated crowd in team colours. Six voxel floodlight towers, big score screens, concourse ad boards and glowing team parapets ring the pitch. On Medium and High graphics the grass is wet and reflective, and it mirrors the stands and the floodlights.
+- **Sky, time of day and weather.** The sky is rendered live, with moving clouds, sun, moon and stars, and it lights the whole scene. Pick sunset, day, night or a full day-night cycle (a day lasts 8 minutes). Weather can be clear, cloudy, rain, thunderstorm (lightning bolts, flashes and thunder) or thick fog. Rain soaks the pitch and makes it shinier.
+- **Voxel cars and ball.** In the voxel world the Octane is rebuilt from blocks, with glossy team paint, tinted glass, chrome, glowing lights and chunky blocky wheels. The body leans as the car brakes, accelerates and corners. The ball is a block sphere with glowing blue energy cores. It flares up on every hit and glows brighter at speed. Goal explosions throw out a shower of team-coloured blocks, and sparks and smoke are square, pixel-style particles.
 - **Octane-style cars, modelled in detail.** The cars are built after the Rocket League Octane in the reference photos. Each has a wedge nose with bulging front fenders, a compact glass cab and big chunky tyres. The rear is open and mechanical, with a red supercharger with chrome intake trumpets, round red tail lamps, a centre boost exhaust and a big body-coloured wing on leaning struts. The wheels have spoked rims, brake discs and calipers. The paint is metallic with a clear coat, and racing numbers sit on the doors. The cars are the same size as the Octane hitbox, so the handling is unchanged.
 - **Stadium details from the reference photos.** Tyre marks are torn into the grass and dirt flies off the wheels. Cars have racing numbers on the doors. Big score screens show "GOAL!!" and fire jets go off when someone scores. Flags wave over the stands, chevrons glow on the walls, and searchlights sweep the sky at night.
-- **Realistic visuals.** Night or sunset stadium with a city skyline, a crowd and floodlights. The grass is mowed in stripes. Goals glow and the walls are hex-glass. Lighting is physically based, with shadows and bloom. The ball has glowing panels, and boost flames and smoke trails come in team colours.
+- **Classic stadium.** Settings also offer the original night or sunset stadium with a city skyline, a crowd and floodlights. The grass is mowed in stripes. Goals glow and the walls are hex-glass. Lighting is physically based, with shadows and bloom. The ball has glowing panels, and boost flames and smoke trails come in team colours.
 - **HUD in Rocket League style.** Score and clock bar, circular boost meter, name plates, ball cam / car cam.
 - **Sound effects** for the engine, boost, hits, goals and the crowd. All of them are generated in code, so no audio files are needed.
 - **Controller rumble** on hits, bumps, demolitions and goals.
-- **Victory cinematic.** When your team wins, the back of the other team's goal flaps down and a glowing road builds itself up into the sky. Your car drives up it and falls off the end into a black hole, where it explodes. The black hole swells and sucks in the stadium and the whole city. The camera pulls out into space to show a black hole far bigger than the Earth swallowing the planet, and then the whole universe explodes. Press **A**, **Space** or **Start** to skip it, or turn it off in **Settings**.
+- **Victory cinematic.** When your team wins, the back of the other team's goal flaps down and a glowing road builds itself up into the sky. Your car drives up it and falls off the end into a black hole, where it explodes. The black hole swells and sucks in the stadium and everything around it. The camera pulls out into space to show a black hole far bigger than the Earth swallowing the planet, and then the whole universe explodes. Press **A**, **Space** or **Start** to skip it, or turn it off in **Settings**.
 
 ## Playing
 
@@ -104,7 +112,7 @@ Moves to try:
 
 ## Settings
 
-**Handling** (Easy or Realistic), graphics quality, default camera, field of view, goal replays, the victory cinematic, rumble, volume and an FPS counter can be changed in **Settings**. *Easy* handling, the default, grips harder, turns tighter at speed, and eases keyboard steering in smoothly. *Realistic* uses Rocket League's exact turning and grip. The defaults are **High** on desktop and **Medium** on Xbox. Choose **Low** on slower machines. You can also force a quality level with the URL, e.g. `index.html?quality=low`.
+**World** (Blocky voxel world or Classic night city), **Time of day** (Sunset, Day, Night or Day–night cycle) and **Weather** (Clear, Cloudy, Rain, Thunderstorm or Fog) can be picked on the match setup screen or in **Settings**. **Handling** (Easy or Realistic), graphics quality, default camera, field of view, goal replays, the victory cinematic, rumble, volume and an FPS counter can be changed in **Settings**. *Easy* handling, the default, grips harder, turns tighter at speed, and eases keyboard steering in smoothly. *Realistic* uses Rocket League's exact turning and grip. The defaults are **High** on desktop and **Medium** on Xbox. Choose **Low** on slower machines. You can also force a quality level with the URL, e.g. `index.html?quality=low`.
 
 ## Development
 
@@ -113,7 +121,7 @@ npm install        # three.js + esbuild
 npm run build      # bundles src/ into dist/game.js (commit this file so the game runs without a build)
 npm run dev        # live dev server on http://localhost:8080 that rebuilds on save
 npm test           # physics + game-mode unit tests and a headless bot-vs-bot simulation
-npm run test:browser   # Playwright tests: 2P with simulated Xbox pads, controller + keyboard & mouse, full match flow
+npm run test:browser   # Playwright tests: 2P with simulated Xbox pads, controller + keyboard & mouse, full match flow, settings
 ```
 
 ### Project layout
@@ -132,7 +140,12 @@ src/
   hud.js, menu.js          scoreboard/boost meter and controller-friendly menus
   audio.js                 WebAudio sound effects
   render/                  three.js stadium, car model, effects, camera, renderer,
-                           victory cinematic (victory.js, blackHole.js, space.js)
+                           victory cinematic (victory.js, blackHole.js, space.js),
+                           voxel car and ball (voxelCar.js)
+  render/world/            voxel world: block textures and greedy mesher (blocks.js),
+                           sky (sky.js), terrain, trees and sea (terrain.js), islands,
+                           castles and lighthouse (features.js), block stands and
+                           floodlights (blockStadium.js), rain and lightning (weather.js)
 tests/                     node + Playwright tests
 ```
 

@@ -19,11 +19,13 @@ function defaultQuality() {
 function loadSettings() {
   const d = {
     quality: defaultQuality(), volume: 0.7, rumble: true, ballCam: true, fov: 100, replays: true, showFps: false,
-    timeOfDay: 'night', split: 'horizontal', duration: 300, difficulty: 'pro',
+    timeOfDay: 'sunset', world: 'blocky', weather: 'clear', split: 'horizontal', duration: 300, difficulty: 'pro',
     teamSize_solo: 1, teamSize_versus: 1, teamSize_coop: 2, handling: 'easy', gameMode: 'soccar', items: 'all', victoryFx: true,
   };
   try {
     const s = JSON.parse(localStorage.getItem(SETTINGS_KEY) || '{}');
+    // saves from before the blocky world: open on the new sunset look
+    if (s.timeOfDay && !s.world) s.timeOfDay = 'sunset';
     return { ...d, ...s };
   } catch (e) {
     return d;
@@ -67,9 +69,13 @@ class App {
   buildStadium() {
     if (this.stadium) this.stadium.dispose();
     const pads = BIG_PADS.map(([x, z]) => ({ x, z, big: true, active: true })).concat(SMALL_PADS.map(([x, z]) => ({ x, z, big: false, active: true })));
-    this.stadium = buildStadium(this.gfx.renderer, this.gfx.scene, { quality: this.settings.quality, timeOfDay: this.settings.timeOfDay, pads });
+    const st = this.settings;
+    this.stadium = buildStadium(this.gfx.renderer, this.gfx.scene, { quality: st.quality, theme: st.world, timeOfDay: st.timeOfDay, weather: st.weather, pads });
     this.gfx.setExposure(this.stadium.exposure);
-    this.builtTime = this.settings.timeOfDay;
+    this.builtTime = this.worldKey();
+    const weather = this.stadium.world && this.stadium.world.weather;
+    if (weather) weather.onThunder = (k, delay) => this.audio.thunder(k, delay);
+    this.audio.setRain(weather ? Math.min(1, weather.cfg.rain) : 0);
   }
 
   saveSettings() {
@@ -83,11 +89,18 @@ class App {
       this.disposeMatch();
       this.buildGraphics();
       this.startAttract(false);
+    } else if (this.worldKey() !== this.builtTime) {
+      // new world, time of day or weather: rebuild the stadium behind the menu
+      this.disposeMatch();
+      this.buildStadium();
+      this.startAttract(false);
     }
   }
 
+  worldKey() { const st = this.settings; return `${st.world}|${st.timeOfDay}|${st.weather}`; }
+
   ensureStadium() {
-    if (this.settings.timeOfDay !== this.builtTime) this.buildStadium();
+    if (this.worldKey() !== this.builtTime) this.buildStadium();
   }
 
   disposeMatch() {

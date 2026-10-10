@@ -34,7 +34,7 @@ require('fs').mkdirSync(OUT, { recursive: true });
   await page.keyboard.press('Enter');
   await waitFrames(3);
   console.log('match humans:', JSON.stringify(await ev(() => window.__app.match.humans.map((h) => ({ dev: h.device, team: h.car.team })))));
-  for (let i = 0; i < 100; i++) { if ((await ev(() => window.__app.match.state)) === 'playing') break; await page.waitForTimeout(200); }
+  for (let i = 0; i < 400; i++) { if ((await ev(() => window.__app.match.state)) === 'playing') break; await page.waitForTimeout(200); }
   // controller: hold RT. keyboard & mouse: hold W + left mouse (boost)
   await ev(() => window.__btn(0, 7, 1));
   await page.mouse.move(480, 300);

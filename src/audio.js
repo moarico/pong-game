@@ -48,7 +48,41 @@ export class AudioEngine {
     lfo.connect(lfoGain).connect(this.crowdGain.gain);
     crowdSrc.connect(bp).connect(this.crowdGain).connect(this.master);
     lfo.start();
+    this.applyRain();
     return true;
+  }
+
+  // ----- weather: steady rain hiss and distant thunder
+  setRain(amount) {
+    this.rainAmount = amount;
+    if (this.ctx) this.applyRain();
+  }
+
+  applyRain() {
+    const a = this.rainAmount || 0;
+    if (!a && !this.rainGain) return;
+    const ctx = this.ctx;
+    if (!this.rainGain) {
+      const src = this.loopNoise();
+      const hp = ctx.createBiquadFilter();
+      hp.type = 'highpass';
+      hp.frequency.value = 1100;
+      const lp = ctx.createBiquadFilter();
+      lp.type = 'lowpass';
+      lp.frequency.value = 7000;
+      this.rainGain = ctx.createGain();
+      this.rainGain.gain.value = 0;
+      src.connect(hp).connect(lp).connect(this.rainGain).connect(this.master);
+    }
+    this.rainGain.gain.setTargetAtTime(a * 0.11, ctx.currentTime, 0.6);
+  }
+
+  thunder(strength = 1, delay = 1.5) {
+    if (!this.ready) return;
+    const g = Math.max(0.2, Math.min(1, strength));
+    this.burst({ dur: 0.45, gain: 0.45 * g, freq: 3200, endFreq: 260, delay });
+    this.burst({ dur: 3.8 + Math.random() * 2, gain: 0.85 * g, freq: 300, endFreq: 38, q: 0.5, delay: delay + 0.06 });
+    this.burst({ dur: 2.6, gain: 0.55 * g, freq: 140, endFreq: 32, delay: delay + 0.45 + Math.random() * 0.6, pan: Math.random() * 1.2 - 0.6 });
   }
 
   resume() {

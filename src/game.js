@@ -12,13 +12,51 @@ import { createMode, ITEMS, ITEM_KEYS } from './physics/modes.js';
 import { ModeFx } from './render/modeFx.js';
 import { TireMarks } from './render/tireMarks.js';
 import { VictoryCinematic } from './render/victory.js';
+import { voxelBallGeometry } from './render/voxelCar.js';
+import { blockMaterial } from './render/world/blocks.js';
 
 const BOT_NAMES = ['Atlas', 'Blitz', 'Comet', 'Dash', 'Echo', 'Flare', 'Ghost', 'Havoc', 'Jinx', 'Nova', 'Rex', 'Zippy', 'Vortex', 'Turbo'];
 const REPLAY_SECONDS = 6;
 const SNAP_HZ = 60;
 
 let ballTex = null;
-function ballMesh() {
+let glowTex = null;
+function glowTexture() {
+  if (glowTex) return glowTex;
+  const c = document.createElement('canvas');
+  c.width = c.height = 128;
+  const g = c.getContext('2d');
+  const gr = g.createRadialGradient(64, 64, 0, 64, 64, 64);
+  gr.addColorStop(0, 'rgba(255,255,255,1)');
+  gr.addColorStop(0.25, 'rgba(255,255,255,0.45)');
+  gr.addColorStop(0.6, 'rgba(255,255,255,0.1)');
+  gr.addColorStop(1, 'rgba(255,255,255,0)');
+  g.fillStyle = gr;
+  g.fillRect(0, 0, 128, 128);
+  glowTex = new THREE.CanvasTexture(c);
+  glowTex.colorSpace = THREE.SRGBColorSpace;
+  return glowTex;
+}
+
+// blocky world: a voxel ball with glowing blue energy cores and a soft halo
+let voxelBallGeo = null;
+function voxelBall() {
+  const mat = blockMaterial({ fog: false, emissiveBoost: 1.6 });
+  mat.emissiveIntensity = 2.4; // ModeFx pulses this; mirrored into the block glow each frame
+  // metres baked in: the victory cinematic animates the ball's own scale from 1
+  if (!voxelBallGeo) { voxelBallGeo = voxelBallGeometry().clone().scale(S, S, S); voxelBallGeo.userData.shared = true; }
+  const m = new THREE.Mesh(voxelBallGeo, mat);
+  m.castShadow = true;
+  const halo = new THREE.Sprite(new THREE.SpriteMaterial({ map: glowTexture(), color: 0x3f8cff, transparent: true, opacity: 0.3, blending: THREE.AdditiveBlending, depthWrite: false, fog: false }));
+  halo.scale.setScalar(BALL.radius * S * 4.2);
+  halo.renderOrder = 2;
+  m.add(halo);
+  m.userData.halo = halo;
+  return m;
+}
+
+function ballMesh(blocky) {
+  if (blocky) return voxelBall();
   if (!ballTex) ballTex = ballTextures(1024);
   const mat = new THREE.MeshStandardMaterial({
     map: ballTex.map, emissive: 0xffffff, emissiveMap: ballTex.emissiveMap, emissiveIntensity: 2.4,
@@ -58,9 +96,10 @@ export class Match {
     this.world = new World();
     this.group = new THREE.Group();
     app.gfx.scene.add(this.group);
-    this.effects = new Effects(this.group, app.settings.quality);
+    this.blocky = app.settings.world !== 'classic';
+    this.effects = new Effects(this.group, app.settings.quality, this.blocky ? 'blocky' : 'classic');
     this.tireMarks = new TireMarks(this.group, app.settings.quality === 'low' ? 900 : 2400, app.settings.quality === 'high' ? 0.075 : 0.02);
-    this.ball = ballMesh();
+    this.ball = ballMesh(this.blocky);
     this.group.add(this.ball);
     if (app.settings.quality === 'low') this.ballBlob = this.addBlob(1.7, 1.7);
 
@@ -74,7 +113,7 @@ export class Match {
         const h = humans[i];
         const car = this.world.addCar(new Car(team, h ? h.name : names.pop()));
         car.handling = app.settings.handling === 'realistic' ? 'realistic' : 'easy';
-        const model = new CarModel(team, carNumbers.pop(), app.settings.quality);
+        const model = new CarModel(team, carNumbers.pop(), app.settings.quality, this.blocky ? 'blocky' : 'classic');
         this.group.add(model.root);
         if (app.settings.quality === 'low') model.blob = this.addBlob(1.6, 2.2);
         const p = { car, model, human: !!h, device: h ? h.device : null, bot: h ? null : new Bot(car, cfg.difficulty), name: car.name };
@@ -513,6 +552,7 @@ export class Match {
       switch (e.type) {
         case 'ballHit':
           if (e.strength > 350) this.effects.hit(e.point, e.strength);
+          this.ballPulse = Math.max(this.ballPulse || 0, Math.min(1, e.strength / 1800));
           if (!this.attract) {
             if (e.strength > 250) app.audio.hit(e.strength * near(e.point));
             if (hp) {
@@ -685,6 +725,18 @@ export class Match {
     this.app.gfx.render();
   }
 
+  // voxel ball energy: cores and halo flare up with speed and on every hit
+  updateBallGlow(dt) {
+    const sp = this.world.ball.vel.length();
+    this.ballPulse = Math.max(0, (this.ballPulse || 0) - dt * 2.5);
+    const pulse = this.ballPulse * this.ballPulse;
+    const k = this.ball.material.emissiveIntensity / 2.4;
+    this.ball.material.userData.emissiveBoost.value = 1.6 * k + Math.min(1.6, sp / 2200) + pulse * 4;
+    const halo = this.ball.userData.halo;
+    halo.material.opacity = Math.min(0.9, 0.2 + Math.min(0.3, sp / 7000) + pulse * 0.55);
+    halo.scale.setScalar(BALL.radius * S * (4.2 + pulse * 2.5 + Math.min(1.2, sp / 3000)));
+  }
+
   renderFrame(dt) {
     const app = this.app;
     const alpha = this.acc / DT;
@@ -740,6 +792,7 @@ export class Match {
       app.hud.update(dt);
     }
     if (this.modeFx) this.modeFx.update(dt, this.players, this.ball, _bp);
+    if (this.ball.userData.halo) this.updateBallGlow(dt);
     this.tireMarks.flush();
     // stadium screens + fire jets during the goal celebration
     const celebrating = this.state === 'goal';

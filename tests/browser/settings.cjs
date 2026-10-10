@@ -1,4 +1,4 @@
-// Browser test: switching graphics quality and stadium rebuilds cleanly.
+// Browser test: switching graphics quality, world, time of day and weather rebuilds cleanly.
 const { chromium } = require('./pw.cjs');
 const path = require('path');
 (async () => {
@@ -23,6 +23,12 @@ const path = require('path');
   await ev(() => { window.__app.settings.quality = 'low'; window.__app.applySettings(); });
   await waitFrames(3);
   console.log('quality now', await ev(() => window.__app.gfx.quality), 'canvases', await ev(() => document.querySelectorAll('canvas').length));
+  // every world / time of day / weather combination rebuilds behind the menu without errors
+  for (const [world, timeOfDay, weather] of [['classic', 'night', 'clear'], ['blocky', 'night', 'storm'], ['blocky', 'day', 'rain'], ['blocky', 'cycle', 'fog'], ['blocky', 'sunset', 'cloudy'], ['classic', 'day', 'rain']]) {
+    await ev((s) => { const a = window.__app; Object.assign(a.settings, s); a.applySettings(); }, { world, timeOfDay, weather });
+    await waitFrames(3);
+    console.log('world', await ev(() => window.__app.builtTime), 'rain', await ev(() => !!(window.__app.stadium.world && window.__app.stadium.world.weather.rain)), 'attract', await ev(() => window.__app.match.attract));
+  }
   console.log('errors:', errors.length ? errors.join('\n') : 'none');
   await browser.close();
 })();

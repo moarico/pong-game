@@ -606,3 +606,45 @@ export function bodyPoint(z, sideSign, th) {
 }
 
 export { G as greenhouseShape, bodyTopAt };
+
+// ------------------------------------------------------------------ solid tests (voxel cars)
+function bodyBottomAt(z, x) {
+  const sec = section(z);
+  let lo = Math.PI / 2, hi = Math.PI;
+  for (let i = 0; i < 30; i++) {
+    const mid = (lo + hi) / 2;
+    if (outline(sec, mid)[0] > x) lo = mid; else hi = mid;
+  }
+  return outline(sec, (lo + hi) / 2)[1];
+}
+
+export function insideBody(x, y, z) {
+  if (z < KZ[0] || z > KZ[KZ.length - 1]) return false;
+  const sec = section(z);
+  const ax = Math.abs(x);
+  if (ax > sec.a || y > sec.top + 0.5 || y < sec.bot - 0.5) return false;
+  if (y > bodyTopAt(z, ax) || y < bodyBottomAt(z, ax)) return false;
+  const ar = archAt(z);
+  if (ar && ax > ar.inner && y < ar.y) return false;
+  return true;
+}
+
+// greenhouse solid; returns the height fraction (0 at the belt, 1 at the roof) or -1
+export function insideCab(x, y, z) {
+  if (z < GZ[0] || z > GZ[GZ.length - 1]) return -1;
+  const gb = G.half(z);
+  const yb = bodyTopAt(z, gb) - 0.7;
+  const h = Math.max(0.25, G.roof(z) - yb);
+  if (y < yb - 1.5 || y > yb + h) return -1;
+  const t = Math.min(1, Math.max(0, (y - yb) / h));
+  const c = Math.pow(t, 2.5);
+  const sn = Math.sqrt(Math.max(0, 1 - c * c));
+  const xe = gb * Math.pow(sn, 2 / 5) * (1 - 0.2 * Math.pow(t, 1.2));
+  return Math.abs(x) <= xe ? t : -1;
+}
+
+export function cabHalfWidth(z, t) {
+  const gb = G.half(z);
+  const c = Math.pow(t, 2.5);
+  return gb * Math.pow(Math.sqrt(Math.max(0, 1 - c * c)), 2 / 5) * (1 - 0.2 * Math.pow(t, 1.2));
+}

@@ -3,6 +3,11 @@ import { CAR, S, TEAM_COLORS } from '../config.js';
 import { treadTexture } from './textures.js';
 import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
 import { carGeometry, carTextures, bodyPoint, tyreHalf } from './carBody.js';
+import { voxelCarGeometry, voxelWheelGeometry } from './voxelCar.js';
+import { blockMaterial } from './world/blocks.js';
+
+const _a = new THREE.Vector3();
+const _qi = new THREE.Quaternion();
 
 // Materials shared by every car (paint is per car because power-ups make it glow).
 let shared = null;
@@ -124,15 +129,63 @@ function numberTexture(n, teamCss) {
 }
 
 export class CarModel {
-  constructor(team, number = 0, quality = 'high') {
+  constructor(team, number = 0, quality = 'high', style = 'classic') {
     const A = sharedAssets();
-    const geo = carGeometry(quality);
     const tc = TEAM_COLORS[team];
     this.team = team;
     this.root = new THREE.Group(); // meters, follows physics
     this.body = new THREE.Group(); // uu
     this.body.scale.setScalar(S);
     this.root.add(this.body);
+    this.tilt = new THREE.Vector2();
+    if (style === 'blocky') this.buildVoxel(team, number);
+    else this.buildClassic(team, number, quality);
+    this.addBoost(team);
+    this.spikes = null;
+    this.powerOn = false;
+  }
+
+  // Minecraft-style: the Octane rebuilt from blocks, on a chassis that rolls and pitches
+  buildVoxel(team, number) {
+    const tc = TEAM_COLORS[team];
+    const mat = blockMaterial();
+    this.paint = mat;
+    this.chassis = new THREE.Group();
+    this.body.add(this.chassis);
+    const shell = new THREE.Mesh(voxelCarGeometry(team), mat);
+    shell.castShadow = true;
+    shell.receiveShadow = true;
+    this.chassis.add(shell);
+    if (number) {
+      const numMat = new THREE.MeshStandardMaterial({ map: numberTexture(number, tc.css), transparent: true, depthWrite: false, roughness: 0.4, polygonOffset: true, polygonOffsetFactor: -4, polygonOffsetUnits: -4 });
+      const plate = new THREE.PlaneGeometry(18, 11);
+      for (const sx of [-1, 1]) {
+        const m = new THREE.Mesh(plate, numMat);
+        m.position.set(sx * 33.15, 7, 5);
+        m.rotation.y = sx * Math.PI / 2;
+        this.chassis.add(m);
+      }
+    }
+    this.wheels = [];
+    for (const w of CAR.wheels) {
+      const sx = Math.sign(w.x);
+      const pivot = new THREE.Group();
+      pivot.position.set(sx * (Math.abs(w.x) + 7), -CAR.restHeight + w.r, w.z);
+      const spin = new THREE.Group();
+      pivot.add(spin);
+      const wheel = new THREE.Mesh(voxelWheelGeometry(w.r, team), mat);
+      wheel.castShadow = true;
+      if (sx < 0) wheel.rotation.y = Math.PI;
+      spin.add(wheel);
+      this.body.add(pivot);
+      this.wheels.push({ pivot, spin, front: w.front, r: w.r, baseY: pivot.position.y });
+    }
+  }
+
+  buildClassic(team, number, quality) {
+    const A = sharedAssets();
+    const geo = carGeometry(quality);
+    const tc = TEAM_COLORS[team];
 
     const paint = new THREE.MeshPhysicalMaterial({
       color: tc.main, metalness: 0.4, roughness: 0.32, clearcoat: 1, clearcoatRoughness: 0.035, envMapIntensity: 1.2,
@@ -241,6 +294,11 @@ export class CarModel {
       this.wheels.push({ pivot, spin, front: w.front, r: w.r, baseY: pivot.position.y });
     }
 
+  }
+
+  addBoost(team) {
+    const A = sharedAssets();
+    const tc = TEAM_COLORS[team];
     // boost flame (two cones, additive) out of the exhausts
     const fc = new THREE.Color(...tc.flame);
     const flameGeo = new THREE.ConeGeometry(7, 46, 16, 1, true);
@@ -264,9 +322,6 @@ export class CarModel {
     this.exhaustGlow.add(gm);
     this.body.add(this.exhaustGlow);
     this.flicker = 0;
-
-    this.spikes = null;
-    this.powerOn = false;
   }
 
   // Rumble spikes: studs all over the body
@@ -321,6 +376,20 @@ export class CarModel {
       const d = car.wheelDist[i];
       const target = d >= 0 ? w.baseY + (CAR.restHeight - d) * 0.6 : w.baseY - 4;
       w.pivot.position.y += (Math.max(w.baseY - 6, Math.min(w.baseY + 6, target)) - w.pivot.position.y) * Math.min(1, dt * 20);
+    }
+    // body roll and pitch from the car's acceleration (visual suspension)
+    if (this.chassis && dt > 0) {
+      if (!this.prevVel) this.prevVel = car.vel.clone();
+      _a.subVectors(car.vel, this.prevVel).divideScalar(Math.max(dt, 1 / 240));
+      this.prevVel.copy(car.vel);
+      _a.applyQuaternion(_qi.copy(quat).invert());
+      const grounded = car.onGround !== false;
+      const pt = grounded ? THREE.MathUtils.clamp(-_a.z * 0.000022, -0.055, 0.055) : 0;
+      const rt = grounded ? THREE.MathUtils.clamp(_a.x * 0.000024, -0.065, 0.065) : 0;
+      const k = Math.min(1, dt * 7);
+      this.tilt.x += (pt - this.tilt.x) * k;
+      this.tilt.y += (rt - this.tilt.y) * k;
+      this.chassis.rotation.set(this.tilt.x, 0, this.tilt.y);
     }
     this.flicker += dt * 40;
     const boosting = car.boosting;

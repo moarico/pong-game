@@ -208,7 +208,7 @@ export class Menu {
     this.option(p, 'Team size', teamSizes, () => s[key], (v) => { s[key] = v; });
     this.option(p, 'Match length', [{ label: '3 minutes', value: 180 }, { label: '5 minutes', value: 300 }, { label: '7 minutes', value: 420 }, { label: '1 minute', value: 60 }, { label: 'Unlimited', value: 0 }], () => s.duration, (v) => { s.duration = v; });
     this.option(p, 'CPU skill', [{ label: 'Rookie', value: 'rookie' }, { label: 'Pro', value: 'pro' }, { label: 'All-Star', value: 'allstar' }], () => s.difficulty, (v) => { s.difficulty = v; });
-    this.option(p, 'Stadium', [{ label: 'Night', value: 'night' }, { label: 'Sunset', value: 'sunset' }], () => s.timeOfDay, (v) => { s.timeOfDay = v; });
+    this.worldOptions(p);
     if (mode !== 'solo') this.option(p, 'Split screen', [{ label: 'Top / Bottom', value: 'horizontal' }, { label: 'Side by side', value: 'vertical' }], () => s.split, (v) => { s.split = v; });
     const go = () => {
       this.app.saveSettings();
@@ -219,6 +219,18 @@ export class Menu {
     this.button(p, '◀  BACK', () => this.show('main'));
     this.onBack = () => this.show('main');
     this.focus = this.items.length - 2;
+  }
+
+  // world look: shared by match setup and settings
+  worldOptions(p) {
+    const s = this.app.settings;
+    this.option(p, 'World', [{ label: 'Blocky voxel world', value: 'blocky' }, { label: 'Classic night city', value: 'classic' }], () => s.world, (v) => { s.world = v; });
+    this.option(p, 'Time of day', [
+      { label: 'Sunset', value: 'sunset' }, { label: 'Day', value: 'day' }, { label: 'Night', value: 'night' }, { label: 'Day–night cycle', value: 'cycle' },
+    ], () => s.timeOfDay, (v) => { s.timeOfDay = v; });
+    this.option(p, 'Weather', [
+      { label: 'Clear', value: 'clear' }, { label: 'Cloudy', value: 'cloudy' }, { label: 'Rain', value: 'rain' }, { label: 'Thunderstorm', value: 'storm' }, { label: 'Fog', value: 'fog' },
+    ], () => s.weather, (v) => { s.weather = v; });
   }
 
   screen_join(mode) {
@@ -317,6 +329,7 @@ export class Menu {
     const s = this.app.settings;
     const p = this.panel('SETTINGS');
     this.option(p, 'Graphics', [{ label: 'High', value: 'high' }, { label: 'Medium', value: 'medium' }, { label: 'Low (fast)', value: 'low' }], () => s.quality, (v) => { s.quality = v; });
+    this.worldOptions(p);
     this.option(p, 'Handling', [{ label: 'Easy (recommended)', value: 'easy' }, { label: 'Realistic (Rocket League)', value: 'realistic' }], () => s.handling, (v) => { s.handling = v; });
     this.option(p, 'Default camera', [{ label: 'Ball cam', value: true }, { label: 'Car cam', value: false }], () => s.ballCam, (v) => { s.ballCam = v; });
     this.option(p, 'Field of view', [90, 95, 100, 105, 110].map((v) => ({ label: v + '°', value: v })), () => s.fov, (v) => { s.fov = v; });

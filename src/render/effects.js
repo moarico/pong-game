@@ -3,7 +3,7 @@ import { S, TEAM_COLORS } from '../config.js';
 
 // GPU-instanced camera-facing particles. Positions are in meters.
 class ParticleSystem {
-  constructor(max, additive) {
+  constructor(max, additive, square = false) {
     this.max = max;
     this.count = 0;
     this.p = new Float32Array(max * 3);
@@ -51,9 +51,7 @@ class ParticleSystem {
         ? /* glsl */ `
         varying vec2 vUv; varying vec4 vCol;
         void main() {
-          float r = length(vUv - 0.5) * 2.0;
-          float a = 1.0 - smoothstep(0.0, 1.0, r);
-          a *= a;
+          ${square ? 'vec2 q = abs(vUv - 0.5) * 2.0; float r = max(q.x, q.y); float a = (1.0 - smoothstep(0.55, 0.85, r)) * 0.9 + (1.0 - r) * 0.1;' : 'float r = length(vUv - 0.5) * 2.0; float a = 1.0 - smoothstep(0.0, 1.0, r); a *= a;'}
           gl_FragColor = vec4(vCol.rgb, vCol.a * a);
           #include <colorspace_fragment>
         }`
@@ -63,9 +61,8 @@ class ParticleSystem {
         float n(vec2 p) { vec2 i = floor(p), f = fract(p); f = f * f * (3.0 - 2.0 * f);
           return mix(mix(h(i), h(i + vec2(1, 0)), f.x), mix(h(i + vec2(0, 1)), h(i + vec2(1, 1)), f.x), f.y); }
         void main() {
-          vec2 d = vUv - 0.5;
-          float r = length(d) * 2.0;
-          float puff = n(vUv * 4.0 + vSeed * 17.0) * 0.6 + n(vUv * 9.0 - vSeed * 5.0) * 0.4;
+          ${square ? '// pixel-art puff: 6x6 cells, square falloff\n          vec2 uv = (floor(vUv * 6.0) + 0.5) / 6.0; vec2 d = abs(uv - 0.5); float r = max(d.x, d.y) * 2.2;' : 'vec2 uv = vUv; float r = length(vUv - 0.5) * 2.0;'}
+          float puff = n(uv * 4.0 + vSeed * 17.0) * 0.6 + n(uv * 9.0 - vSeed * 5.0) * 0.4;
           float a = (1.0 - smoothstep(0.35, 1.0, r + (puff - 0.5) * 0.5));
           gl_FragColor = vec4(vCol.rgb * (0.8 + puff * 0.4), vCol.a * a);
           #include <colorspace_fragment>
@@ -139,23 +136,93 @@ const _f = new THREE.Vector3();
 const _u = new THREE.Vector3();
 const _l = new THREE.Vector3();
 const _e = new THREE.Vector3();
+const _m4 = new THREE.Matrix4();
+const _q4 = new THREE.Quaternion();
+const _s3 = new THREE.Vector3();
 const rand = (a, b) => a + Math.random() * (b - a);
 
 export class Effects {
-  constructor(scene, quality) {
+  constructor(scene, quality, style = 'classic') {
     this.scene = scene;
+    this.blocky = style === 'blocky';
     this.mult = quality === 'low' ? 0.45 : quality === 'medium' ? 0.75 : 1;
-    this.glow = new ParticleSystem(quality === 'low' ? 1500 : 4000, true);
-    this.smoke = new ParticleSystem(quality === 'low' ? 600 : 1800, false);
+    this.glow = new ParticleSystem(quality === 'low' ? 1500 : 4000, true, this.blocky);
+    this.smoke = new ParticleSystem(quality === 'low' ? 600 : 1800, false, this.blocky);
     scene.add(this.glow.mesh, this.smoke.mesh);
     this.flashes = [];
     this.sphereGeo = new THREE.SphereGeometry(1, 32, 16);
     this.ringGeo = new THREE.TorusGeometry(1, 0.06, 8, 64);
+    if (this.blocky) this.initCubes(quality === 'low' ? 120 : 320);
+  }
+
+  // instanced voxel debris (blocky world): tumbling cubes with gravity that bounce on the pitch
+  initCubes(max) {
+    const mat = new THREE.MeshStandardMaterial({ roughness: 0.55, metalness: 0.05, emissive: 0xffffff, emissiveIntensity: 0 });
+    mat.onBeforeCompile = (sh) => {
+      // emissive follows the instance colour so team blocks glow
+      sh.fragmentShader = sh.fragmentShader.replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\n totalEmissiveRadiance = vColor.rgb * 0.9;');
+    };
+    this.cubes = new THREE.InstancedMesh(new THREE.BoxGeometry(1, 1, 1), mat, max);
+    this.cubes.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(max * 3), 3);
+    this.cubes.count = 0;
+    this.cubes.frustumCulled = false;
+    this.cubes.castShadow = true;
+    this.scene.add(this.cubes);
+    this.cubeList = [];
+    this.cubeMax = max;
+  }
+
+  // burst of blocks from p (metres): cols = array of [r,g,b]
+  blocks(p, cols, n, speed, size = 0.35) {
+    if (!this.cubes) return;
+    n = Math.round(n * this.mult);
+    for (let i = 0; i < n; i++) {
+      if (this.cubeList.length >= this.cubeMax) this.cubeList.shift();
+      _v.set(rand(-1, 1), rand(-0.1, 1.2), rand(-1, 1)).normalize().multiplyScalar(rand(0.3, 1) * speed);
+      this.cubeList.push({
+        p: p.clone().add(new THREE.Vector3(rand(-0.4, 0.4), rand(-0.4, 0.4), rand(-0.4, 0.4))),
+        v: _v.clone(), r: new THREE.Euler(rand(0, 6), rand(0, 6), rand(0, 6)), w: new THREE.Vector3(rand(-9, 9), rand(-9, 9), rand(-9, 9)),
+        s: size * rand(0.6, 1.4), t: 0, life: rand(2.2, 3.6), c: cols[(Math.random() * cols.length) | 0],
+      });
+    }
+  }
+
+  updateCubes(dt) {
+    const m = _m4, q = _q4, sc = _s3;
+    const list = this.cubeList;
+    for (let i = list.length - 1; i >= 0; i--) {
+      const c = list[i];
+      c.t += dt;
+      if (c.t > c.life) { list.splice(i, 1); continue; }
+      c.v.y -= 16 * dt;
+      c.p.addScaledVector(c.v, dt);
+      const half = c.s / 2;
+      if (c.p.y < half) {
+        c.p.y = half;
+        c.v.y = Math.abs(c.v.y) * 0.35;
+        c.v.x *= 0.7; c.v.z *= 0.7;
+        c.w.multiplyScalar(0.6);
+      }
+      c.r.x += c.w.x * dt; c.r.y += c.w.y * dt; c.r.z += c.w.z * dt;
+    }
+    for (let i = 0; i < list.length; i++) {
+      const c = list[i];
+      const fade = Math.min(1, (c.life - c.t) / 0.6);
+      q.setFromEuler(c.r);
+      sc.setScalar(c.s * fade);
+      m.compose(c.p, q, sc);
+      this.cubes.setMatrixAt(i, m);
+      this.cubes.instanceColor.setXYZ(i, c.c[0], c.c[1], c.c[2]);
+    }
+    this.cubes.count = list.length;
+    this.cubes.instanceMatrix.needsUpdate = true;
+    this.cubes.instanceColor.needsUpdate = true;
   }
 
   clear() {
     this.glow.clear();
     this.smoke.clear();
+    if (this.cubes) { this.cubeList.length = 0; this.cubes.count = 0; }
     for (const f of this.flashes) this.scene.remove(f.mesh);
     this.flashes.length = 0;
   }
@@ -251,8 +318,9 @@ export class Effects {
 
   ballTrail(ball, pos) {
     const sp = ball.vel.length();
-    if (sp < 2600) return;
-    if (Math.random() > ((sp - 2600) / 2000) * this.mult) return;
+    const min = this.blocky ? 1700 : 2600;
+    if (sp < min) return;
+    if (Math.random() > ((sp - min) / 2000) * this.mult) return;
     _e.copy(pos).multiplyScalar(S);
     this.glow.emit(_e.x + rand(-0.3, 0.3), _e.y + rand(-0.3, 0.3), _e.z + rand(-0.3, 0.3), 0, 0, 0, 0.35, 1.0, 0.2, [0.6, 0.85, 1.4, 0.35], [0.2, 0.4, 1.0, 0], 0, 0);
   }
@@ -266,6 +334,7 @@ export class Effects {
       this.glow.emit(p.x, p.y, p.z, _v.x, _v.y, _v.z, rand(0.15, 0.35), rand(0.06, 0.12), 0.02, [3, 2.6, 1.8, 1], [2, 0.8, 0.2, 0], 2, 6);
     }
     if (strength > 1800) this.flash(p, 0xbfe3ff, 1.6, 0.18, 2.5);
+    if (this.blocky && strength > 1400) this.blocks(p, [[0.45, 0.75, 1.6], [1.2, 1.2, 1.3], [0.2, 0.22, 0.26]], 10, 7, 0.16);
   }
 
   boostPickup(pad) {
@@ -310,6 +379,10 @@ export class Effects {
     }
     this.flash(p, tc.main, big ? 9 : 3, big ? 0.55 : 0.3, 4);
     this.ring(p, tc.light, big ? 26 : 8, big ? 0.9 : 0.5);
+    if (this.blocky) {
+      const c = new THREE.Color(tc.main), l = new THREE.Color(tc.light);
+      this.blocks(p, [[c.r, c.g, c.b], [l.r, l.g, l.b], [1, 0.95, 0.8], [0.35, 0.6, 0.18]], big ? 150 : 40, big ? 22 : 10, big ? 0.55 : 0.35);
+    }
   }
 
   // car demolition: fireball, burning debris, black smoke, flash and shockwave
@@ -346,11 +419,16 @@ export class Effects {
     }
     this.flash(p, 0xff8a30, 3, 0.25, 2);
     this.ring(p, 0xffb060, 10, 0.55);
+    if (this.blocky) {
+      const c = new THREE.Color(tc.main);
+      this.blocks(p, [[c.r, c.g, c.b], [0.05, 0.05, 0.06], [0.12, 0.12, 0.13], [1.4, 0.6, 0.1]], 34, 11, 0.3);
+    }
   }
 
   update(dt) {
     this.glow.update(dt);
     this.smoke.update(dt);
+    if (this.cubes) this.updateCubes(dt);
     for (let i = this.flashes.length - 1; i >= 0; i--) {
       const f = this.flashes[i];
       f.t += dt;

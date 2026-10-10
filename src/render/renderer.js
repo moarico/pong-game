@@ -104,6 +104,8 @@ export class GameRenderer {
         r.setScissor(x * scale, y * scale, w * scale, hh * scale);
         r.setScissorTest(true);
       }
+      v.camera.layers.enable(1); // distant scenery lives on layer 1
+      v.camera.layers.enable(2); // boost pads (not reflected, no shadows)
       r.render(this.overrideScene || this.scene, v.camera);
     }
     if (target) {

@@ -3,6 +3,91 @@ import { ARENA, S, TEAM_COLORS } from '../config.js';
 import { wallOutline } from '../arena.js';
 import * as T from './textures.js';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
+import { SkySystem } from './world/sky.js';
+import { buildTerrain } from './world/terrain.js';
+import { buildFeatures } from './world/features.js';
+import { buildBlockStands, RIM } from './world/blockStadium.js';
+import { Reflector } from 'three/addons/objects/Reflector.js';
+import { Weather, WEATHER, fogDensities } from './world/weather.js';
+import { skyFog } from './world/blocks.js';
+
+export const WORLD_LAYER = 1; // distant scenery: skipped by the pitch reflection
+export const PITCH_LAYER = 2; // boost pads: skipped by the pitch reflection and the shadow pass
+
+// Wet pitch: a planar reflection of the stadium laid over the grass, rippled by the turf
+// and stronger at glancing angles.
+function wetPitch(renderer, quality) {
+  const size = new THREE.Vector2();
+  renderer.getDrawingBufferSize(size);
+  const div = quality === 'high' ? 2 : 3;
+  const noise = (() => {
+    const N = 64, d = new Uint8Array(N * N * 4);
+    for (let i = 0; i < N * N; i++) { d[i * 4] = Math.random() * 255; d[i * 4 + 1] = Math.random() * 255; d[i * 4 + 2] = 0; d[i * 4 + 3] = 255; }
+    const t = new THREE.DataTexture(d, N, N);
+    t.wrapS = t.wrapT = THREE.RepeatWrapping;
+    t.magFilter = THREE.LinearFilter;
+    t.needsUpdate = true;
+    return t;
+  })();
+  const shader = {
+    name: 'WetPitch',
+    uniforms: { color: { value: null }, tDiffuse: { value: null }, textureMatrix: { value: null }, tNoise: { value: noise }, uWet: { value: 0.4 }, uTime: { value: 0 }, uRain: { value: 0 }, uTexel: { value: new THREE.Vector2(1 / 512, 1 / 512) } },
+    vertexShader: /* glsl */ `
+      uniform mat4 textureMatrix;
+      varying vec4 vUv; varying vec2 vP; varying vec3 vW;
+      void main() {
+        vUv = textureMatrix * vec4(position, 1.0);
+        vP = position.xy / ${S.toFixed(4)};
+        vec4 w = modelMatrix * vec4(position, 1.0);
+        vW = w.xyz;
+        gl_Position = projectionMatrix * viewMatrix * w;
+      }`,
+    fragmentShader: /* glsl */ `
+      uniform sampler2D tDiffuse, tNoise;
+      uniform float uWet, uTime, uRain;
+      uniform vec2 uTexel;
+      varying vec4 vUv; varying vec2 vP; varying vec3 vW;
+      void main() {
+        vec2 a = abs(vP);
+        if (a.x > ${(HX - RR).toFixed(1)} || a.y > ${(HZ - RR).toFixed(1)} || a.x + a.y > ${(HX + HZ - ARENA.chamfer - RR * 0.6).toFixed(1)}) discard;
+        // slow, broad ripples in the wet turf; raindrops add fine ones
+        vec2 n = texture2D(tNoise, vP / 1100.0).rg + texture2D(tNoise, vP / 420.0 + uTime * 0.004).rg * 0.5 - 0.75;
+        n += (texture2D(tNoise, vP / 90.0 + vec2(uTime * 0.9, uTime * 0.7)).rg - 0.5) * uRain * 0.8;
+        vec4 uv = vUv;
+        uv.xy += n * 0.007 * uv.w;
+        // soft five-tap blur: grass is never a perfect mirror
+        vec2 o = uTexel * 1.7 * uv.w;
+        vec3 refl = texture2DProj(tDiffuse, uv).rgb * 2.0
+          + texture2DProj(tDiffuse, uv + vec4(o.x, 0.0, 0.0, 0.0)).rgb + texture2DProj(tDiffuse, uv - vec4(o.x, 0.0, 0.0, 0.0)).rgb
+          + texture2DProj(tDiffuse, uv + vec4(0.0, o.y, 0.0, 0.0)).rgb + texture2DProj(tDiffuse, uv - vec4(0.0, o.y, 0.0, 0.0)).rgb;
+        refl = min(refl / 6.0, vec3(1.3)); // keep floodlight glints from blooming into blotches
+        vec3 V = normalize(cameraPosition - vW);
+        float fres = 0.04 + 0.96 * pow(1.0 - clamp(V.y, 0.0, 1.0), 4.0);
+        float edge = smoothstep(0.0, 260.0, ${(HX - RR).toFixed(1)} - a.x) * smoothstep(0.0, 260.0, ${(HZ - RR).toFixed(1)} - a.y);
+        gl_FragColor = vec4(refl * vec3(0.85, 0.95, 0.9), uWet * mix(0.1, 0.62, fres) * edge);
+        #include <tonemapping_fragment>
+        #include <colorspace_fragment>
+      }`,
+  };
+  const geo = new THREE.PlaneGeometry(2 * HX * S, 2 * HZ * S);
+  const mirror = new Reflector(geo, { textureWidth: Math.round(size.x / div), textureHeight: Math.round(size.y / div), clipBias: 0.003, multisample: 0, shader });
+  mirror.material.transparent = true;
+  mirror.material.depthWrite = false;
+  mirror.rotation.x = -Math.PI / 2;
+  mirror.position.y = quality === 'high' ? 0.085 : 0.03;
+  mirror.renderOrder = 1;
+  // the reflection skips the far-away landscape and the flat boost pads
+  const getCam = mirror.getReflectionCamera;
+  mirror.getReflectionCamera = (camera) => { const c = getCam.call(mirror, camera); c.layers.mask = camera.layers.mask & ~((1 << WORLD_LAYER) | (1 << PITCH_LAYER)); return c; };
+  mirror.fitTo = (r) => {
+    r.getDrawingBufferSize(size);
+    const w = Math.round(size.x / div), h = Math.round(size.y / div);
+    const rt = mirror.getRenderTarget();
+    if (rt.width !== w || rt.height !== h) rt.setSize(w, h);
+    mirror.material.uniforms.uTexel.value.set(1 / w, 1 / h);
+  };
+  return mirror;
+}
 
 const { halfX: HX, halfZ: HZ, height: H, rampR: RR, goalHalfW: GW, goalH: GH, goalDepth: GD } = ARENA;
 
@@ -201,7 +286,8 @@ function floorShapeGeometry(pts, inset) {
 }
 
 export function buildStadium(renderer, scene, opts) {
-  const preset = PRESETS[opts.timeOfDay] || PRESETS.night;
+  const blocky = opts.theme !== 'classic';
+  const preset = blocky ? PRESETS.sunset : PRESETS[opts.timeOfDay] || PRESETS.sunset; // classic: night or sunset
   const quality = opts.quality;
   const root = new THREE.Group();
   const arena = new THREE.Group(); // in uu
@@ -217,32 +303,48 @@ export function buildStadium(renderer, scene, opts) {
 
   scene.fog = new THREE.FogExp2(preset.fog, preset.fogDensity * 0.35);
 
-  // ---- sky + city
-  const sky = new THREE.Mesh(new THREE.SphereGeometry(2500, 48, 24), skyMaterial(preset));
-  sky.renderOrder = -10;
-  sky.frustumCulled = false;
-  root.add(sky);
-
-  const rnd = T.rng(42);
-  const bGeo = new THREE.BoxGeometry(1, 1, 1);
-  bGeo.translate(0, 0.5, 0);
-  const nB = 190;
-  const buildings = new THREE.InstancedMesh(bGeo, buildingMaterial(preset), nB);
   const m = new THREE.Matrix4();
-  for (let i = 0; i < nB; i++) {
-    const a = rnd() * Math.PI * 2;
-    const r = 170 + rnd() * 380 + (rnd() < 0.3 ? 250 : 0);
-    const w = 18 + rnd() * 40, d = 18 + rnd() * 40;
-    const h = 30 + Math.pow(rnd(), 2) * 260 + (r > 400 ? 60 : 0);
-    m.compose(new THREE.Vector3(Math.cos(a) * r, -5, Math.sin(a) * r * 1.2), new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), rnd() * 0.6), new THREE.Vector3(w, h, d));
-    buildings.setMatrixAt(i, m);
+  let buildings, ground, world = null;
+  if (blocky) {
+    // ---- blocky world: dynamic sky, voxel landscape and landmarks
+    const wcfg = WEATHER[opts.weather] || WEATHER.clear;
+    const sky = new SkySystem(renderer, scene, quality, { time: opts.timeOfDay, weather: opts.weather });
+    sky.setWeather(wcfg.cover);
+    skyFog.density.value = fogDensities(wcfg).block;
+    const weather = new Weather(root, quality, opts.weather, WORLD_LAYER);
+    const terrain = buildTerrain(root, quality, { inner: 30 });
+    const features = buildFeatures(root, quality);
+    for (const g of [terrain.group, features.group]) g.traverse((o) => o.layers.set(WORLD_LAYER));
+    world = { sky, terrain, features, weather, wcfg };
+    buildings = terrain.oaks; // the victory cinematic pulls these into the black hole
+    ground = terrain.group;
+  } else {
+    // ---- sky + city
+    const sky = new THREE.Mesh(new THREE.SphereGeometry(2500, 48, 24), skyMaterial(preset));
+    sky.renderOrder = -10;
+    sky.frustumCulled = false;
+    root.add(sky);
+
+    const rnd = T.rng(42);
+    const bGeo = new THREE.BoxGeometry(1, 1, 1);
+    bGeo.translate(0, 0.5, 0);
+    const nB = 190;
+    buildings = new THREE.InstancedMesh(bGeo, buildingMaterial(preset), nB);
+    for (let i = 0; i < nB; i++) {
+      const a = rnd() * Math.PI * 2;
+      const r = 170 + rnd() * 380 + (rnd() < 0.3 ? 250 : 0);
+      const w = 18 + rnd() * 40, d = 18 + rnd() * 40;
+      const h = 30 + Math.pow(rnd(), 2) * 260 + (r > 400 ? 60 : 0);
+      m.compose(new THREE.Vector3(Math.cos(a) * r, -5, Math.sin(a) * r * 1.2), new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), rnd() * 0.6), new THREE.Vector3(w, h, d));
+      buildings.setMatrixAt(i, m);
+    }
+    root.add(buildings);
+    // ground outside the stadium
+    ground = new THREE.Mesh(new THREE.CircleGeometry(1400, 48), new THREE.MeshStandardMaterial({ color: 0x0d0f12, roughness: 1 }));
+    ground.rotation.x = -Math.PI / 2;
+    ground.position.y = -6;
+    root.add(ground);
   }
-  root.add(buildings);
-  // ground outside the stadium
-  const ground = new THREE.Mesh(new THREE.CircleGeometry(1400, 48), new THREE.MeshStandardMaterial({ color: 0x0d0f12, roughness: 1 }));
-  ground.rotation.x = -Math.PI / 2;
-  ground.position.y = -6;
-  root.add(ground);
 
   // ---- lights
   const hemi = new THREE.HemisphereLight(preset.hemiSky, preset.hemiGround, preset.hemi);
@@ -261,6 +363,10 @@ export function buildStadium(renderer, scene, opts) {
     key.shadow.bias = -0.0004;
     key.shadow.normalBias = 0.02;
   }
+  // stadium floodlights: keep the pitch readable whatever the sky is doing
+  const flood = new THREE.DirectionalLight(0xf2f5ff, 0);
+  flood.position.set(-20, 100, 30);
+  root.add(flood);
 
   // ---- field
   const pts = wallOutline(200, 6);
@@ -274,6 +380,8 @@ export function buildStadium(renderer, scene, opts) {
   const floor = new THREE.Mesh(floorGeo, floorMat);
   floor.receiveShadow = true;
   arena.add(floor);
+  const wet = blocky && quality !== 'low' ? wetPitch(renderer, quality) : null;
+  if (wet) root.add(wet);
 
   if (quality === 'high') {
     // grass shells: stacked alpha-tested layers that give the turf some depth
@@ -434,70 +542,81 @@ export function buildStadium(renderer, scene, opts) {
   }
 
   // ---- stands
-  const crowd = T.crowdTexture();
-  const standMat = cuttable(new THREE.MeshStandardMaterial({ map: crowd, roughness: 0.95, emissive: 0xffffff, emissiveMap: crowd, emissiveIntensity: 0.07, side: THREE.DoubleSide }));
   const darkMat = cuttable(new THREE.MeshStandardMaterial({ color: 0x15181e, roughness: 0.8, metalness: 0.3, side: THREE.DoubleSide }));
-  const lower = [[-60, 720], [-1200, 1240], [-2300, 1760], [-3300, 2300]];
-  const upper = [[-3300, 2780], [-4200, 3250], [-5100, 3720], [-5900, 4150]];
-  const slopeV = (prof) => {
-    let acc = 0;
-    const vs = [0];
-    for (let k = 1; k < prof.length; k++) { acc += Math.hypot(prof[k][0] - prof[k - 1][0], prof[k][1] - prof[k - 1][1]); vs.push(acc); }
-    return (j) => vs[j] / 900;
-  };
-  arena.add(new THREE.Mesh(stripGeometry(pts, lower, { uLen: 3400, vOf: slopeV(lower) }), standMat));
-  arena.add(new THREE.Mesh(stripGeometry(pts, upper, { uLen: 3400, vOf: slopeV(upper) }), standMat));
   // front wall below the lower bowl (cut around the goals)
   const front = new THREE.Mesh(stripGeometry(pts, [[-60, 0], [-60, GH + 40], [-60, 720]], { uLen: 4200, vOf: (j) => (j === 0 ? 0 : j === 1 ? 0.5 : 1), skip: goalCut(GH + 40, 60) }), darkMat);
   arena.add(front);
-  // ribbon LED board between the decks
-  const ribbonTex = T.adTexture();
-  const ribbon = new THREE.Mesh(
-    stripGeometry(pts, [[-3300, 2300], [-3300, 2780]], { uLen: 5200, vOf: (j) => j }),
-    cuttable(new THREE.MeshStandardMaterial({ color: 0x050505, emissive: 0xffffff, emissiveMap: ribbonTex, emissiveIntensity: 1.6, side: THREE.DoubleSide })),
-  );
-  arena.add(ribbon);
-  anim.push((dt) => { ribbonTex.offset.x = (ribbonTex.offset.x - dt * 0.02) % 1; });
-  // back wall with a light rim, then an open canopy so the sky and city show above the field
-  arena.add(new THREE.Mesh(stripGeometry(pts, [[-5900, 4150], [-5900, 4650]], { uLen: 2000 }), darkMat));
-  const rimMat = cuttable(new THREE.MeshBasicMaterial({ vertexColors: true, fog: false, side: THREE.DoubleSide }));
-  arena.add(new THREE.Mesh(stripGeometry(pts, [[-5900, 4650], [-5900, 4700]], { colorOf: (x, y, z) => teamTint(z, 2.2) }), rimMat));
-  const roofMat = cuttable(new THREE.MeshStandardMaterial({ color: 0x0e1014, roughness: 0.8, metalness: 0.4, side: THREE.DoubleSide }));
-  arena.add(new THREE.Mesh(stripGeometry(pts, [[-6500, 5350], [-4200, 5220], [-1900, 5120]], { uLen: 2000 }), roofMat));
-  arena.add(new THREE.Mesh(stripGeometry(pts, [[-1900, 5120], [-1900, 5020]], { uLen: 2000 }), darkMat));
+  let crowd, blockStands = null;
+  const rimOff = blocky ? RIM.offset - 60 : 5950, rimY = blocky ? RIM.y : 4650;
+  if (blocky) {
+    const concourseAds = T.adTexture();
+    arena.userData.adsTexture = concourseAds;
+    anim.push((dt) => { concourseAds.offset.x = (concourseAds.offset.x - dt * 0.02) % 1; });
+    blockStands = buildBlockStands({ arena, root, pts, stripGeometry, teamTint, cuttable, quality, flood });
+    crowd = blockStands.crowd;
+  } else {
+    // ---- classic stands
+    crowd = T.crowdTexture();
+    const standMat = cuttable(new THREE.MeshStandardMaterial({ map: crowd, roughness: 0.95, emissive: 0xffffff, emissiveMap: crowd, emissiveIntensity: 0.07, side: THREE.DoubleSide }));
+    const lower = [[-60, 720], [-1200, 1240], [-2300, 1760], [-3300, 2300]];
+    const upper = [[-3300, 2780], [-4200, 3250], [-5100, 3720], [-5900, 4150]];
+    const slopeV = (prof) => {
+      let acc = 0;
+      const vs = [0];
+      for (let k = 1; k < prof.length; k++) { acc += Math.hypot(prof[k][0] - prof[k - 1][0], prof[k][1] - prof[k - 1][1]); vs.push(acc); }
+      return (j) => vs[j] / 900;
+    };
+    arena.add(new THREE.Mesh(stripGeometry(pts, lower, { uLen: 3400, vOf: slopeV(lower) }), standMat));
+    arena.add(new THREE.Mesh(stripGeometry(pts, upper, { uLen: 3400, vOf: slopeV(upper) }), standMat));
+    // ribbon LED board between the decks
+    const ribbonTex = T.adTexture();
+    const ribbon = new THREE.Mesh(
+      stripGeometry(pts, [[-3300, 2300], [-3300, 2780]], { uLen: 5200, vOf: (j) => j }),
+      cuttable(new THREE.MeshStandardMaterial({ color: 0x050505, emissive: 0xffffff, emissiveMap: ribbonTex, emissiveIntensity: 1.6, side: THREE.DoubleSide })),
+    );
+    arena.add(ribbon);
+    anim.push((dt) => { ribbonTex.offset.x = (ribbonTex.offset.x - dt * 0.02) % 1; });
+    // back wall with a light rim, then an open canopy so the sky and city show above the field
+    arena.add(new THREE.Mesh(stripGeometry(pts, [[-5900, 4150], [-5900, 4650]], { uLen: 2000 }), darkMat));
+    const rimMat = cuttable(new THREE.MeshBasicMaterial({ vertexColors: true, fog: false, side: THREE.DoubleSide }));
+    arena.add(new THREE.Mesh(stripGeometry(pts, [[-5900, 4650], [-5900, 4700]], { colorOf: (x, y, z) => teamTint(z, 2.2) }), rimMat));
+    const roofMat = cuttable(new THREE.MeshStandardMaterial({ color: 0x0e1014, roughness: 0.8, metalness: 0.4, side: THREE.DoubleSide }));
+    arena.add(new THREE.Mesh(stripGeometry(pts, [[-6500, 5350], [-4200, 5220], [-1900, 5120]], { uLen: 2000 }), roofMat));
+    arena.add(new THREE.Mesh(stripGeometry(pts, [[-1900, 5120], [-1900, 5020]], { uLen: 2000 }), darkMat));
 
-  // trusses with light strips spanning the open roof
-  const trussMat = new THREE.MeshStandardMaterial({ color: 0x1a1d22, roughness: 0.6, metalness: 0.7 });
-  const lightMat = cuttable(new THREE.MeshBasicMaterial({ color: new THREE.Color(4.2, 4.2, 4.0), fog: false }));
-  const trussZ = [-3700, -1250, 1250, 3700];
-  const lightGeo = new THREE.BoxGeometry(150, 14, 60);
-  const lightCount = trussZ.length * 30 + 160;
-  const lights = new THREE.InstancedMesh(lightGeo, lightMat, lightCount);
-  let li = 0;
-  for (const z of trussZ) {
-    const beam = new THREE.Mesh(new THREE.BoxGeometry(2 * HX + 4400, 200, 140), trussMat);
-    beam.position.set(0, 5560, z);
-    arena.add(beam);
-    const chord = new THREE.Mesh(new THREE.BoxGeometry(2 * HX + 4400, 60, 60), trussMat);
-    chord.position.set(0, 5180, z);
-    arena.add(chord);
-    for (let k = 0; k < 30; k++) {
-      const x = -HX - 1300 + (k * (2 * HX + 2600)) / 29;
-      m.makeTranslation(x, 5140, z);
+    // trusses with light strips spanning the open roof
+    const trussMat = new THREE.MeshStandardMaterial({ color: 0x1a1d22, roughness: 0.6, metalness: 0.7 });
+    const lightMat = cuttable(new THREE.MeshBasicMaterial({ color: new THREE.Color(4.2, 4.2, 4.0), fog: false }));
+    const trussZ = [-3700, -1250, 1250, 3700];
+    const lightGeo = new THREE.BoxGeometry(150, 14, 60);
+    const lightCount = trussZ.length * 30 + 160;
+    const lights = new THREE.InstancedMesh(lightGeo, lightMat, lightCount);
+    let li = 0;
+    for (const z of trussZ) {
+      const beam = new THREE.Mesh(new THREE.BoxGeometry(2 * HX + 4400, 200, 140), trussMat);
+      beam.position.set(0, 5560, z);
+      arena.add(beam);
+      const chord = new THREE.Mesh(new THREE.BoxGeometry(2 * HX + 4400, 60, 60), trussMat);
+      chord.position.set(0, 5180, z);
+      arena.add(chord);
+      for (let k = 0; k < 30; k++) {
+        const x = -HX - 1300 + (k * (2 * HX + 2600)) / 29;
+        m.makeTranslation(x, 5140, z);
+        lights.setMatrixAt(li++, m);
+      }
+    }
+    // floodlight banks along the canopy edge
+    const ringPts = wallOutline(420, 3);
+    for (const p of ringPts) {
+      if (li >= lightCount) break;
+      const x = p.x - p.nx * 1950, z = p.z - p.nz * 1950;
+      m.makeRotationY(Math.atan2(p.nx, p.nz));
+      m.setPosition(x, 5010, z);
       lights.setMatrixAt(li++, m);
     }
+    lights.count = li;
+    arena.add(lights);
   }
-  // floodlight banks along the canopy edge
-  const ringPts = wallOutline(420, 3);
-  for (const p of ringPts) {
-    if (li >= lightCount) break;
-    const x = p.x - p.nx * 1950, z = p.z - p.nz * 1950;
-    m.makeRotationY(Math.atan2(p.nx, p.nz));
-    m.setPosition(x, 5010, z);
-    lights.setMatrixAt(li++, m);
-  }
-  lights.count = li;
-  arena.add(lights);
 
   // ---- big score screens above each end (reference photo 2)
   const screens = [];
@@ -519,7 +638,10 @@ export function buildStadium(renderer, scene, opts) {
         leg.position.set(sx * w * 0.35, -h / 2 - 1000, -60);
         g.add(leg);
       }
-      g.position.set(0, 4300, sz * (HZ + 4000));
+      if (blocky) {
+        g.position.set(0, 8700, sz * (HZ + 6200));
+        g.scale.setScalar(1.5);
+      } else g.position.set(0, 4300, sz * (HZ + 4000));
       g.rotation.order = 'YXZ';
       g.rotation.y = sz > 0 ? Math.PI : 0;
       g.rotation.x = 0.12; // lean toward the field
@@ -586,13 +708,13 @@ export function buildStadium(renderer, scene, opts) {
     const poles = new THREE.InstancedMesh(poleGeo, poleMat, ring.length);
     const byDesign = designs.map(() => []);
     ring.forEach((p, i) => {
-      const x = p.x - p.nx * 5950, z = p.z - p.nz * 5950;
-      m.makeTranslation(x, 4650 + 260, z);
+      const x = p.x - p.nx * rimOff, z = p.z - p.nz * rimOff;
+      m.makeTranslation(x, rimY + 260, z);
       poles.setMatrixAt(i, m);
       const geo = new THREE.PlaneGeometry(fw, fh, 8, 1);
       geo.translate(fw / 2, 0, 0);
       geo.rotateY(Math.atan2(p.nx, p.nz)); // face the field, fly along the stands
-      geo.translate(x, 4650 + 420, z);
+      geo.translate(x, rimY + 420, z);
       byDesign[i % designs.length].push(geo);
     });
     arena.add(poles);
@@ -624,7 +746,7 @@ export function buildStadium(renderer, scene, opts) {
   anim.push((dt) => { flagTime.value += dt; });
 
   // ---- searchlights sweeping the night sky (reference photo 2)
-  if (preset.stars) {
+  if (preset.stars && !blocky) {
     const c = document.createElement('canvas');
     c.width = 4; c.height = 256;
     const g = c.getContext('2d');
@@ -699,7 +821,11 @@ export function buildStadium(renderer, scene, opts) {
   const padBaseMat = new THREE.MeshStandardMaterial({ color: 0x2a2f36, roughness: 0.4, metalness: 0.7 });
   const smallGeo = new THREE.CylinderGeometry(70, 80, 6, 32);
   const bigBaseGeo = new THREE.CylinderGeometry(150, 175, 14, 40);
-  const ringGeo = new THREE.TorusGeometry(64, 7, 8, 40);
+  // small pads: ring and glowing core share one mesh
+  const smallGlowGeo = mergeGeometries([
+    new THREE.TorusGeometry(64, 7, 8, 40).rotateX(Math.PI / 2),
+    new THREE.CircleGeometry(40, 24).rotateX(-Math.PI / 2),
+  ].map((g) => { g.deleteAttribute('uv'); return g; }));
   const bigRingGeo = new THREE.TorusGeometry(140, 10, 8, 48);
   const orbGeo = new THREE.SphereGeometry(52, 24, 16);
   const coneGeo = new THREE.CylinderGeometry(70, 150, 260, 32, 1, true);
@@ -718,24 +844,26 @@ export function buildStadium(renderer, scene, opts) {
       orb.position.y = 110;
       const cone = new THREE.Mesh(coneGeo, new THREE.MeshBasicMaterial({ color: 0xff9a30, transparent: true, opacity: 0.13, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide }));
       cone.position.y = 135;
+      base.layers.set(PITCH_LAYER);
+      ring.layers.set(PITCH_LAYER);
       grp.add(base, ring, orb, cone);
       pads.push({ pad, grp, ring, orb, cone, glowMat });
     } else {
       const base = new THREE.Mesh(smallGeo, padBaseMat);
       base.position.y = 2;
-      const ring = new THREE.Mesh(ringGeo, glowMat);
-      ring.rotation.x = Math.PI / 2;
+      const ring = new THREE.Mesh(smallGlowGeo, glowMat);
       ring.position.y = 6;
-      const core = new THREE.Mesh(new THREE.CircleGeometry(40, 24), glowMat);
-      core.rotation.x = -Math.PI / 2;
-      core.position.y = 6;
-      grp.add(base, ring, core);
+      base.layers.set(PITCH_LAYER);
+      ring.layers.set(PITCH_LAYER);
+      grp.add(base, ring);
       pads.push({ pad, grp, ring, glowMat });
     }
     arena.add(grp);
   }
 
-  // ---- environment map for reflections
+  // ---- environment map for reflections (the blocky sky makes its own)
+  let env = null;
+  if (!blocky) {
   const envScene = new THREE.Scene();
   envScene.add(new THREE.Mesh(new THREE.SphereGeometry(100, 32, 16), skyMaterial(preset)));
   const envLight = new THREE.MeshBasicMaterial({ color: new THREE.Color(12, 12, 11) });
@@ -751,10 +879,46 @@ export function buildStadium(renderer, scene, opts) {
   envFloor.position.y = -2;
   envScene.add(envFloor);
   const pmrem = new THREE.PMREMGenerator(renderer);
-  const env = pmrem.fromScene(envScene, 0.03).texture;
+  env = pmrem.fromScene(envScene, 0.03).texture;
   pmrem.dispose();
   scene.environment = env;
   scene.environmentIntensity = preset.envI;
+  } else {
+    scene.environmentIntensity = 0.85;
+  }
+
+  // ---- blocky world lighting follows the sky
+  const _fogC = new THREE.Color();
+  const MOON = new THREE.Color(0x9fb4ff), WHITE = new THREE.Color(1, 1, 1);
+  function updateWorld(dt) {
+    const { sky, terrain, features, weather, wcfg } = world;
+    const strike = weather.update(dt, sky);
+    sky.update(dt);
+    terrain.update(dt, sky);
+    features.update(dt, sky);
+    if (blockStands) blockStands.update(dt, sky);
+    if (wet) {
+      wet.fitTo(renderer);
+      wet.material.uniforms.uTime.value += dt;
+      wet.material.uniforms.uWet.value = 0.5 + sky.cover * 0.15 + wcfg.wet * 0.4;
+      wet.material.uniforms.uRain.value = Math.min(1, wcfg.rain);
+    }
+    const w = sky.w;
+    key.position.copy(sky.lightDir).multiplyScalar(120);
+    key.color.copy(sky.colors.sun).lerp(MOON, w.night);
+    key.intensity = (w.day * 3.0 + w.sunset * 2.6 + w.night * 0.35) * (1 - sky.cover * 0.55);
+    hemi.color.copy(sky.colors.zenith).lerp(WHITE, 0.45);
+    hemi.groundColor.setRGB(0.16, 0.2, 0.12).multiplyScalar(0.4 + w.day * 0.8);
+    hemi.intensity = (0.35 + w.day * 0.65 + w.sunset * 0.45) * (1 - wcfg.rain * 0.12) + strike * 2.2;
+    flood.intensity = 0.35 + w.night * 1.9 + w.sunset * 0.6 + sky.cover * 0.5;
+    renderer.toneMappingExposure = 0.9 * w.day + 1.02 * w.sunset + 1.12 * w.night;
+    _fogC.copy(sky.colors.horizon).lerp(sky.colors.away, 0.5);
+    scene.fog.color.copy(_fogC);
+  }
+  if (world) {
+    scene.fog.density = fogDensities(world.wcfg).scene;
+    updateWorld(0);
+  }
 
   // crowd bounce when someone scores
   let cheer = 0;
@@ -797,11 +961,19 @@ export function buildStadium(renderer, scene, opts) {
           m.dispose();
         }
       });
-      env.dispose();
+      if (env) env.dispose();
+      if (world) { world.sky.dispose(); world.weather.dispose(); }
+      if (wet) wet.dispose();
       scene.environment = null;
+      scene.background = null;
       scene.fog = null;
     },
-    update(dt) { for (const f of anim) f(dt); },
+    update(dt) {
+      for (const f of anim) f(dt);
+      if (world) updateWorld(dt);
+    },
+    world,
+    wet,
     cheer(amount = 1) { cheer = Math.max(cheer, amount); },
     pyroPoints,
     setScreens(s0, s1, clock, flash) { drawScreens(s0, s1, clock, flash); },
@@ -816,8 +988,8 @@ export function buildStadium(renderer, scene, opts) {
       buildings,
       ground,
       // stands cross-section behind a goal, [offset behind the back wall, height] in uu
-      standEdge: [[GD, 1094], [1200, 1240], [2300, 1760], [3300, 2300], [3300, 2780], [4200, 3250], [5100, 3720], [5900, 4150], [5900, 4700]],
-      roofEdge: [[1900, 5020], [1900, 5120], [4200, 5220], [6500, 5350]],
+      standEdge: blockStands ? blockStands.profile.standEdge : [[GD, 1094], [1200, 1240], [2300, 1760], [3300, 2300], [3300, 2780], [4200, 3250], [5100, 3720], [5900, 4150], [5900, 4700]],
+      roofEdge: blockStands ? blockStands.profile.roofEdge : [[1900, 5020], [1900, 5120], [4200, 5220], [6500, 5350]],
       // angle 0 = closed, PI/2 = lying flat outside the goal
       setGoalFlap(team, angle) {
         const gb = goalBacks[team];
