@@ -286,7 +286,9 @@ function floorShapeGeometry(pts, inset) {
 }
 
 export function buildStadium(renderer, scene, opts) {
+  // 'realistic' and 'blocky' share the open-world stadium; 'blocky' builds it from Minecraft-style blocks
   const blocky = opts.theme !== 'classic';
+  const style = opts.theme === 'blocky' ? 'blocky' : 'realistic';
   const preset = blocky ? PRESETS.sunset : PRESETS[opts.timeOfDay] || PRESETS.sunset; // classic: night or sunset
   const quality = opts.quality;
   const root = new THREE.Group();
@@ -306,14 +308,14 @@ export function buildStadium(renderer, scene, opts) {
   const m = new THREE.Matrix4();
   let buildings, ground, world = null;
   if (blocky) {
-    // ---- blocky world: dynamic sky, voxel landscape and landmarks
+    // ---- open world: dynamic sky, landscape and landmarks
     const wcfg = WEATHER[opts.weather] || WEATHER.clear;
     const sky = new SkySystem(renderer, scene, quality, { time: opts.timeOfDay, weather: opts.weather });
     sky.setWeather(wcfg.cover);
-    skyFog.density.value = fogDensities(wcfg).block;
+    skyFog.density.value = fogDensities(wcfg).block * (style === 'blocky' ? 1 : 0.7);
     const weather = new Weather(root, quality, opts.weather, WORLD_LAYER);
-    const terrain = buildTerrain(root, quality, { inner: 30 });
-    const features = buildFeatures(root, quality);
+    const terrain = buildTerrain(root, quality, { inner: 30, style });
+    const features = buildFeatures(root, quality, style);
     for (const g of [terrain.group, features.group]) g.traverse((o) => o.layers.set(WORLD_LAYER));
     world = { sky, terrain, features, weather, wcfg };
     buildings = terrain.oaks; // the victory cinematic pulls these into the black hole
@@ -381,6 +383,8 @@ export function buildStadium(renderer, scene, opts) {
   floor.receiveShadow = true;
   arena.add(floor);
   const wet = blocky && quality !== 'low' ? wetPitch(renderer, quality) : null;
+  // dry grass only shows a faint sheen at low angles; rain soaks it
+  const dryWet = style === 'blocky' ? 0.5 : 0.1;
   if (wet) root.add(wet);
 
   if (quality === 'high') {
@@ -442,7 +446,7 @@ export function buildStadium(renderer, scene, opts) {
   }
   const glassMat = new THREE.MeshStandardMaterial({
     color: 0x7fa6d8, emissive: 0x9cc8ff, emissiveMap: hex, emissiveIntensity: 0.16,
-    alphaMap: hex, transparent: true, opacity: 0.32, depthWrite: false, roughness: 0.1, metalness: 0.2, side: THREE.DoubleSide,
+    alphaMap: hex, transparent: true, opacity: 0.32, depthWrite: false, roughness: 0.35, metalness: 0.2, side: THREE.DoubleSide,
   });
   hex.repeat.set(1, 1);
   const glass = new THREE.Mesh(stripGeometry(pts, glassProfile, { uLen: 900, vOf: (j, y) => y / 1040, skip: goalCut(GH) }), glassMat);
@@ -552,7 +556,7 @@ export function buildStadium(renderer, scene, opts) {
     const concourseAds = T.adTexture();
     arena.userData.adsTexture = concourseAds;
     anim.push((dt) => { concourseAds.offset.x = (concourseAds.offset.x - dt * 0.02) % 1; });
-    blockStands = buildBlockStands({ arena, root, pts, stripGeometry, teamTint, cuttable, quality, flood });
+    blockStands = buildBlockStands({ arena, root, pts, stripGeometry, teamTint, cuttable, quality, flood, style });
     crowd = blockStands.crowd;
   } else {
     // ---- classic stands
@@ -900,7 +904,7 @@ export function buildStadium(renderer, scene, opts) {
     if (wet) {
       wet.fitTo(renderer);
       wet.material.uniforms.uTime.value += dt;
-      wet.material.uniforms.uWet.value = 0.5 + sky.cover * 0.15 + wcfg.wet * 0.4;
+      wet.material.uniforms.uWet.value = dryWet + sky.cover * 0.1 + wcfg.wet * 0.55;
       wet.material.uniforms.uRain.value = Math.min(1, wcfg.rain);
     }
     const w = sky.w;

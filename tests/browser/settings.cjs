@@ -24,7 +24,7 @@ const path = require('path');
   await waitFrames(3);
   console.log('quality now', await ev(() => window.__app.gfx.quality), 'canvases', await ev(() => document.querySelectorAll('canvas').length));
   // every world / time of day / weather combination rebuilds behind the menu without errors
-  for (const [world, timeOfDay, weather] of [['classic', 'night', 'clear'], ['blocky', 'night', 'storm'], ['blocky', 'day', 'rain'], ['blocky', 'cycle', 'fog'], ['blocky', 'sunset', 'cloudy'], ['classic', 'day', 'rain']]) {
+  for (const [world, timeOfDay, weather] of [['classic', 'night', 'clear'], ['realistic', 'night', 'storm'], ['realistic', 'day', 'rain'], ['blocky', 'cycle', 'fog'], ['realistic', 'sunset', 'cloudy'], ['blocky', 'day', 'clear'], ['classic', 'day', 'rain']]) {
     await ev((s) => { const a = window.__app; Object.assign(a.settings, s); a.applySettings(); }, { world, timeOfDay, weather });
     await waitFrames(3);
     console.log('world', await ev(() => window.__app.builtTime), 'rain', await ev(() => !!(window.__app.stadium.world && window.__app.stadium.world.weather.rain)), 'attract', await ev(() => window.__app.match.attract));

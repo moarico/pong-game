@@ -4,6 +4,7 @@
 import * as THREE from 'three';
 import { B, BLOCKS, QuadBuilder, VoxelGrid, blockMaterial, rng, skyFog } from './blocks.js';
 import { SUNSET_DIR } from './sky.js';
+import { buildSmoothLand, realTreeGeometry, treeMaterial, treeSpots } from './landscape.js';
 
 // ------------------------------------------------------------------ noise
 function makePerlin(seed) {
@@ -270,10 +271,11 @@ const QUALITY = {
   low: { near: 8, extent: 1900, chunk: 256, oaks: 220, spruces: 90, treeNear: 380 },
 };
 
-export function buildTerrain(root, quality, { inner = 132 } = {}) {
+export function buildTerrain(root, quality, { inner = 132, style = 'blocky' } = {}) {
   const q = { ...(QUALITY[quality] || QUALITY.high), inner };
   const group = new THREE.Group();
   root.add(group);
+  if (style === 'realistic') return buildRealTerrain(group, quality, q);
   const mat = blockMaterial();
   const treeSpots = [];
   // chunks grouped into large tiles: few draw calls, still frustum culled
@@ -300,11 +302,7 @@ export function buildTerrain(root, quality, { inner = 132 } = {}) {
     meshes.push(m);
   }
 
-  // sea
-  const water = new THREE.Mesh(new THREE.PlaneGeometry(q.extent * 2.4, q.extent * 2.4), waterMaterial());
-  water.rotation.x = -Math.PI / 2;
-  water.position.y = SEA_Y + 0.4;
-  group.add(water);
+  const water = addSea(group, q);
 
   // forests: oaks in the lowlands, spruces higher up
   const r = rng(77);
@@ -340,15 +338,69 @@ export function buildTerrain(root, quality, { inner = 132 } = {}) {
   place(far(oakSpots), q.oaks * 2, treeGeometry('oakFar'), 7, 11);
   place(far(spruceSpots), q.spruces * 2, treeGeometry('spruceFar'), 11, 17);
 
-  return {
-    group, water, oaks, spruces, material: mat,
-    update(dt, sky) {
-      const u = water.material.uniforms;
-      u.uTime.value += dt;
-      u.uSunDir.value.copy(sky.sunDir);
-      u.uSunColor.value.copy(sky.colors.sun).multiplyScalar(sky.w.day + sky.w.sunset);
-    },
+  return { group, water, oaks, spruces, material: mat, update: seaUpdater(water) };
+}
+
+function addSea(group, q) {
+  const water = new THREE.Mesh(new THREE.PlaneGeometry(q.extent * 2.4, q.extent * 2.4), waterMaterial());
+  water.rotation.x = -Math.PI / 2;
+  water.position.y = SEA_Y + 0.4;
+  group.add(water);
+  return water;
+}
+
+function seaUpdater(water) {
+  return (dt, sky) => {
+    const u = water.material.uniforms;
+    u.uTime.value += dt;
+    u.uSunDir.value.copy(sky.sunDir);
+    u.uSunColor.value.copy(sky.colors.sun).multiplyScalar(sky.w.day + sky.w.sunset);
   };
+}
+
+// realistic: smooth textured ground, broadleaf and pine forests
+function buildRealTerrain(group, quality, q) {
+  const env = { heightAt, fbm, SEA_Y, PLAZA_Y, plazaR: PLAZA_R, extent: q.extent };
+  const land = buildSmoothLand(group, quality, env);
+  const water = addSea(group, q);
+  const mat = treeMaterial();
+  const r = rng(91);
+  const spots = treeSpots(env, quality);
+  const place = (list, max, geo, hMin, hMax, cull = false) => {
+    const pick = list.slice(0, max); // spots come densest-forest first
+    const mesh = new THREE.InstancedMesh(geo, mat, Math.max(1, pick.length));
+    mesh.count = pick.length;
+    const m4 = new THREE.Matrix4(), q4 = new THREE.Quaternion(), s = new THREE.Vector3(), p = new THREE.Vector3(), up = new THREE.Vector3(0, 1, 0);
+    const c = new THREE.Color();
+    pick.forEach(({ x, y, z }, i) => {
+      const h = hMin + r() * (hMax - hMin);
+      q4.setFromAxisAngle(up, r() * Math.PI * 2);
+      const w = h * (0.85 + r() * 0.3);
+      s.set(w, h, w);
+      m4.compose(p.set(x, y, z), q4, s);
+      mesh.setMatrixAt(i, m4);
+      c.setRGB(0.8 + r() * 0.4, 0.85 + r() * 0.3, 0.8 + r() * 0.4); // each tree a slightly different green
+      mesh.setColorAt(i, c);
+    });
+    mesh.instanceMatrix.needsUpdate = true;
+    if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
+    if (cull && pick.length) mesh.computeBoundingSphere(); else mesh.frustumCulled = false;
+    group.add(mesh);
+    return mesh;
+  };
+  const nearR = q.treeNear * 0.8;
+  const near = (l) => l.filter((t) => Math.hypot(t.x, t.z) < nearR);
+  const oakSpots = spots.filter((t) => !t.pine), pineSpots = spots.filter((t) => t.pine);
+  const oaks = place(near(oakSpots), q.oaks, realTreeGeometry('oak'), 9, 15);
+  const spruces = place(near(pineSpots), q.spruces, realTreeGeometry('spruce'), 13, 21);
+  // distant woods in eight wedges, so the ones behind the camera are culled
+  const farOak = realTreeGeometry('oakFar'), farPine = realTreeGeometry('spruceFar');
+  for (let k = 0; k < 8; k++) {
+    const wedge = (l) => l.filter((t) => Math.hypot(t.x, t.z) >= nearR && Math.floor(((Math.atan2(t.z, t.x) / (Math.PI * 2)) + 1) * 8) % 8 === k);
+    place(wedge(oakSpots), Math.round(q.oaks * 0.6), farOak, 9, 15, true);
+    place(wedge(pineSpots), Math.round(q.spruces * 0.6), farPine, 13, 21, true);
+  }
+  return { group, water, oaks, spruces, material: land.material, update: seaUpdater(water) };
 }
 
 export { fbm, ridged };

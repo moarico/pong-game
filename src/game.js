@@ -47,16 +47,21 @@ function voxelBall() {
   if (!voxelBallGeo) { voxelBallGeo = voxelBallGeometry().clone().scale(S, S, S); voxelBallGeo.userData.shared = true; }
   const m = new THREE.Mesh(voxelBallGeo, mat);
   m.castShadow = true;
+  addHalo(m);
+  return m;
+}
+
+// soft blue energy glow around the ball; it swells on hits and at speed
+function addHalo(m) {
   const halo = new THREE.Sprite(new THREE.SpriteMaterial({ map: glowTexture(), color: 0x3f8cff, transparent: true, opacity: 0.3, blending: THREE.AdditiveBlending, depthWrite: false, fog: false }));
   halo.scale.setScalar(BALL.radius * S * 4.2);
   halo.renderOrder = 2;
   m.add(halo);
   m.userData.halo = halo;
-  return m;
 }
 
-function ballMesh(blocky) {
-  if (blocky) return voxelBall();
+function ballMesh(style) {
+  if (style === 'blocky') return voxelBall();
   if (!ballTex) ballTex = ballTextures(1024);
   const mat = new THREE.MeshStandardMaterial({
     map: ballTex.map, emissive: 0xffffff, emissiveMap: ballTex.emissiveMap, emissiveIntensity: 2.4,
@@ -64,6 +69,7 @@ function ballMesh(blocky) {
   });
   const m = new THREE.Mesh(new THREE.SphereGeometry(BALL.radius * S, 64, 40), mat);
   m.castShadow = true;
+  if (style === 'realistic') addHalo(m);
   return m;
 }
 
@@ -96,10 +102,10 @@ export class Match {
     this.world = new World();
     this.group = new THREE.Group();
     app.gfx.scene.add(this.group);
-    this.blocky = app.settings.world !== 'classic';
+    this.blocky = app.settings.world === 'blocky';
     this.effects = new Effects(this.group, app.settings.quality, this.blocky ? 'blocky' : 'classic');
     this.tireMarks = new TireMarks(this.group, app.settings.quality === 'low' ? 900 : 2400, app.settings.quality === 'high' ? 0.075 : 0.02);
-    this.ball = ballMesh(this.blocky);
+    this.ball = ballMesh(app.settings.world);
     this.group.add(this.ball);
     if (app.settings.quality === 'low') this.ballBlob = this.addBlob(1.7, 1.7);
 
@@ -730,10 +736,16 @@ export class Match {
     const sp = this.world.ball.vel.length();
     this.ballPulse = Math.max(0, (this.ballPulse || 0) - dt * 2.5);
     const pulse = this.ballPulse * this.ballPulse;
-    const k = this.ball.material.emissiveIntensity / 2.4;
-    this.ball.material.userData.emissiveBoost.value = 1.6 * k + Math.min(1.6, sp / 2200) + pulse * 4;
+    const mat = this.ball.material;
+    if (mat.userData.emissiveBoost) {
+      mat.userData.emissiveBoost.value = 1.6 * (mat.emissiveIntensity / 2.4) + Math.min(1.6, sp / 2200) + pulse * 4;
+    } else {
+      // panel ball: ModeFx resets the base intensity each frame in its modes
+      const base = this.modeFx ? mat.emissiveIntensity : 2.4;
+      mat.emissiveIntensity = base + Math.min(1, sp / 3000) + pulse * 2.5;
+    }
     const halo = this.ball.userData.halo;
-    halo.material.opacity = Math.min(0.9, 0.2 + Math.min(0.3, sp / 7000) + pulse * 0.55);
+    halo.material.opacity = Math.min(0.9, (this.blocky ? 0.2 : 0.12) + Math.min(0.3, sp / 7000) + pulse * 0.55);
     halo.scale.setScalar(BALL.radius * S * (4.2 + pulse * 2.5 + Math.min(1.2, sp / 3000)));
   }
 

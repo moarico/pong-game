@@ -1,6 +1,7 @@
-// The big blocky stadium shell: two tiers of stepped stands packed with a pixel-art crowd,
-// a concourse ad band, a team-coloured parapet, a stone outer facade and giant voxel
-// floodlight towers outside. Profiles are in uu (arena space); towers are in metres.
+// The big open-world stadium shell: two tiers of stepped stands packed with a crowd, a
+// concourse ad band, a team-coloured parapet, an outer facade and giant floodlight towers
+// outside. 'realistic' draws concrete, glass and steel; 'blocky' draws it all in Minecraft
+// style. Profiles are in uu (arena space); towers are in metres.
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { B, QuadBuilder, VoxelGrid, blockMaterial } from './blocks.js';
@@ -113,6 +114,139 @@ function tierProfile(o0, y0, n, rise, depth) {
   return { risers, treads, end: [o, y] };
 }
 
+// ------------------------------------------------------------------ realistic textures
+function smoothTex(c, repeat = true) {
+  const t = new THREE.CanvasTexture(c);
+  t.colorSpace = THREE.SRGBColorSpace;
+  if (repeat) t.wrapS = t.wrapT = THREE.RepeatWrapping;
+  t.anisotropy = 8;
+  return t;
+}
+
+// one row of fans in front of their seats, drawn with soft shapes
+function realCrowdTexture() {
+  const W = 1024, H = 64;
+  const c = canvas(W, H);
+  const g = c.getContext('2d');
+  let s = 7;
+  const r = () => { s = (s * 16807) % 2147483647; return s / 2147483647; };
+  g.fillStyle = '#16181d';
+  g.fillRect(0, 0, W, H);
+  const shirts = ['#2a5cc0', '#d8701e', '#2a5cc0', '#d8701e', '#e6e8ec', '#1d1e22', '#7a2626', '#36633a', '#b89a3a', '#4c5260', '#2a5cc0', '#d8701e', '#8a8f9a'];
+  const skins = ['#d2a487', '#b5825e', '#8a5a3c', '#5b3a26', '#e3c0a2'];
+  const hair = ['#2a1c12', '#4a3018', '#151515', '#b89048', '#6a4026', '#8a8a8a'];
+  for (let x = 0; x < W; x += 16) {
+    g.fillStyle = '#262a33';
+    g.beginPath(); g.roundRect(x + 2, 20, 12, 22, 3); g.fill(); // seat back
+  }
+  for (let x = 8; x < W; x += 16) {
+    if (r() < 0.07) continue;
+    const sh = shirts[Math.floor(r() * shirts.length)];
+    const sk = skins[Math.floor(r() * skins.length)];
+    const y0 = 16 + r() * 6;
+    const up = r() < 0.16;
+    if (up) {
+      g.strokeStyle = sk; g.lineWidth = 2.6; g.lineCap = 'round';
+      g.beginPath(); g.moveTo(x - 5, y0 + 12); g.lineTo(x - 8, y0 - 6); g.moveTo(x + 5, y0 + 12); g.lineTo(x + 8, y0 - 6); g.stroke();
+      if (r() < 0.4) { g.fillStyle = r() < 0.5 ? '#2a5cc0' : '#d8701e'; g.fillRect(x - 11, y0 - 12, 22, 6); }
+    }
+    g.fillStyle = sh;
+    g.beginPath(); g.roundRect(x - 6.5, y0 + 9, 13, H - y0 - 9, [5, 5, 0, 0]); g.fill();
+    g.fillStyle = sk;
+    g.beginPath(); g.ellipse(x, y0 + 4, 4.3, 5, 0, 0, Math.PI * 2); g.fill();
+    g.fillStyle = hair[Math.floor(r() * hair.length)];
+    g.beginPath(); g.ellipse(x, y0 + 1.5, 4.4, 3, 0, Math.PI, Math.PI * 2); g.fill();
+  }
+  const c2 = canvas(W, H);
+  const g2 = c2.getContext('2d');
+  g2.filter = 'blur(0.5px)';
+  g2.drawImage(c, 0, 0);
+  return smoothTex(c2);
+}
+
+function realSeatTexture() {
+  const c = canvas(128, 32);
+  const g = c.getContext('2d');
+  g.fillStyle = '#5c6068';
+  g.fillRect(0, 0, 128, 32);
+  for (let x = 0; x < 128; x += 16) {
+    g.fillStyle = '#3c4048';
+    g.beginPath(); g.roundRect(x + 2, 4, 12, 14, 3); g.fill();
+    g.fillStyle = '#2a2d33';
+    g.fillRect(x + 3, 18, 10, 3);
+  }
+  g.fillStyle = 'rgba(0,0,0,0.25)';
+  g.fillRect(0, 26, 128, 6);
+  return smoothTex(c);
+}
+
+// concrete panels with a band of glazing that lights up at night
+function realFacadeTexture() {
+  const c = canvas(256, 256);
+  const g = c.getContext('2d');
+  g.fillStyle = '#9a9a96';
+  g.fillRect(0, 0, 256, 256);
+  for (let i = 0; i < 2500; i++) { const v = 130 + Math.random() * 40; g.fillStyle = `rgba(${v},${v},${v - 4},0.25)`; g.fillRect(Math.random() * 256, Math.random() * 256, 2, 2); }
+  g.fillStyle = '#6e6e6a';
+  for (let x = 0; x < 256; x += 64) g.fillRect(x, 0, 2, 256);
+  g.fillRect(0, 0, 256, 2);
+  g.fillStyle = '#1c242e';
+  g.fillRect(0, 96, 256, 64);
+  g.fillStyle = 'rgba(160,190,220,0.25)';
+  for (let x = 0; x < 256; x += 32) g.fillRect(x + 4, 100, 10, 56);
+  g.fillStyle = '#3a3f46';
+  for (let x = 0; x < 256; x += 32) g.fillRect(x, 96, 3, 64);
+  const e = canvas(256, 256);
+  const ge = e.getContext('2d');
+  ge.fillStyle = '#000';
+  ge.fillRect(0, 0, 256, 256);
+  for (let x = 0; x < 256; x += 32) { ge.fillStyle = Math.random() < 0.8 ? '#ffd9a0' : '#3a3020'; ge.fillRect(x + 4, 100, 25, 56); }
+  return { map: smoothTex(c), emit: smoothTex(e) };
+}
+
+// steel lattice mast with a bank of lamps facing the pitch (metres, base at y = 0)
+function steelTowerGeometry() {
+  const H = 100, base = 5, top = 2.6;
+  const steel = [];
+  const beam = (a, b, rad = 0.12) => {
+    const g = new THREE.CylinderGeometry(rad, rad, a.distanceTo(b), 5);
+    g.rotateX(Math.PI / 2);
+    const m = new THREE.Matrix4().lookAt(a, b, new THREE.Vector3(0, 1, 0));
+    g.applyMatrix4(m);
+    g.translate((a.x + b.x) / 2, (a.y + b.y) / 2, (a.z + b.z) / 2);
+    steel.push(g);
+  };
+  for (const sx of [-1, 1]) for (const sz of [-1, 1]) beam(new THREE.Vector3(sx * base, 0, sz * base), new THREE.Vector3(sx * top, H, sz * top), 0.4);
+  const at = (y, sx, sz) => { const w = base + (top - base) * (y / H); return new THREE.Vector3(sx * w, y, sz * w); };
+  const corners = [[-1, -1], [1, -1], [1, 1], [-1, 1]];
+  for (let y = 0; y < H; y += 8) {
+    for (let k = 0; k < 4; k++) {
+      const [ax, az] = corners[k], [bx, bz] = corners[(k + 1) % 4];
+      beam(at(y, ax, az), at(y, bx, bz));
+      beam(at(y, ax, az), at(Math.min(H, y + 8), bx, bz), 0.09);
+    }
+  }
+  // platform and the lamp frame
+  steel.push(new THREE.BoxGeometry(8, 0.5, 8).translate(0, H, 0));
+  steel.push(new THREE.BoxGeometry(22, 13, 1.2).translate(0, H + 8, 1.6));
+  const lamps = new THREE.PlaneGeometry(20.5, 11.5).translate(0, H + 8, 2.25);
+  return { steel: mergeGeometries(steel.map((g) => { g.deleteAttribute('uv'); return g.index ? g.toNonIndexed() : g; })), lamps, top: H + 8 };
+}
+
+function lampTexture() {
+  const c = canvas(256, 144);
+  const g = c.getContext('2d');
+  g.fillStyle = '#05070a';
+  g.fillRect(0, 0, 256, 144);
+  for (let y = 12; y < 144; y += 24) for (let x = 14; x < 256; x += 25) {
+    const gr = g.createRadialGradient(x, y, 0, x, y, 10);
+    gr.addColorStop(0, '#ffffff'); gr.addColorStop(0.5, '#fff2d8'); gr.addColorStop(1, '#2a2a2a');
+    g.fillStyle = gr;
+    g.beginPath(); g.arc(x, y, 9.5, 0, Math.PI * 2); g.fill();
+  }
+  return smoothTex(c, false);
+}
+
 // ------------------------------------------------------------------ floodlight tower
 function towerGeometry() {
   const H = 64, W = 6;
@@ -140,10 +274,11 @@ function towerGeometry() {
   return b.build();
 }
 
-export function buildBlockStands({ arena, root, pts, stripGeometry, teamTint, cuttable, quality, flood }) {
-  const crowd = crowdTexture();
-  const seats = seatTexture();
-  const facade = facadeTexture();
+export function buildBlockStands({ arena, root, pts, stripGeometry, teamTint, cuttable, quality, flood, style = 'blocky' }) {
+  const real = style === 'realistic';
+  const crowd = real ? realCrowdTexture() : crowdTexture();
+  const seats = real ? realSeatTexture() : seatTexture();
+  const facade = real ? realFacadeTexture() : facadeTexture();
   const tint = (amount) => (x, y, z) => { const c = teamTint(z, 1); return [1 - amount + c[0] * amount * 1.6, 1 - amount + c[1] * amount * 1.6, 1 - amount + c[2] * amount * 1.6]; };
   const t1 = tierProfile(TIER1.start[0], TIER1.start[1], TIER1.steps, TIER1.rise, TIER1.depth);
   const t2start = [t1.end[0] - 240, CONCOURSE_TOP];
@@ -175,16 +310,18 @@ export function buildBlockStands({ arena, root, pts, stripGeometry, teamTint, cu
   const glowRim = cuttable(new THREE.MeshBasicMaterial({ vertexColors: true, fog: false, side: THREE.DoubleSide }));
   arena.add(new THREE.Mesh(stripGeometry(pts, [[t2.end[0] + 2, RIM.y - 110], [t2.end[0] + 2, RIM.y - 40]], { colorOf: (x, y, z) => teamTint(z, 3) }), glowRim));
   const facadeMat = cuttable(new THREE.MeshStandardMaterial({ map: facade.map, roughness: 0.9, emissive: 0xffffff, emissiveMap: facade.emit, emissiveIntensity: 0, side: THREE.DoubleSide }));
-  const facadeMesh = new THREE.Mesh(stripGeometry(pts, [[-RIM.offset, RIM.y], [-RIM.offset, -600]], { uLen: 800, vOf: (j, y) => y / 800 }), facadeMat);
+  const facadeMesh = new THREE.Mesh(stripGeometry(pts, [[-RIM.offset, RIM.y], [-RIM.offset, -600]], real ? { uLen: 1400, vOf: (j, y) => y / 1800 } : { uLen: 800, vOf: (j, y) => y / 800 }), facadeMat);
   arena.add(facadeMesh);
   // the void under the upper tier, seen from outside, gets a dark ceiling
   const underMat = cuttable(new THREE.MeshStandardMaterial({ color: 0x24272d, roughness: 0.9, side: THREE.DoubleSide }));
   arena.add(new THREE.Mesh(stripGeometry(pts, [[t2start[0], CONCOURSE_TOP], [-RIM.offset, CONCOURSE_TOP]], { uLen: 1000 }), underMat));
 
   // floodlight towers around the outside
-  const towerMat = blockMaterial();
-  towerMat.userData.emissiveBoost.value = 1.4;
-  const towerGeo = towerGeometry();
+  const towerMat = real ? new THREE.MeshStandardMaterial({ color: 0x8a8f96, metalness: 0.7, roughness: 0.45 }) : blockMaterial();
+  if (!real) towerMat.userData.emissiveBoost.value = 1.4;
+  const steel = real ? steelTowerGeometry() : null;
+  const lampMat = real ? new THREE.MeshStandardMaterial({ color: 0x111111, emissive: 0xffffff, emissiveMap: lampTexture(), emissiveIntensity: 1.5 }) : null;
+  const towerGeo = real ? steel.steel : towerGeometry();
   const towers = [];
   const spots = [[112, 126], [-112, 126], [112, -126], [-112, -126], [136, 0], [-136, 0]];
   const glowTex = (() => {
@@ -205,9 +342,10 @@ export function buildBlockStands({ arena, root, pts, stripGeometry, teamTint, cu
     t.rotation.y = Math.atan2(-x, -z); // light bank faces the pitch
     const m = new THREE.Mesh(towerGeo, towerMat);
     t.add(m);
+    if (real) t.add(new THREE.Mesh(steel.lamps, lampMat));
     const glow = new THREE.Sprite(glowMat);
-    glow.position.set(0, 64 * 1.5 + 9, 6 * 1.5 + 3);
-    glow.scale.setScalar(46);
+    if (real) glow.position.set(0, steel.top, 4); else glow.position.set(0, 64 * 1.5 + 9, 6 * 1.5 + 3);
+    glow.scale.setScalar(real ? 26 : 46);
     t.add(glow);
     root.add(t);
     towers.push({ group: t, glow });
@@ -224,8 +362,9 @@ export function buildBlockStands({ arena, root, pts, stripGeometry, teamTint, cu
       const night = sky.w.night, dusk = sky.w.sunset;
       facadeMat.emissiveIntensity = 0.15 + night * 0.9 + dusk * 0.3;
       crowdMat.emissiveIntensity = 0.05 + night * 0.12;
-      glowMat.opacity = 0.35 + night * 0.65 + dusk * 0.35;
-      towerMat.userData.emissiveBoost.value = 0.8 + night * 1.6 + dusk * 0.6;
+      glowMat.opacity = real ? 0.04 + night * 0.45 + dusk * 0.12 : 0.35 + night * 0.65 + dusk * 0.35;
+      if (real) lampMat.emissiveIntensity = 1.2 + night * 1.6 + dusk * 0.6;
+      else towerMat.userData.emissiveBoost.value = 0.8 + night * 1.6 + dusk * 0.6;
       if (flood) flood.intensity = Math.max(flood.intensity, 0);
     },
   };

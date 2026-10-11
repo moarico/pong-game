@@ -28,7 +28,7 @@ function sharedAssets() {
     frameMat: new THREE.MeshStandardMaterial({ color: 0x2a2d33, roughness: 0.42, metalness: 0.75 }),
     trimMat: new THREE.MeshStandardMaterial({ color: 0x07080a, roughness: 0.18, metalness: 0.4 }),
     glassMat: new THREE.MeshPhysicalMaterial({ color: 0x06090d, roughness: 0.04, metalness: 0.1, clearcoat: 1, clearcoatRoughness: 0.02, envMapIntensity: 1.6 }),
-    chromeMat: new THREE.MeshStandardMaterial({ color: 0xdfe4ea, roughness: 0.1, metalness: 1 }),
+    chromeMat: new THREE.MeshStandardMaterial({ color: 0xdfe4ea, roughness: 0.22, metalness: 1 }),
     engineMat: new THREE.MeshPhysicalMaterial({ color: 0xb0121a, roughness: 0.3, metalness: 0.35, clearcoat: 1, clearcoatRoughness: 0.08 }),
     tailLampMat: new THREE.MeshStandardMaterial({ color: 0x300004, emissive: 0xff1a24, emissiveMap: T.lamp, emissiveIntensity: 3.4, roughness: 0.2 }),
     headMat: new THREE.MeshStandardMaterial({ ...decalOpts, map: T.head.map, emissiveMap: T.head.emissiveMap, emissive: 0xf4f8ff, emissiveIntensity: 2.4, roughness: 0.08, metalness: 0.4 }),
@@ -188,11 +188,15 @@ export class CarModel {
     const tc = TEAM_COLORS[team];
 
     const paint = new THREE.MeshPhysicalMaterial({
-      color: tc.main, metalness: 0.4, roughness: 0.32, clearcoat: 1, clearcoatRoughness: 0.035, envMapIntensity: 1.2,
+      color: tc.main, metalness: 0.3, roughness: 0.4, clearcoat: 0.8, clearcoatRoughness: 0.16, envMapIntensity: 1.0,
     });
     this.paint = paint;
+    // the shell and everything bolted to it tilt with the suspension; wheels stay on the road
+    this.chassis = new THREE.Group();
+    this.body.add(this.chassis);
+    const C = this.chassis;
 
-    const add = (g, mat, x = 0, y = 0, z = 0, parent = this.body, shadow = true) => {
+    const add = (g, mat, x = 0, y = 0, z = 0, parent = C, shadow = true) => {
       const mesh = new THREE.Mesh(g, mat);
       mesh.position.set(x, y, z);
       mesh.castShadow = shadow;
@@ -207,22 +211,22 @@ export class CarModel {
 
     // conforming decals: lights, shut lines, grilles, numbers
     const d = geo.decals;
-    for (const k of ['headR', 'headL']) add(d[k], A.headMat, 0, 0, 0, this.body, false);
-    for (const k of ['doorR', 'doorL']) add(d[k], A.panelMat, 0, 0, 0, this.body, false);
-    add(d.hoodVents, A.ventMat, 0, 0, 0, this.body, false);
-    add(d.badge, A.badgeMat, 0, 0, 0, this.body, false);
+    for (const k of ['headR', 'headL']) add(d[k], A.headMat, 0, 0, 0, C, false);
+    for (const k of ['doorR', 'doorL']) add(d[k], A.panelMat, 0, 0, 0, C, false);
+    add(d.hoodVents, A.ventMat, 0, 0, 0, C, false);
+    add(d.badge, A.badgeMat, 0, 0, 0, C, false);
     if (number) {
       const numMat = new THREE.MeshStandardMaterial({
         map: numberTexture(number, tc.css), transparent: true, depthWrite: false, roughness: 0.3, metalness: 0.2,
         polygonOffset: true, polygonOffsetFactor: -5, polygonOffsetUnits: -5,
       });
-      for (const k of ['numR', 'numL']) add(d[k], numMat, 0, 0, 0, this.body, false);
+      for (const k of ['numR', 'numL']) add(d[k], numMat, 0, 0, 0, C, false);
     }
 
     // exposed rear: engine, red supercharger with chrome intake trumpets, frame, round lamps
     add(A.geo.engine, A.frameMat, 0, 25.5, -36.5);
     add(A.geo.blower, A.engineMat, 0, 38, -33.5);
-    add(A.geo.blowerTop, A.chromeMat, 0, 45.2, -33.5, this.body, false);
+    add(A.geo.blowerTop, A.chromeMat, 0, 45.2, -33.5, C, false);
     for (const sx of [-1, 1]) add(A.geo.stack, A.chromeMat, sx * 5.2, 45.8, -31);
     add(A.geo.belt, A.darkMat, 12.5, 33, -28.5);
     add(A.geo.pulley, A.chromeMat, 12.8, 37, -23.5);
@@ -235,7 +239,7 @@ export class CarModel {
       post(12, sx * 14, 8.6, -46.3);
       for (const lx of [33.5, 24.5]) {
         add(A.geo.lampHousing, A.trimMat, sx * (lx - 4.4), 10.8, -46.6);
-        add(A.geo.lamp, A.tailLampMat, sx * (lx - 4.4), 10.8, -47.85, this.body, false);
+        add(A.geo.lamp, A.tailLampMat, sx * (lx - 4.4), 10.8, -47.85, C, false);
       }
     }
     add(A.geo.undertray, A.frameMat, 0, -3.5, -42);
@@ -261,8 +265,8 @@ export class CarModel {
 
     // centre boost exhaust
     add(A.geo.pipe, A.chromeMat, 0, 6.5, -46.5);
-    add(A.geo.pipeRim, A.chromeMat, 0, 6.5, -49.5, this.body, false);
-    add(A.geo.pipeInner, A.darkMat, 0, 6.5, -48.6, this.body, false);
+    add(A.geo.pipeRim, A.chromeMat, 0, 6.5, -49.5, C, false);
+    add(A.geo.pipeInner, A.darkMat, 0, 6.5, -48.6, C, false);
 
     // wheels: spinning tyre/rim/disc, caliper fixed to the upright
     this.wheels = [];
@@ -313,6 +317,7 @@ export class CarModel {
     this.flame.add(this.flameCore);
     this.body.add(this.flame);
     this.flame.visible = false;
+    if (this.chassis) this.chassis.add(this.flame);
     // exhaust glow (always on, brighter when boosting)
     this.exhaustGlow = new THREE.Group();
     const glowMat = new THREE.MeshBasicMaterial({ color: fc.clone().multiplyScalar(1.5), transparent: true, opacity: 0.6, blending: THREE.AdditiveBlending, depthWrite: false });
@@ -320,7 +325,7 @@ export class CarModel {
     const gm = new THREE.Mesh(A.geo.pipeInner, glowMat);
     gm.position.set(0, 6.5, -48.4);
     this.exhaustGlow.add(gm);
-    this.body.add(this.exhaustGlow);
+    (this.chassis || this.body).add(this.exhaustGlow);
     this.flicker = 0;
   }
 

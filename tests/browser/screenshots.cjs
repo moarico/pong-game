@@ -6,7 +6,7 @@ const Q = process.env.Q || 'high';
 
 async function open(browser, settings, pads) {
   const page = await browser.newPage({ viewport: { width: 1280, height: 720 } });
-  await page.addInitScript((s) => { localStorage.setItem('rocketArena.settings.v1', JSON.stringify(s)); }, { world: 'blocky', timeOfDay: 'sunset', weather: 'clear', quality: Q, ...settings });
+  await page.addInitScript((s) => { localStorage.setItem('rocketArena.settings.v1', JSON.stringify(s)); }, { world: 'realistic', timeOfDay: 'sunset', weather: 'clear', quality: Q, ...settings });
   if (pads) {
     await page.addInitScript(() => {
       const mk = (i) => ({ index: i, id: 'Xbox Wireless Controller (STANDARD GAMEPAD Vendor: 045e)', connected: true, mapping: 'standard', axes: [0, 0, 0, 0], buttons: Array.from({ length: 17 }, () => ({ pressed: false, value: 0 })), timestamp: 0 });

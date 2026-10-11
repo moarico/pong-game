@@ -3,6 +3,7 @@
 import * as THREE from 'three';
 import { B, QuadBuilder, VoxelGrid, blockMaterial, rng } from './blocks.js';
 import { heightAt, SEA_Y, fbm } from './terrain.js';
+import { buildRealFeatures } from './realFeatures.js';
 
 // ------------------------------------------------------------------ generators
 function island(R, seed, { depth = 1.6, castle = false, trees = 5, stream = true } = {}) {
@@ -177,7 +178,8 @@ function waterfallMaterial() {
 }
 
 // ------------------------------------------------------------------ assemble
-export function buildFeatures(root, quality) {
+export function buildFeatures(root, quality, style = 'blocky') {
+  if (style === 'realistic') return buildRealFeatures(root, quality, { heightAt, SEA_Y });
   const group = new THREE.Group();
   root.add(group);
   const mat = blockMaterial();
