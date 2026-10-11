@@ -74,6 +74,7 @@ html, body {
 .minimap canvas { display: block; width: 100%; aspect-ratio: 0.8; }
 .coords { margin-top: 3px; font: 700 11px/1.2 var(--font); color: #e8f0ff; letter-spacing: 0.5px; white-space: nowrap; text-shadow: 0 1px 2px #000; font-variant-numeric: tabular-nums; }
 .hud-view.split .minimap { width: clamp(80px, 10vmin, 120px); top: 42px; left: 10px; }
+.hud-view.split .coords { font-size: 9px; letter-spacing: 0; }
 .cam-mode { position: absolute; left: 18px; bottom: 16px; font-family: var(--font); text-shadow: 0 1px 3px #000; pointer-events: none; }
 .cam-name { display: flex; align-items: center; gap: 8px; font-size: 20px; font-weight: 800; color: #ff5a4a; letter-spacing: 1px; }
 .cam-dot { width: 13px; height: 13px; border-radius: 50%; background: #ff3b30; box-shadow: 0 0 8px rgba(255, 60, 40, 0.9); }
