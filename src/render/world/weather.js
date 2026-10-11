@@ -170,7 +170,7 @@ export class Weather {
       const u = this.rain.material.uniforms;
       u.uTime.value = this.time;
       // rain picks up the sky colour so it reads at sunset and at night
-      u.uColor.value.copy(sky.colors.horizon).lerp(RAIN_GREY, 0.5).multiplyScalar(0.55 + sky.w.day * 0.4 + this.flash * 2);
+      u.uColor.value.copy(sky.colors.horizon).lerp(RAIN_GREY, 0.5).multiplyScalar(0.45 + sky.w.day * 0.35 + this.flash * 0.6);
     }
     if (this.cfg.storm) {
       this.nextStrike -= dt;
