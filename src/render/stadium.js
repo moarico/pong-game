@@ -55,12 +55,17 @@ function wetPitch(renderer, quality) {
         n += (texture2D(tNoise, vP / 90.0 + vec2(uTime * 0.9, uTime * 0.7)).rg - 0.5) * uRain * 0.8;
         vec4 uv = vUv;
         uv.xy += n * 0.007 * uv.w;
-        // soft five-tap blur: grass is never a perfect mirror
-        vec2 o = uTexel * 1.7 * uv.w;
-        vec3 refl = texture2DProj(tDiffuse, uv).rgb * 2.0
-          + texture2DProj(tDiffuse, uv + vec4(o.x, 0.0, 0.0, 0.0)).rgb + texture2DProj(tDiffuse, uv - vec4(o.x, 0.0, 0.0, 0.0)).rgb
-          + texture2DProj(tDiffuse, uv + vec4(0.0, o.y, 0.0, 0.0)).rgb + texture2DProj(tDiffuse, uv - vec4(0.0, o.y, 0.0, 0.0)).rgb;
-        refl = min(refl / 6.0, vec3(1.3)); // keep floodlight glints from blooming into blotches
+        // wet grass smears reflections into vertical streaks, like lights on a wet road
+        vec2 o = uTexel * uv.w;
+        vec3 refl = texture2DProj(tDiffuse, uv).rgb * 1.6;
+        float wsum = 1.6;
+        for (int k = 1; k <= 4; k++) {
+          float fk = float(k), wk = 1.0 - fk * 0.17;
+          refl += (texture2DProj(tDiffuse, uv + vec4(0.0, o.y * fk * 3.0, 0.0, 0.0)).rgb + texture2DProj(tDiffuse, uv - vec4(0.0, o.y * fk * 3.0, 0.0, 0.0)).rgb) * wk;
+          wsum += 2.0 * wk;
+        }
+        refl += (texture2DProj(tDiffuse, uv + vec4(o.x * 1.5, 0.0, 0.0, 0.0)).rgb + texture2DProj(tDiffuse, uv - vec4(o.x * 1.5, 0.0, 0.0, 0.0)).rgb) * 0.6;
+        refl = min(refl / (wsum + 1.2), vec3(1.6));
         vec3 V = normalize(cameraPosition - vW);
         float fres = 0.04 + 0.96 * pow(1.0 - clamp(V.y, 0.0, 1.0), 4.0);
         float edge = smoothstep(0.0, 260.0, ${(HX - RR).toFixed(1)} - a.x) * smoothstep(0.0, 260.0, ${(HZ - RR).toFixed(1)} - a.y);
@@ -384,7 +389,7 @@ export function buildStadium(renderer, scene, opts) {
   arena.add(floor);
   const wet = blocky && quality !== 'low' ? wetPitch(renderer, quality) : null;
   // dry grass only shows a faint sheen at low angles; rain soaks it
-  const dryWet = style === 'blocky' ? 0.5 : 0.1;
+  const dryWet = style === 'blocky' ? 0.5 : 0.3;
   if (wet) root.add(wet);
 
   if (quality === 'high') {
@@ -643,7 +648,7 @@ export function buildStadium(renderer, scene, opts) {
         g.add(leg);
       }
       if (blocky) {
-        g.position.set(0, 8700, sz * (HZ + 6200));
+        g.position.set(0, RIM.y + 2200, sz * (HZ + 6200));
         g.scale.setScalar(1.5);
       } else g.position.set(0, 4300, sz * (HZ + 4000));
       g.rotation.order = 'YXZ';

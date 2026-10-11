@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { CAR, S, TEAM_COLORS } from '../config.js';
+import { CAR, S, TEAM_COLORS, EXHAUST_X } from '../config.js';
 import { treadTexture } from './textures.js';
 import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
 import { carGeometry, carTextures, bodyPoint, tyreHalf } from './carBody.js';
@@ -263,10 +263,13 @@ export class CarModel {
       ep.scale.set(1, 1.2, 1.25);
     }
 
-    // centre boost exhaust
-    add(A.geo.pipe, A.chromeMat, 0, 6.5, -46.5);
-    add(A.geo.pipeRim, A.chromeMat, 0, 6.5, -49.5, C, false);
-    add(A.geo.pipeInner, A.darkMat, 0, 6.5, -48.6, C, false);
+    // twin boost exhausts
+    for (const ex of EXHAUST_X) {
+      add(A.geo.pipe, A.chromeMat, ex, 6.5, -46.5);
+      add(A.geo.pipeRim, A.chromeMat, ex, 6.5, -49.5, C, false);
+      add(A.geo.pipeInner, A.darkMat, ex, 6.5, -48.6, C, false);
+    }
+    this.exhausts = EXHAUST_X;
 
     // wheels: spinning tyre/rim/disc, caliper fixed to the upright
     this.wheels = [];
@@ -305,16 +308,24 @@ export class CarModel {
     const tc = TEAM_COLORS[team];
     // boost flame (two cones, additive) out of the exhausts
     const fc = new THREE.Color(...tc.flame);
-    const flameGeo = new THREE.ConeGeometry(7, 46, 16, 1, true);
-    flameGeo.translate(0, -23, 0);
+    const xs = this.exhausts || [0];
+    const twin = xs.length > 1;
+    const flameGeo = new THREE.ConeGeometry(twin ? 5.6 : 7, twin ? 52 : 46, 16, 1, true);
+    flameGeo.translate(0, -(twin ? 26 : 23), 0);
     flameGeo.rotateX(-Math.PI / 2); // tip points -z
-    this.flame = new THREE.Mesh(flameGeo, new THREE.MeshBasicMaterial({ color: fc.clone().multiplyScalar(1.4), transparent: true, opacity: 0.75, blending: THREE.AdditiveBlending, depthWrite: false, fog: false }));
+    const flameMat = new THREE.MeshBasicMaterial({ color: fc.clone().multiplyScalar(1.4), transparent: true, opacity: 0.75, blending: THREE.AdditiveBlending, depthWrite: false, fog: false });
+    this.flame = new THREE.Group();
     this.flame.position.set(0, 6.5, -49);
     const coreGeo = new THREE.ConeGeometry(3.6, 26, 12, 1, true);
     coreGeo.translate(0, -13, 0);
     coreGeo.rotateX(-Math.PI / 2);
-    this.flameCore = new THREE.Mesh(coreGeo, new THREE.MeshBasicMaterial({ color: new THREE.Color(2.2, 2.2, 2.2), transparent: true, opacity: 0.9, blending: THREE.AdditiveBlending, depthWrite: false, fog: false }));
-    this.flame.add(this.flameCore);
+    const coreMat = new THREE.MeshBasicMaterial({ color: new THREE.Color(2.2, 2.2, 2.2), transparent: true, opacity: 0.9, blending: THREE.AdditiveBlending, depthWrite: false, fog: false });
+    for (const ex of xs) {
+      const cone = new THREE.Mesh(flameGeo, flameMat);
+      cone.position.x = ex;
+      cone.add(new THREE.Mesh(coreGeo, coreMat));
+      this.flame.add(cone);
+    }
     this.body.add(this.flame);
     this.flame.visible = false;
     if (this.chassis) this.chassis.add(this.flame);
@@ -322,9 +333,11 @@ export class CarModel {
     this.exhaustGlow = new THREE.Group();
     const glowMat = new THREE.MeshBasicMaterial({ color: fc.clone().multiplyScalar(1.5), transparent: true, opacity: 0.6, blending: THREE.AdditiveBlending, depthWrite: false });
     this.exhaustGlow.material = glowMat;
-    const gm = new THREE.Mesh(A.geo.pipeInner, glowMat);
-    gm.position.set(0, 6.5, -48.4);
-    this.exhaustGlow.add(gm);
+    for (const ex of xs) {
+      const gm = new THREE.Mesh(A.geo.pipeInner, glowMat);
+      gm.position.set(ex, 6.5, -48.4);
+      this.exhaustGlow.add(gm);
+    }
     (this.chassis || this.body).add(this.exhaustGlow);
     this.flicker = 0;
   }

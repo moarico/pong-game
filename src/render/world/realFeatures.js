@@ -189,6 +189,8 @@ export function buildRealFeatures(root, quality, env) {
     { pos: [180, 235, -960], R: 48, depth: 1.5, trees: 16, seed: 11 },
     { pos: [-840, 165, -260], R: 32, depth: 1.8, trees: 9, seed: 13 },
     { pos: [780, 310, 140], R: 24, depth: 1.6, trees: 6, seed: 17, fall: false },
+    // high and close enough to show above the stands from the pitch, over the sunset end
+    { pos: [-380, 380, 330], R: 58, depth: 1.4, castle: true, trees: 12, seed: 23 },
   ];
   for (const isl of ISLANDS) {
     if (quality === 'low' && isl.R < 30) continue;
@@ -263,7 +265,7 @@ export function buildRealFeatures(root, quality, env) {
   const shipMat = withSkyFog(new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.65 }), 'shipReal');
   const shipGeo = airshipGeometry();
   const ships = [
-    { r: 620, y: 230, speed: 0.012, phase: 0.6 },
+    { r: 330, y: 270, speed: 0.016, phase: 0.6 },
     { r: 980, y: 300, speed: -0.008, phase: 2.8 },
   ].map((s) => { const m = new THREE.Mesh(shipGeo, shipMat); group.add(m); return { ...s, mesh: m }; });
 

@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { S, TEAM_COLORS } from '../config.js';
+import { S, TEAM_COLORS, EXHAUST_X } from '../config.js';
 
 // GPU-instanced camera-facing particles. Positions are in meters.
 class ParticleSystem {
@@ -237,15 +237,19 @@ export class Effects {
     if (car.boosting) {
       _e.copy(pos).addScaledVector(_f, -51).addScaledVector(_u, 6.5).multiplyScalar(S);
       const cv = _v.copy(car.vel).multiplyScalar(S);
-      const n = Math.max(1, Math.round(dt * 150 * this.mult));
+      const n = Math.max(1, Math.round(dt * (this.blocky ? 150 : 210) * this.mult));
       const fl = tc.flame, fe = tc.flameEnd;
+      // the realistic Octane has twin exhausts; the block car one in the middle
+      const side = this.blocky ? 0 : EXHAUST_X[1] * S;
+      const life = this.blocky ? [0.1, 0.2] : [0.16, 0.3];
       for (let i = 0; i < n; i++) {
         const back = rand(7, 12);
         const j = Math.random() * dt;
+        const o = i % 2 ? side : -side;
         this.glow.emit(
-          _e.x - _f.x * back * j + rand(-0.03, 0.03), _e.y - _f.y * back * j + rand(-0.03, 0.03), _e.z - _f.z * back * j + rand(-0.03, 0.03),
+          _e.x + _l.x * o - _f.x * back * j + rand(-0.03, 0.03), _e.y + _l.y * o - _f.y * back * j + rand(-0.03, 0.03), _e.z + _l.z * o - _f.z * back * j + rand(-0.03, 0.03),
           cv.x * 0.2 - _f.x * back + rand(-0.5, 0.5), cv.y * 0.2 - _f.y * back + rand(-0.5, 0.5), cv.z * 0.2 - _f.z * back + rand(-0.5, 0.5),
-          rand(0.1, 0.2), rand(0.12, 0.2), rand(0.3, 0.55),
+          rand(life[0], life[1]), rand(0.12, 0.2), rand(0.3, this.blocky ? 0.55 : 0.75),
           [fl[0] * 1.1, fl[1] * 1.1, fl[2] * 1.1, 0.55], [fe[0], fe[1], fe[2], 0], 2, 0,
         );
       }
@@ -318,11 +322,17 @@ export class Effects {
 
   ballTrail(ball, pos) {
     const sp = ball.vel.length();
-    const min = this.blocky ? 1700 : 2600;
+    const min = 1600;
     if (sp < min) return;
-    if (Math.random() > ((sp - min) / 2000) * this.mult) return;
     _e.copy(pos).multiplyScalar(S);
-    this.glow.emit(_e.x + rand(-0.3, 0.3), _e.y + rand(-0.3, 0.3), _e.z + rand(-0.3, 0.3), 0, 0, 0, 0.35, 1.0, 0.2, [0.6, 0.85, 1.4, 0.35], [0.2, 0.4, 1.0, 0], 0, 0);
+    if (Math.random() < ((sp - min) / 2000) * this.mult) {
+      this.glow.emit(_e.x + rand(-0.3, 0.3), _e.y + rand(-0.3, 0.3), _e.z + rand(-0.3, 0.3), 0, 0, 0, 0.35, 1.0, 0.2, [0.6, 0.85, 1.4, 0.35], [0.2, 0.4, 1.0, 0], 0, 0);
+    }
+    // crackling blue energy streaming off a fast ball
+    if (Math.random() < ((sp - min) / 1600) * this.mult) {
+      _v.set(rand(-1, 1), rand(-1, 1), rand(-1, 1)).normalize().multiplyScalar(rand(2, 6));
+      this.glow.emit(_e.x + _v.x * 0.15, _e.y + _v.y * 0.15, _e.z + _v.z * 0.15, _v.x, _v.y, _v.z, rand(0.12, 0.25), rand(0.05, 0.1), 0.01, [1.4, 2.0, 3.2, 1], [0.3, 0.6, 2.0, 0], 3, 0);
+    }
   }
 
   hit(point, strength) {

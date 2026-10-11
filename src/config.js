@@ -104,3 +104,6 @@ export const TEAM_COLORS = {
   0: { main: 0x0f6bff, light: 0x5fb4ff, dark: 0x0a3a9a, css: '#2f7bff', flame: [0.55, 0.85, 1.0], flameEnd: [0.1, 0.3, 1.0] },
   1: { main: 0xff6a12, light: 0xffb060, dark: 0x8a2a00, css: '#ff7a1a', flame: [1.0, 0.85, 0.45], flameEnd: [1.0, 0.28, 0.04] },
 };
+
+// the realistic Octane's twin boost exhausts, either side of the centre line (uu)
+export const EXHAUST_X = [-8.5, 8.5];

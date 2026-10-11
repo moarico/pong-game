@@ -4,7 +4,7 @@
 import * as THREE from 'three';
 
 export const WEATHER = {
-  clear: { cover: 0.52, rain: 0, haze: 0, storm: false, wet: 0 },
+  clear: { cover: 0.57, rain: 0, haze: 0, storm: false, wet: 0 },
   cloudy: { cover: 0.76, rain: 0, haze: 1100, storm: false, wet: 0.1 },
   rain: { cover: 0.86, rain: 1, haze: 420, storm: false, wet: 0.8 },
   storm: { cover: 0.96, rain: 1.5, haze: 320, storm: true, wet: 1 },

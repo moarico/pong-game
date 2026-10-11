@@ -787,13 +787,20 @@ export class Match {
       const look = _p.copy(_bp).multiplyScalar(S * 0.6);
       cam.lookAt(look.x, 2, look.z);
     } else {
+      const mapCars = this.players.map((p) => {
+        _p.set(0, 0, 1).applyQuaternion(p.iquat);
+        return { car: p.car, x: p.ipos.x, y: p.ipos.y, z: p.ipos.z, fx: _p.x, fz: _p.z, team: p.car.team, demolished: p.car.demolished, own: false };
+      });
       for (const p of this.humans) {
         const v = p.view;
+        for (const m of mapCars) m.own = m.car === p.car;
         const c = p.controls || {};
         v.rig.update(dt, p.car, p.ipos, p.iquat, this.ball.visible ? _bp : null, c.lookX || 0, c.lookY || 0);
         app.hud.setBoost(p.viewIndex, p.car.boost);
         if (this.gameMode === 'rumble') app.hud.setItem(p.viewIndex, this.world.mode.status(p.car), ITEMS, itemKey(p.device));
         app.hud.updatePlates(p.viewIndex, v.camera, carPos, p.car);
+        app.hud.setCamMode(p.viewIndex, v.rig.ballCam);
+        app.hud.updateMinimap(p.viewIndex, mapCars, this.ball.visible ? _bp : null, this.world.pads, mapCars.find((m) => m.car === p.car), dt);
       }
       this.humans.forEach((p, i) => {
         const c = p.car;

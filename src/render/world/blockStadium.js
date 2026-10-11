@@ -5,12 +5,13 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { B, QuadBuilder, VoxelGrid, blockMaterial } from './blocks.js';
-import { S, TEAM_COLORS } from '../../config.js';
+import { S, TEAM_COLORS, ARENA } from '../../config.js';
+import { wallOutline } from '../../arena.js';
 
 const TIER1 = { steps: 18, rise: 92, depth: 150, start: [-60, 720] };
-const TIER2 = { steps: 22, rise: 150, depth: 170 };
+const TIER2 = { steps: 22, rise: 110, depth: 170 }; // ~33°, so the sky still shows above the stands
 const CONCOURSE_TOP = 2900;
-export const RIM = { offset: 7000, y: 6600, inner: 6740 };
+export const RIM = { offset: 7000, y: 5720, inner: 6740 };
 
 function canvas(w, h) {
   const c = document.createElement('canvas');
@@ -247,6 +248,122 @@ function lampTexture() {
   return smoothTex(c, false);
 }
 
+// a run of lamp heads along the roof edge
+function lampRowTexture() {
+  const c = canvas(256, 32);
+  const g = c.getContext('2d');
+  g.fillStyle = '#07080a';
+  g.fillRect(0, 0, 256, 32);
+  for (let x = 4; x < 256; x += 32) {
+    g.fillStyle = '#20232a';
+    g.fillRect(x, 4, 24, 24);
+    const gr = g.createRadialGradient(x + 12, 16, 0, x + 12, 16, 11);
+    gr.addColorStop(0, '#ffffff'); gr.addColorStop(0.55, '#fff0d0'); gr.addColorStop(1, '#3a3428');
+    g.fillStyle = gr;
+    g.fillRect(x + 2, 6, 20, 20);
+  }
+  return smoothTex(c);
+}
+
+// tall team banner with a white crest and a swallowtail end
+function bannerTexture(team) {
+  const c = canvas(128, 448);
+  const g = c.getContext('2d');
+  const main = team === 0 ? ['#0b3a9c', '#2a6cf0'] : ['#a33a06', '#ff7a1a'];
+  const gr = g.createLinearGradient(0, 0, 128, 0);
+  gr.addColorStop(0, main[0]); gr.addColorStop(0.5, main[1]); gr.addColorStop(1, main[0]);
+  g.fillStyle = gr;
+  g.beginPath(); g.moveTo(0, 0); g.lineTo(128, 0); g.lineTo(128, 448); g.lineTo(64, 400); g.lineTo(0, 448); g.closePath(); g.fill();
+  g.fillStyle = 'rgba(255,255,255,0.9)';
+  g.fillRect(0, 24, 128, 6); g.fillRect(0, 360, 128, 4);
+  // crest: shield with a ball and a chevron
+  g.beginPath(); g.moveTo(64, 120); g.lineTo(104, 136); g.lineTo(100, 200); g.quadraticCurveTo(92, 240, 64, 256); g.quadraticCurveTo(36, 240, 28, 200); g.lineTo(24, 136); g.closePath();
+  g.lineWidth = 7; g.strokeStyle = '#ffffff'; g.stroke();
+  g.beginPath(); g.arc(64, 182, 22, 0, Math.PI * 2); g.fill();
+  g.fillStyle = main[0];
+  g.beginPath(); g.moveTo(44, 300); g.lineTo(64, 320); g.lineTo(84, 300); g.lineTo(84, 312); g.lineTo(64, 332); g.lineTo(44, 312); g.closePath(); g.fill();
+  const t = smoothTex(c, false);
+  return t;
+}
+
+// giant logo screen hung under the roof on each long side
+function logoScreenTexture() {
+  const c = canvas(1024, 384);
+  const g = c.getContext('2d');
+  const bg = g.createLinearGradient(0, 0, 0, 384);
+  bg.addColorStop(0, '#0a2a6a'); bg.addColorStop(1, '#04102c');
+  g.fillStyle = bg;
+  g.fillRect(0, 0, 1024, 384);
+  g.strokeStyle = 'rgba(120,180,255,0.18)';
+  g.lineWidth = 2;
+  for (let x = 0; x < 1024; x += 24) { g.beginPath(); g.moveTo(x, 0); g.lineTo(x - 120, 384); g.stroke(); }
+  // shield
+  g.save();
+  g.translate(200, 192);
+  g.beginPath(); g.moveTo(0, -130); g.lineTo(105, -92); g.lineTo(96, 40); g.quadraticCurveTo(70, 112, 0, 140); g.quadraticCurveTo(-70, 112, -96, 40); g.lineTo(-105, -92); g.closePath();
+  const sg = g.createLinearGradient(0, -130, 0, 140);
+  sg.addColorStop(0, '#5aa8ff'); sg.addColorStop(1, '#1446b8');
+  g.fillStyle = sg; g.fill();
+  g.lineWidth = 12; g.strokeStyle = '#e8f2ff'; g.stroke();
+  g.fillStyle = '#ffffff';
+  g.beginPath(); g.arc(-8, -6, 42, 0, Math.PI * 2); g.fill();
+  g.fillStyle = '#1446b8';
+  g.beginPath(); g.moveTo(-70, 70); g.lineTo(40, 20); g.lineTo(70, 40); g.lineTo(-40, 90); g.closePath(); g.fill();
+  g.restore();
+  g.fillStyle = '#ffffff';
+  g.font = 'italic 900 132px Arial Black, Arial, sans-serif';
+  g.textBaseline = 'middle';
+  g.shadowColor = 'rgba(90,170,255,0.9)'; g.shadowBlur = 24;
+  g.fillText('ROCKET', 340, 128);
+  g.fillText('ARENA', 340, 262);
+  return smoothTex(c, false);
+}
+
+// roof canopy, lamp rows, hanging banners and logo screens (realistic stadium)
+function addRoof({ arena, pts, stripGeometry, cuttable, teamTint }) {
+  const inner = RIM.offset - 1300;
+  const top = RIM.y + 450, edge = RIM.y + 260; // roof edge height and the bottom of its lamp fascia
+  const roofMat = cuttable(new THREE.MeshStandardMaterial({ color: 0x2c3038, roughness: 0.75, metalness: 0.5, side: THREE.DoubleSide }));
+  arena.add(new THREE.Mesh(stripGeometry(pts, [[-RIM.offset - 40, RIM.y + 150], [-inner, top]], { uLen: 1000 }), roofMat));
+  const lamps = lampRowTexture();
+  const lampMat = cuttable(new THREE.MeshStandardMaterial({ color: 0x0b0c0f, emissive: 0xffffff, emissiveMap: lamps, emissiveIntensity: 2.2, side: THREE.DoubleSide }));
+  arena.add(new THREE.Mesh(stripGeometry(pts, [[-inner, top], [-inner, edge]], { uLen: 560, vOf: (j) => j }), lampMat));
+  // banners
+  const geos = [[], []];
+  const bw = 360, bh = 1100;
+  for (const p of wallOutline(1250, 2)) {
+    if (Math.abs(p.z) < 2000 && Math.abs(p.x) > ARENA.halfX - 10) continue; // the logo screens hang here
+    const c = teamTint(p.z, 1);
+    const team = c[0] > c[2] ? 1 : 0;
+    const g = new THREE.PlaneGeometry(bw, bh);
+    g.translate(0, -bh / 2, 0);
+    g.rotateY(Math.atan2(p.nx, p.nz)); // face the pitch
+    g.translate(p.x - p.nx * (inner - 70), edge - 10, p.z - p.nz * (inner - 70));
+    geos[team].push(g);
+  }
+  const bannerMats = [];
+  for (const team of [0, 1]) {
+    if (!geos[team].length) continue;
+    const tex = bannerTexture(team);
+    const mat = cuttable(new THREE.MeshStandardMaterial({ map: tex, alphaTest: 0.5, side: THREE.DoubleSide, roughness: 0.85, emissive: 0xffffff, emissiveMap: tex, emissiveIntensity: 0.12 }));
+    bannerMats.push(mat);
+    arena.add(new THREE.Mesh(mergeGeometries(geos[team]), mat));
+  }
+  // logo screens on the long sides
+  const logo = logoScreenTexture();
+  const screenMat = cuttable(new THREE.MeshBasicMaterial({ map: logo, color: new THREE.Color(1.35, 1.35, 1.35) }));
+  for (const sx of [-1, 1]) {
+    const m = new THREE.Mesh(new THREE.PlaneGeometry(2930, 1100), screenMat);
+    m.position.set(sx * (ARENA.halfX + inner - 90), edge - 560, 0);
+    m.rotation.y = -sx * Math.PI / 2;
+    arena.add(m);
+    const frame = new THREE.Mesh(new THREE.BoxGeometry(60, 1200, 3060), cuttable(new THREE.MeshStandardMaterial({ color: 0x15181d, roughness: 0.6, metalness: 0.6 })));
+    frame.position.set(sx * (ARENA.halfX + inner - 50), edge - 560, 0);
+    arena.add(frame);
+  }
+  return { lampMat, bannerMats };
+}
+
 // ------------------------------------------------------------------ floodlight tower
 function towerGeometry() {
   const H = 64, W = 6;
@@ -316,6 +433,8 @@ export function buildBlockStands({ arena, root, pts, stripGeometry, teamTint, cu
   const underMat = cuttable(new THREE.MeshStandardMaterial({ color: 0x24272d, roughness: 0.9, side: THREE.DoubleSide }));
   arena.add(new THREE.Mesh(stripGeometry(pts, [[t2start[0], CONCOURSE_TOP], [-RIM.offset, CONCOURSE_TOP]], { uLen: 1000 }), underMat));
 
+  const roof = real ? addRoof({ arena, pts, stripGeometry, cuttable, teamTint }) : null;
+
   // floodlight towers around the outside
   const towerMat = real ? new THREE.MeshStandardMaterial({ color: 0x8a8f96, metalness: 0.7, roughness: 0.45 }) : blockMaterial();
   if (!real) towerMat.userData.emissiveBoost.value = 1.4;
@@ -363,7 +482,10 @@ export function buildBlockStands({ arena, root, pts, stripGeometry, teamTint, cu
       facadeMat.emissiveIntensity = 0.15 + night * 0.9 + dusk * 0.3;
       crowdMat.emissiveIntensity = 0.05 + night * 0.12;
       glowMat.opacity = real ? 0.04 + night * 0.45 + dusk * 0.12 : 0.35 + night * 0.65 + dusk * 0.35;
-      if (real) lampMat.emissiveIntensity = 1.2 + night * 1.6 + dusk * 0.6;
+      if (real) {
+        lampMat.emissiveIntensity = 1.2 + night * 1.6 + dusk * 0.6;
+        roof.lampMat.emissiveIntensity = 1.4 + night * 2.0 + dusk * 0.8;
+      }
       else towerMat.userData.emissiveBoost.value = 0.8 + night * 1.6 + dusk * 0.6;
       if (flood) flood.intensity = Math.max(flood.intensity, 0);
     },

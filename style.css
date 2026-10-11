@@ -66,6 +66,23 @@ html, body {
 .hud-view.split { outline: 2px solid rgba(0,0,0,0.85); }
 .boost-gauge { position: absolute; right: 2.2%; bottom: 3%; width: clamp(110px, 16vmin, 190px); aspect-ratio: 1; }
 .hud-view.split .boost-gauge { width: clamp(90px, 13vmin, 150px); }
+/* minimap + coordinates (top-left) and camera mode (bottom-left) */
+.minimap {
+  position: absolute; left: 16px; top: 16px; width: clamp(96px, 13vmin, 150px); padding: 6px 6px 4px;
+  background: rgba(6, 12, 24, 0.62); border: 1px solid rgba(160, 200, 255, 0.28); border-radius: 6px;
+}
+.minimap canvas { display: block; width: 100%; aspect-ratio: 0.8; }
+.coords { margin-top: 3px; font: 700 11px/1.2 var(--font); color: #e8f0ff; letter-spacing: 0.5px; white-space: nowrap; text-shadow: 0 1px 2px #000; font-variant-numeric: tabular-nums; }
+.hud-view.split .minimap { width: clamp(80px, 10vmin, 120px); top: 42px; left: 10px; }
+.cam-mode { position: absolute; left: 18px; bottom: 16px; font-family: var(--font); text-shadow: 0 1px 3px #000; pointer-events: none; }
+.cam-name { display: flex; align-items: center; gap: 8px; font-size: 20px; font-weight: 800; color: #ff5a4a; letter-spacing: 1px; }
+.cam-dot { width: 13px; height: 13px; border-radius: 50%; background: #ff3b30; box-shadow: 0 0 8px rgba(255, 60, 40, 0.9); }
+.cam-mode.off .cam-name { color: #cfd8e6; }
+.cam-mode.off .cam-dot { background: transparent; border: 2px solid #cfd8e6; box-shadow: none; }
+.cam-hint { margin-top: 2px; font-size: 11px; font-weight: 700; color: #e6ecf5; letter-spacing: 1.2px; }
+.hud-view.split .cam-mode { bottom: 10px; left: 12px; }
+.hud-view.split .cam-name { font-size: 15px; }
+.hud-view.split .cam-hint { display: none; }
 .boost-svg { width: 100%; height: 100%; overflow: visible; filter: drop-shadow(0 0 6px rgba(40,110,255,0.45)); }
 .boost-svg .seg { fill: none; stroke: rgba(255,140,40,0.16); stroke-width: 13; stroke-linecap: butt; transition: stroke 0.08s; }
 .boost-svg .seg.on { stroke: #ffa233; filter: drop-shadow(0 0 3px rgba(255,150,40,0.9)); }

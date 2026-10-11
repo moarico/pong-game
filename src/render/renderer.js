@@ -3,6 +3,30 @@ import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
 import { Pass } from 'three/addons/postprocessing/Pass.js';
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
+import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
+
+// Film-style grade on the final (display) image: a little more contrast and colour, warm
+// highlights, cool shadows and a soft vignette.
+const GradeShader = {
+  name: 'Grade',
+  uniforms: { tDiffuse: { value: null }, uAmount: { value: 1 } },
+  vertexShader: 'varying vec2 vUv; void main() { vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }',
+  fragmentShader: /* glsl */ `
+    uniform sampler2D tDiffuse;
+    uniform float uAmount;
+    varying vec2 vUv;
+    void main() {
+      vec4 src = texture2D(tDiffuse, vUv);
+      vec3 c = src.rgb;
+      float l = dot(c, vec3(0.2126, 0.7152, 0.0722));
+      vec3 g = (c - 0.5) * 1.1 + 0.5;
+      g = mix(vec3(l), g, 1.2);
+      g += vec3(0.035, 0.012, -0.03) * smoothstep(0.45, 1.0, l) + vec3(-0.018, 0.004, 0.03) * (1.0 - smoothstep(0.0, 0.4, l));
+      vec2 d = vUv - 0.5;
+      g *= 1.0 - dot(d, d) * 0.55;
+      gl_FragColor = vec4(mix(c, clamp(g, 0.0, 1.0), uAmount), src.a);
+    }`,
+};
 
 // Renders every player view (split screen) into one target, then blooms the lot.
 class MultiViewPass extends Pass {
@@ -44,6 +68,8 @@ export class GameRenderer {
       this.bloom = new UnrealBloomPass(new THREE.Vector2(256, 256), 0.5, 0.35, 0.92);
       this.composer.addPass(this.bloom);
       this.composer.addPass(new OutputPass());
+      this.grade = new ShaderPass(GradeShader);
+      this.composer.addPass(this.grade);
     }
     this.resize();
     this.onResize = () => this.resize();

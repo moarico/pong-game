@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { S, TEAM_COLORS } from './config.js';
+import { S, TEAM_COLORS, ARENA } from './config.js';
 
 const SEGMENTS = 30;
 const _v = new THREE.Vector3();
@@ -80,8 +80,16 @@ export class Hud {
       const status = el('div', 'view-status', box);
       const center = el('div', 'view-center', box);
       const plates = el('div', 'plates', box);
+      // minimap with the player's coordinates, and the camera mode (reference photo)
+      const mapBox = el('div', 'minimap', box);
+      const map = el('canvas', '', mapBox);
+      const coords = el('div', 'coords', mapBox);
+      const cam = el('div', 'cam-mode', box);
+      const dev = v.player && v.player.device;
+      const key = !dev || dev.type === 'any' ? 'Y / R' : dev.type === 'pad' ? 'Y' : dev.layout === 'p2' ? 'I' : 'R';
+      cam.innerHTML = `<div class="cam-name"><span class="cam-dot"></span><b>BALL CAM</b></div><div class="cam-hint">PRESS ${key} TO TOGGLE</div>`;
       return {
-        box, gauge, status, center, plates, plateMap: new Map(),
+        box, gauge, status, center, plates, plateMap: new Map(), map, mapCtx: map.getContext('2d'), coords, cam, camName: cam.querySelector('b'), mapT: 0, ballCam: null,
         item, itemIcon: item.querySelector('.item-icon'), itemName: item.querySelector('.item-name'),
         itemKey: item.querySelector('.item-key'), itemBar: item.querySelector('.item-bar div'), itemSig: '',
         segs: Array.from(gauge.querySelectorAll('.seg')),
@@ -205,6 +213,76 @@ export class Hud {
       seen.add(c.car.id);
     }
     for (const [id, p] of v.plateMap) if (!seen.has(id)) p.style.display = 'none';
+  }
+
+  setCamMode(i, ballCam) {
+    const v = this.views[i];
+    if (!v || v.ballCam === ballCam) return;
+    v.ballCam = ballCam;
+    v.camName.textContent = ballCam ? 'BALL CAM' : 'CAR CAM';
+    v.cam.classList.toggle('off', !ballCam);
+  }
+
+  // top-down map of the pitch: pads, cars (arrows) and the ball; the player's attacking end is up
+  updateMinimap(i, cars, ball, pads, own, dt) {
+    const v = this.views[i];
+    if (!v) return;
+    v.mapT -= dt;
+    if (v.mapT > 0) return;
+    v.mapT = 1 / 20;
+    const cv = v.map;
+    const W = cv.clientWidth, H = cv.clientHeight;
+    if (!W || !H) return;
+    const dpr = Math.min(2, window.devicePixelRatio || 1);
+    if (cv.width !== Math.round(W * dpr)) { cv.width = Math.round(W * dpr); cv.height = Math.round(H * dpr); }
+    const g = v.mapCtx;
+    g.setTransform(dpr, 0, 0, dpr, 0, 0);
+    g.clearRect(0, 0, W, H);
+    const { halfX: HX, halfZ: HZ, chamfer: C, goalHalfW: GW, goalDepth: GD } = ARENA;
+    const sc = Math.min((W - 12) / (2 * HX), (H - 12) / (2 * (HZ + GD)));
+    const flip = own && own.team === 1 ? -1 : 1;
+    const X = (x) => W / 2 + x * sc * flip, Y = (z) => H / 2 - z * sc * flip;
+    // pitch
+    g.beginPath();
+    for (const [x, z] of [[HX, HZ - C], [HX - C, HZ], [-HX + C, HZ], [-HX, HZ - C], [-HX, -HZ + C], [-HX + C, -HZ], [HX - C, -HZ], [HX, -HZ + C]]) g.lineTo(X(x), Y(z));
+    g.closePath();
+    g.fillStyle = 'rgba(40, 96, 46, 0.55)';
+    g.fill();
+    g.lineWidth = 1.5;
+    g.strokeStyle = 'rgba(230, 240, 255, 0.75)';
+    g.stroke();
+    g.lineWidth = 1;
+    g.strokeStyle = 'rgba(230, 240, 255, 0.35)';
+    g.beginPath(); g.moveTo(X(-HX), Y(0)); g.lineTo(X(HX), Y(0)); g.stroke();
+    g.beginPath(); g.arc(X(0), Y(0), 1000 * sc, 0, Math.PI * 2); g.stroke();
+    for (const t of [0, 1]) {
+      const z = t === 0 ? -HZ : HZ;
+      g.fillStyle = TEAM_COLORS[t].css;
+      g.fillRect(Math.min(X(-GW), X(GW)), Math.min(Y(z), Y(z + (t === 0 ? -GD : GD))), Math.abs(X(GW) - X(-GW)), Math.abs(GD * sc));
+    }
+    for (const p of pads) {
+      g.fillStyle = p.active ? 'rgba(255, 190, 60, 0.95)' : 'rgba(255, 190, 60, 0.25)';
+      g.beginPath(); g.arc(X(p.x), Y(p.z), p.big ? 2.6 : 1.4, 0, Math.PI * 2); g.fill();
+    }
+    for (const c of cars) {
+      if (c.demolished) continue;
+      const a = Math.atan2(c.fx * flip, c.fz * flip);
+      g.save();
+      g.translate(X(c.x), Y(c.z));
+      g.rotate(a);
+      g.beginPath(); g.moveTo(0, -6); g.lineTo(4.2, 4.5); g.lineTo(0, 2.4); g.lineTo(-4.2, 4.5); g.closePath();
+      g.fillStyle = TEAM_COLORS[c.team].css;
+      g.fill();
+      if (c.own) { g.lineWidth = 1.6; g.strokeStyle = '#ffffff'; g.stroke(); }
+      g.restore();
+    }
+    if (ball) {
+      g.fillStyle = '#ffffff';
+      g.shadowColor = 'rgba(120, 190, 255, 0.9)'; g.shadowBlur = 6;
+      g.beginPath(); g.arc(X(ball.x), Y(ball.z), 3.2, 0, Math.PI * 2); g.fill();
+      g.shadowBlur = 0;
+    }
+    if (own) v.coords.textContent = `X: ${Math.round(own.x / 10)}  Y: ${Math.round(own.y / 10)}  Z: ${Math.round(own.z / 10)}`;
   }
 
   update(dt) {

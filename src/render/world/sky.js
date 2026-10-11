@@ -44,6 +44,7 @@ function skyMaterial() {
       uSunColor: { value: new THREE.Color() },
       uCloudLit: { value: new THREE.Color() },
       uCloudShadow: { value: new THREE.Color() },
+      uCloudAway: { value: new THREE.Color() },
       uCover: { value: 0.35 },
       uNight: { value: 0 },
       uFlash: { value: 0 },
@@ -55,7 +56,7 @@ function skyMaterial() {
         gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
       }`,
     fragmentShader: /* glsl */ `
-      uniform vec3 uSunDir, uMoonDir, uZenith, uHorizon, uHorizonAway, uGlow, uSunColor, uCloudLit, uCloudShadow;
+      uniform vec3 uSunDir, uMoonDir, uZenith, uHorizon, uHorizonAway, uGlow, uSunColor, uCloudLit, uCloudShadow, uCloudAway;
       uniform vec2 uWind;
       uniform float uCover, uNight, uFlash;
       varying vec3 vDir;
@@ -68,8 +69,8 @@ function skyMaterial() {
         vec3 horizon = mix(uHorizonAway, uHorizon, pow(toward, 2.2));
         vec3 col = mix(horizon, uZenith, pow(smoothstep(0.0, 0.55, h), 0.5));
         float sd = max(dot(d, uSunDir), 0.0);
-        float band = 1.0 - smoothstep(0.0, 0.4, abs(h));
-        col += uGlow * (pow(sd, 5.0) * 0.45 * band + pow(sd, 40.0) * 0.35);
+        float band = 1.0 - smoothstep(0.0, 0.8, abs(h));
+        col += uGlow * (pow(sd, 4.0) * 0.55 * band + pow(sd, 40.0) * 0.35);
         if (h < 0.0) col = mix(col, horizon * 0.4, smoothstep(0.0, -0.25, h));
         // stars
         if (uNight > 0.01 && h > 0.0) {
@@ -89,12 +90,17 @@ function skyMaterial() {
           vec2 q = vec2(fbm(p * 0.35 + 1.7), fbm(p * 0.35 + 9.2));
           float n = fbm(p * 0.3 + q * 1.6);
           float cov = mix(0.6, 0.3, uCover);
-          float dens = smoothstep(cov, cov + 0.18, n);
+          float dens = smoothstep(cov, cov + 0.13, n);
           // light: denser cloud between this point and the sun means shadow
           vec2 ps = p + sunH.xz * 0.35;
           float ns = fbm(ps * 0.3 + q * 1.6);
           float shade = smoothstep(cov - 0.02, cov + 0.3, ns) * 0.8 + smoothstep(cov + 0.1, cov + 0.4, n) * 0.35;
-          vec3 cc = mix(uCloudLit, uCloudShadow, clamp(shade * 0.9 + uCover * 0.35, 0.0, 1.0));
+          // clouds toward the sun burn gold, the far side of the sky turns pink
+          vec3 lit = mix(uCloudAway, uCloudLit, pow(toward, 1.4));
+          vec3 cc = mix(lit, uCloudShadow, clamp(shade * 0.85 + uCover * 0.35, 0.0, 1.0));
+          float rim = smoothstep(0.0, 0.45, dens) * (1.0 - smoothstep(0.55, 1.0, dens));
+          cc += uGlow * rim * pow(sd, 2.0) * 1.4; // bright edges facing the sun
+          cc += uCloudLit * pow(toward, 3.0) * 0.35 * (1.0 - clamp(shade, 0.0, 1.0)) * (1.0 - uCover * 0.8);
           cc += uGlow * pow(sd, 6.0) * (1.0 - dens * 0.7) * 1.2;
           cc += uGlow * pow(sd, 3.0) * 0.25;
           float fade = smoothstep(0.0, 0.1, h);
@@ -111,9 +117,9 @@ function skyMaterial() {
 
 const C = (h) => new THREE.Color(h);
 const PAL = {
-  night: { zenith: C(0x040816), horizon: C(0x16223e), away: C(0x0e1830), glow: C(0x000000), sun: C(0x000000), lit: C(0x39436a), shadow: C(0x0b0f1e) },
-  sunset: { zenith: C(0x0c2a7a), horizon: C(0xff8a1e), away: C(0x3a5294), glow: C(0xff7a10), sun: C(0xfff2c8), lit: C(0xffb446), shadow: C(0x2c3262) },
-  day: { zenith: C(0x2a68d4), horizon: C(0xb3d4f0), away: C(0x9cc2ea), glow: C(0xfff0d8), sun: C(0xfff4e0), lit: C(0xffffff), shadow: C(0x8e9cb8) },
+  night: { zenith: C(0x040816), horizon: C(0x16223e), away: C(0x0e1830), glow: C(0x000000), sun: C(0x000000), lit: C(0x39436a), shadow: C(0x0b0f1e), litAway: C(0x2c3456) },
+  sunset: { zenith: C(0x0a1f5c), horizon: C(0xff8a1e), away: C(0x3a4a8a), glow: C(0xff7a10), sun: C(0xfff2c8), lit: C(0xffa53a), shadow: C(0x2a2650), litAway: C(0xd0707e) },
+  day: { zenith: C(0x2a68d4), horizon: C(0xb3d4f0), away: C(0x9cc2ea), glow: C(0xfff0d8), sun: C(0xfff4e0), lit: C(0xffffff), shadow: C(0x8e9cb8), litAway: C(0xf2f4f8) },
 };
 
 const _c = new THREE.Color();
@@ -194,11 +200,12 @@ export class SkySystem {
     u.uSunColor.value.copy(this.colors.sun);
     blend('lit', this.w, u.uCloudLit.value);
     blend('shadow', this.w, u.uCloudShadow.value);
+    blend('litAway', this.w, u.uCloudAway.value);
     // overcast skies are greyer and darker
     if (this.cover > 0.62) {
       const k = (this.cover - 0.62) * 2.6;
       const grey = new THREE.Color(0.32, 0.34, 0.38).multiplyScalar(0.3 + this.w.day * 0.9 + this.w.sunset * 0.5);
-      for (const c of [u.uZenith.value, u.uHorizon.value, u.uHorizonAway.value, u.uCloudLit.value]) c.lerp(grey, k * 0.8);
+      for (const c of [u.uZenith.value, u.uHorizon.value, u.uHorizonAway.value, u.uCloudLit.value, u.uCloudAway.value]) c.lerp(grey, k * 0.8);
       u.uCloudShadow.value.multiplyScalar(1 - k * 0.5);
       u.uGlow.value.multiplyScalar(1 - k * 0.8);
     }
