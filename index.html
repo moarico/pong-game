@@ -57,7 +57,17 @@
 
   /* overlay (title / pause) */
   #overlay { position:absolute; inset:0; background:rgba(10,16,10,.85); display:flex; flex-direction:column; align-items:center; justify-content:center; pointer-events:auto; cursor:pointer; }
-  #overlay.bg { background:linear-gradient(rgba(8,14,8,.82),rgba(8,14,8,.92)), repeating-conic-gradient(#2c2218 0% 25%, #241c12 0% 50%) 50%/64px 64px; }
+  #overlay.bg { background:radial-gradient(ellipse at 50% 45%,rgba(6,10,8,.45),rgba(6,10,8,.8)); }
+  #overlay.title { background:linear-gradient(180deg,rgba(0,0,0,.42) 0%,rgba(0,0,0,0) 32%,rgba(0,0,0,0) 60%,rgba(0,0,0,.62) 100%); }
+  #overlay.title #title { font-size:86px; color:#fff6e8; -webkit-text-stroke:2px #2a1a0e; text-shadow:0 0 34px rgba(255,170,90,.6),0 6px 0 #3a2a1a,0 10px 22px rgba(0,0,0,.6); }
+  #overlay.title #title span { color:#ffb347; }
+  #subtitle { display:none; font-family:'Cinzel',Georgia,serif; font-weight:700; color:#fff1dc; letter-spacing:.62em; font-size:17px; margin:2px 0 4px .62em; text-shadow:0 0 6px #000,0 2px 10px #000,0 0 22px rgba(0,0,0,.8); }
+  body.titlemode #p1hud, body.titlemode #p2hud, body.titlemode #coords, body.titlemode #touch, body.titlemode #vhud, body.titlemode #pad { display:none !important; }
+  #overlay.title #subtitle { display:block; }
+  #overlay.title #playbtn { background:rgba(24,14,6,.5); border:2px solid #ffb347; color:#fff3e0; letter-spacing:8px; box-shadow:0 0 24px rgba(255,170,80,.35); }
+  #overlay.title #playbtn:hover { background:rgba(255,160,60,.35); }
+  #overlay.title #ctl, #overlay.title #ctlt { position:absolute; left:0; right:0; bottom:14px; margin:0; font-size:12px; opacity:.88; }
+  @media (max-width:760px),(max-height:520px){ #overlay.title #title { font-size:48px; } #subtitle { font-size:12px; } #overlay.title #ctl { display:none; } }
   #title { font-size:64px; font-weight:bold; letter-spacing:4px; color:#cfd6cf;
     text-shadow:0 5px 0 #3a3a3a, 0 8px 0 #1c1c1c, 4px 4px 0 #1c1c1c;
     -webkit-text-stroke:2px #222; }
@@ -297,17 +307,18 @@
     <div class="hint donly">Click a block to put it in your selected hotbar slot &nbsp;•&nbsp; E to close</div>
     <div class="hint tonly">Tap a block to put it in your selected hotbar slot</div>
   </div>
-  <div id="overlay" class="bg">
+  <div id="overlay" class="title">
     <div id="ovmsg">PAUSED</div>
     <div id="title">MINE<span>CRAFT</span> JS</div>
-    <div id="splash">Shaders on! Flowing water, starry nights &amp; storms</div>
+    <div id="subtitle">ISLAND OF LEGENDS</div>
+    <div id="splash">Warships, fighter jets &amp; six legendary bosses!</div>
     <button id="playbtn">PLAY</button>
     <div id="ctlt" class="tonly"><b>Left thumb</b> moves &nbsp;&middot;&nbsp; <b>right thumb</b> looks &nbsp;&middot;&nbsp; <b>tap</b> to break &nbsp;&middot;&nbsp; <b>&#9635;</b> places<br>
       Turn your phone sideways for the best view</div>
     <div id="ctl" class="donly">
       <b>WASD / Arrow keys</b> move &nbsp; <b>Mouse</b> look &nbsp; <b>Space</b> jump &nbsp; <b>Shift</b> sprint<br>
       <b>Left click</b> break &nbsp; <b>Right click</b> place &nbsp; <b>1–9 / scroll</b> hotbar &nbsp; <b>E</b> blocks<br>
-      <b>R</b> ride minecart &nbsp; <b>Double-Space</b> fly &nbsp; <b>H</b> Command Center<br>
+      <b>R</b> fly a jet / sail a warship / ride the coaster &nbsp; <b>Double-Space</b> fly &nbsp; <b>H</b> Command Center<br>
       <b>C</b> = 2-player split-screen co-op &nbsp;&middot;&nbsp; NUKE + TNT x100 in your hotbar<br>
       <b>Q</b> graphics quality &nbsp;&middot;&nbsp; <b>T</b> time of day &nbsp;&middot;&nbsp; <b>Y</b> weather &nbsp;&middot;&nbsp; lava caves &middot; spreading fire<br>
       Xbox controller supported &mdash; just plug it in and press a button<br>
@@ -3445,8 +3456,14 @@ vec3 aurora(vec3 d){
 void main(){
   vec3 d=normalize(vDir), col=d.y>0.0?skyLut(d):skyLut(normalize(vec3(d.x,0.03,d.z)))*uFog.w;
   float cs=dot(d,uLutSun);
-  col+=uSunCol*smoothstep(0.99986,0.99993,cs)*60.0*step(0.0,uLutSun.y+0.02);
-  col+=uSunCol*pow(max(cs,0.0),700.0)*1.6;
+  { // the sun: a limb-darkened disc, squashed by refraction near the horizon, wrapped in a corona of soft rays
+    vec3 ax=normalize(cross(uLutSun,vec3(0.0,1.0,0.0))+vec3(1e-4,0.0,0.0)), ay=cross(ax,uLutSun);
+    vec2 sp=vec2(dot(d,ax),dot(d,ay)); sp.y*=mix(1.0,1.4,smoothstep(0.1,-0.01,uLutSun.y));
+    float r=length(sp)/0.0098, up=step(0.0,uLutSun.y+0.025)*step(0.0,cs), mu=sqrt(max(1.0-r*r,0.0));
+    col+=uSunCol*smoothstep(1.0,0.93,r)*(0.42+0.58*pow(mu,0.55))*95.0*up;
+    float an=atan(sp.y,sp.x), ry=0.6+0.4*sin(an*11.0+uTime*0.04)*sin(an*7.0-uTime*0.03);
+    col+=uSunCol*(exp(-max(r-1.0,0.0)*1.1)*0.9+exp(-r*0.16)*0.14*ry+pow(max(cs,0.0),90.0)*0.22)*up;
+  }
   float hor=smoothstep(-0.01,0.05,d.y), clear=1.0-uRain*0.9;
   if(uNight>0.01&&d.y>-0.01){
     vec3 sd=uStarRot*d; float band;
@@ -3679,8 +3696,16 @@ void main(){
       +vec3(0.5,1.0,0.65)*smoothstep(0.025,0.012,length((vUv-(sp+ax*1.7))*asp))*0.15;
     float rr=length((vUv-(sp+ax*2.1))*asp);
     fl+=vec3(1.0,0.6,0.35)*smoothstep(0.21,0.18,rr)*smoothstep(0.15,0.19,rr)*0.05;
-    fl+=vec3(1.0,0.85,0.7)*exp(-abs(vUv.y-sp.y)*180.0)*exp(-abs(vUv.x-sp.x)*7.0)*0.2;
+    fl+=vec3(0.75,0.86,1.0)*exp(-abs(vUv.y-sp.y)*220.0)*exp(-abs(vUv.x-sp.x)*3.6)*0.34;
+    vec2 dv=(vUv-sp)*asp; float dl=length(dv), an=atan(dv.y,dv.x);
+    float spk=pow(abs(cos(an*3.0+0.3)),120.0)+0.6*pow(abs(cos(an*3.0+0.82)),220.0);
+    fl+=vec3(1.0,0.93,0.82)*spk*exp(-dl*6.0)*0.45+vec3(1.0,0.88,0.72)*exp(-dl*16.0)*0.3;
+    float ring=exp(-pow((dl-0.3)*30.0,2.0));
+    fl+=vec3(0.55+0.45*sin(dl*90.0),0.55+0.45*sin(dl*90.0+2.1),0.55+0.45*sin(dl*90.0+4.2))*ring*0.03;
+    float sunL=dot(texture(tScene,clamp(sp,0.001,0.999)).rgb,vec3(0.2126,0.7152,0.0722))*ex;
+    vis*=smoothstep(1.2,5.0,sunL);
     c+=fl*uFlare*vis;
+    c+=vec3(1.0,0.9,0.75)*uFlare*vis*exp(-length((sp-vec2(0.5))*asp)*3.0)*0.05;
   }
   c+=vec3(1.0,0.92,0.8)*uFlash;
   if(uNightG>0.0&&texture(tDepth,vUv).r<0.99998){    // moonlit eyes: dim colours drain to a silvery blue, lamps keep theirs
@@ -3918,7 +3943,7 @@ function renderFrame(dt){
   c.uFlare.value=(!split&&QP.rays>0&&!SKY.under)?SKY.sunVis*(1-WEATHER.cloud)*Math.min(1,rayK*1.4):0;
   c.tScene.value=rtCloud.texture; c.tBloom.value=bloomRTs.length?bloomRTs[0].texture:rtRayB.texture; c.tRays.value=rtRayB.texture;
   c.tDepth.value=rtScene.depthTexture; c.tExp.value=adaptRT[adaptI].texture; c.uBloom.value=bloomRTs.length?.38:0;
-  c.uRays.value=rays?rayK*rayK*1.6*SKY.sunVis:0; c.uRayCol.value.copy(U.uSunCol.value);
+  c.uRays.value=rays?rayK*rayK*(1.6+.9*smooth01(1-SKY.sunDir.y/.35))*SKY.sunVis:0; c.uRayCol.value.copy(U.uSunCol.value);
   c.uUnder.value=SKY.under?1:0; c.uNF.value.set(P.cam.near,P.cam.far);
   c.uWaterTint.value.setRGB(.012,.06,.075).multiplyScalar(Math.max(.05,U.uAmbient.value.g*2));
   c.uFlash.value=SKY.flash; c.uNightG.value=smooth01(U.uNight.value);
@@ -6943,6 +6968,8 @@ function lockPointer(){
   else steerMode=true;
 }
 function startGame(){
+  const fromTitle=TITLE.on; if(fromTitle) titleToPlay();
+  overlay.classList.remove('title'); overlay.classList.add('bg');
   playing=true;
   overlay.style.display='none';
   ovmsg.style.display='block';
@@ -6956,7 +6983,8 @@ function startGame(){
   fitView();
   blip(520,.12,'triangle',.2);
   ac(); nextNote=0;
-  if(!helpShown){ helpShown=true; setTimeout(function(){ toggleHelp(true); },260); }
+  if(!helpShown){ helpShown=true; if(fromTitle) TITLE.help=true; else setTimeout(function(){ toggleHelp(true); },260); }
+  if(fromTitle) return;
   toastEl.textContent='Explore! Villages, ships, caves, a giant temple, and a roller coaster await';
   toastEl.style.opacity=1;
   clearTimeout(toastTimer); toastTimer=setTimeout(function(){ toastEl.style.opacity=0; },5000);
@@ -7268,6 +7296,7 @@ function updateExplore(dt){
     if(Math.random()<.3) fx(PT.SPARK,VOLC.x+rs()*8,top,VOLC.z+rs()*8,rs()*6,8+Math.random()*10,rs()*6,2+Math.random(),.25,.1,3.2,1.2,.3,1,.1,-9,0);
   }
   EXPLORE.t-=dt; if(EXPLORE.t>0) return; EXPLORE.t=.5;
+  if(!playing||TITLE.on) return;
   for(const L of LANDMARKS){
     if(EXPLORE.found.indexOf(L.name)>=0) continue;
     if(Math.hypot(L.x-P.pos.x,L.z-P.pos.z)>L.r) continue;
@@ -7427,8 +7456,9 @@ function updateChunks(){
 }
 
 /* ============================== DAY/NIGHT + LOOP ============================== */
+
 const DAY_SECS=1200, NIGHT_SECS=600;               // 20 minutes of daylight, 10 of night
-let tod=.455;                                      // start in the golden hour, sun low in the west
+let tod=.024;                                      // the island wakes at sunrise
 function lerp(a,b,t){ return a+(b-a)*t; }
 const _starM4=new THREE.Matrix4();
 const SKY={aurora:0, auroraT:0, metT:6, wasNight:false, expMax:5, sunDir:new THREE.Vector3(), lightDir:new THREE.Vector3(), exposure:.5, sunVis:1, under:false, flash:0, access:1, ambT:0};
@@ -7519,7 +7549,7 @@ function updateSky(dt){
   SKY.expMax=lerp(5,2.6,night);
   // haze: thicker near the horizon around sunrise and sunset, dark in caves
   const golden=smooth01(1-Math.abs(sy)/.3)*(1-night);
-  U.uFog.value.set(.0011+.0013*golden+.004*WEATHER.rain,.016,LOD_E*.94,lerp(.05,1,SKY.access));
+  U.uFog.value.set(.0008+.0005*golden+.004*WEATHER.rain,.016,LOD_E*.94,lerp(.05,1,SKY.access));
   // mist settles in the valleys around dawn, and whenever it rains
   U.uMist.value=(.011*smooth01(1-Math.abs(tod-.055)/.07)+.0015*night+.004*WEATHER.rain)*SKY.access;
   // how much haze lights up into beams: most at sunrise and sunset, a little at noon, faint moonbeams at night
@@ -7576,8 +7606,66 @@ function patchSceneMaterials(){
   scene.traverse(function(o){ const m=o.material; if(!m) return; if(Array.isArray(m)) m.forEach(patchAtmo); else patchAtmo(m); });
 }
 sunDirAt(tod,SKY.sunDir);
-P.yaw=Math.atan2(-SKY.sunDir.x,-SKY.sunDir.z);    // first look: straight into the sunset
+P.yaw=-Math.PI/2;                                   // first look: along the row of jets
 patchSceneMaterials();
+/* ====== THE TITLE: before you press play, the camera drifts over the sea at sunrise, the island beyond ====== */
+const TITLE={on:true, t:0, shot:0, swoop:0, help:false, from:new THREE.Vector3(), fromQ:new THREE.Quaternion(), tod:.024, jets:null};
+const _tv=new THREE.Vector3(), _tv2=new THREE.Vector3(), _tq=new THREE.Quaternion(), _tm=new THREE.Matrix4();
+const TSHOTS=(function(){
+  const c=new THREE.Vector3(CARRIER.x,SEA,CARRIER.z), sd=sunDirAt(TITLE.tod,new THREE.Vector3());
+  const fw=new THREE.Vector3(sd.x,0,sd.z).normalize(), side=new THREE.Vector3(-fw.z,0,fw.x), isle=new THREE.Vector3(60,SEA+30,-60);
+  const at=function(f,s,y){ return new THREE.Vector3(c.x-fw.x*f+side.x*s,SEA+y,c.z-fw.z*f+side.z*s); };
+  return [
+    {d:15, pos:function(k){ return at(175-k*60,58-k*6,3.2+k*1.2); }, look:function(k,p){ return _tv2.copy(p).addScaledVector(fw,600).addScaledVector(side,-170+k*40).setY(SEA+52); }, fov:64},
+    {d:14, pos:function(k){ return at(-170+k*40,-150+k*20,10+k*40); }, look:function(k,p){ return _tv2.copy(c).lerp(isle,ease(Math.min(1,k*1.1))).setY(SEA+12+k*22); }, fov:56},
+    {d:15, pos:function(k){ return _tv.set(isle.x+fw.x*760+side.x*(-300+k*380),SEA+120-k*20,isle.z+fw.z*760+side.z*(-300+k*380)).clone(); }, look:function(){ return _tv2.set(VOLC.x*.55,SEA+35,VOLC.z*.45); }, fov:55}
+  ];
+})();
+function titleCam(){ const s=TSHOTS[TITLE.shot], k=Math.min(1,TITLE.t/s.d), p=s.pos(k); return {p:p, look:s.look(k,p).clone(), fov:s.fov}; }
+function updateTitle(dt){
+  document.body.classList.toggle('titlemode',TITLE.on&&TITLE.swoop<=0);
+  if(!TITLE.on) return;
+  const cam=P.cam;
+  if(TITLE.swoop>0){                                        // PLAY: swoop from the sea down to the player on the apron
+    TITLE.swoop=Math.max(0,TITLE.swoop-dt);
+    const k=ease(1-TITLE.swoop/3.4), eye=_tv.set(P.pos.x,P.pos.y+EYE,P.pos.z);
+    const mid=_tv2.copy(TITLE.from).lerp(eye,.5); mid.y=Math.max(TITLE.from.y,eye.y)+90;
+    const u=1-k; cam.position.set(u*u*TITLE.from.x+2*u*k*mid.x+k*k*eye.x, u*u*TITLE.from.y+2*u*k*mid.y+k*k*eye.y, u*u*TITLE.from.z+2*u*k*mid.z+k*k*eye.z);
+    _tq.setFromEuler(new THREE.Euler(P.pitch,P.yaw,0,'YXZ'));
+    const look=k<.55?new THREE.Vector3().lerpVectors(TITLE.fromLook,eye,ease(k/.55)):eye.clone().add(new THREE.Vector3(-Math.sin(P.yaw),0,-Math.cos(P.yaw)).multiplyScalar(30));
+    cam.up.set(0,1,0); cam.lookAt(look); if(k>.8) cam.quaternion.slerp(_tq,(k-.8)/.2);
+    if(Math.abs(cam.fov-75)>.1){ cam.fov+=(75-cam.fov)*Math.min(1,dt*2); cam.updateProjectionMatrix(); }
+    if(TITLE.swoop<=0){ TITLE.on=false; if(TITLE.jets) for(const j of TITLE.jets) j.root.visible=false; cam.fov=75; cam.updateProjectionMatrix();
+      if(TITLE.help) setTimeout(function(){ toggleHelp(true); },200); TITLE.help=false;
+      toastEl.textContent='Welcome to the island! Jets wait on the apron — press '+(TOUCH.on?'\u{1F6AA}':'R')+' beside one to fly'; toastEl.style.opacity=1;
+      clearTimeout(toastTimer); toastTimer=setTimeout(function(){ toastEl.style.opacity=0; },6000); }
+    return;
+  }
+  tod=TITLE.tod; SKY.ambT=Math.min(SKY.ambT,.1);
+  TITLE.t+=dt;
+  if(TITLE.t>=TSHOTS[TITLE.shot].d){ TITLE.t=0; TITLE.shot=(TITLE.shot+1)%TSHOTS.length; }
+  const c=titleCam();
+  cam.position.copy(c.p); cam.up.set(0,1,0); cam.lookAt(c.look);
+  if(Math.abs(cam.fov-c.fov)>.05){ cam.fov=c.fov; cam.updateProjectionMatrix(); }
+  P.pos.set(c.p.x,c.p.y-EYE,c.p.z); P.vel.set(0,0,0); P.fly=true;       // the world streams in around the camera
+  // a pair of fighters screams past toward the sunrise
+  if(!TITLE.jets){ TITLE.jets=[buildJet(0xa3adb7,0x949ea8),buildJet(0xb0b9c2,0x949ea8)]; for(const j of TITLE.jets){ scene.add(j.root); j.gear.visible=false; } }
+  const s0=TSHOTS[0], on=TITLE.shot===0&&TITLE.t>4.5&&TITLE.t<12;
+  TITLE.jets.forEach(function(j,i){
+    j.root.visible=on; if(!on) return;
+    const k=TITLE.t-4.5, sd=sunDirAt(TITLE.tod,_tv), fw=_tv2.set(sd.x,.06,sd.z).normalize();
+    const start=s0.pos(0); j.root.position.set(start.x-fw.x*120+(i?14:-6),SEA+16+i*5+k*2,start.z-fw.z*120+(i?-10:6)).addScaledVector(fw,k*120);
+    j.root.lookAt(j.root.position.clone().sub(fw)); j.root.rotateZ(Math.sin(k*.8+i)*.15);
+    for(let n=0;n<j.flames.length;n++){ const f=j.flames[n]; f.visible=true; f.scale.z=(n%2?3.5:5)*(.9+Math.random()*.2); }
+    if(Math.random()<.8) fx(PT.SMOKE,j.root.position.x-fw.x*9,j.root.position.y,j.root.position.z-fw.z*9,0,0,0,2.5,.5,2.2,1,1,1,.3,0,0,0);
+  });
+}
+function titleToPlay(){
+  if(!TITLE.on||TITLE.swoop>0) return;
+  TITLE.from.copy(P.cam.position); TITLE.fromLook=titleCam().look;
+  respawn(P); P.yaw=-Math.PI/2; P.pitch=-.05; P.fly=false;
+  TITLE.swoop=3.4; tod=TITLE.tod+.004; document.body.classList.remove('titlemode');
+}
 
 function tick(dt){
   for(const pl of [P,P2]){                            // cooldowns keep running while riding the coaster
@@ -7603,7 +7691,7 @@ function tick(dt){
       else aimCamera(P2);
     }
   }
-  if(playing&&!pickerOpen&&!helpOpen&&!P.dead&&!cartOf(P)&&!vehOf(P)&&!CINE.on){
+  if(playing&&!pickerOpen&&!helpOpen&&!P.dead&&!cartOf(P)&&!vehOf(P)&&!CINE.on&&!(TITLE.on&&TITLE.swoop<=0)){
     if(steerMode&&!locked){
       // edge-assist: keep turning only when the cursor runs out of screen
       const edge=.86;
@@ -7660,6 +7748,7 @@ function tick(dt){
   updateAvatars(dt);
   updateBosses(dt);
   updateCine(dt);
+  updateTitle(dt);
   musicTick();
   // hud
   document.getElementById('coords').textContent=
@@ -7705,7 +7794,7 @@ window.MC={VEH:VEH, interact:interact, vehOf:vehOf, enterVeh:enterVeh, exitVeh:e
   SPAWN:SPAWN, DEPTH:DEPTH, SEA:SEA, WH:WH,
   get P(){ return P; }, get P2(){ return P2; }, get players(){ return players; },
   get coop(){ return coop; }, setCoop:setCoop, fitView:fitView, resizeCams:resizeCams,
-  setFrozen:function(v){ FROZEN=v; }, DRAGON:DRAGON, LAIR:LAIR, BOSSES:BOSSES, CINE:CINE, wakeBoss:wakeBoss, killBoss:killBoss, hurtBoss:hurtBoss, skipCine:skipCine, startFight:startFight, KG:KG, BSHOTS:BSHOTS,
+  setFrozen:function(v){ FROZEN=v; }, TITLE:TITLE, titleToPlay:titleToPlay, DRAGON:DRAGON, LAIR:LAIR, BOSSES:BOSSES, CINE:CINE, wakeBoss:wakeBoss, killBoss:killBoss, hurtBoss:hurtBoss, skipCine:skipCine, startFight:startFight, KG:KG, BSHOTS:BSHOTS,
   get godMode(){ return godMode; }, setRenderDistance:setRenderDistance,
   get RD(){ return RD; }, get mouseHold(){ return {a:mouse1,b:mouse2}; },
   setMouse:function(a,b){ mouse1=a; mouse2=b; }, setGod:function(v){ godMode=v; for(const q of players) renderHearts(q); }, blasts:blasts, timers:timers,
@@ -7726,7 +7815,7 @@ window.MC={VEH:VEH, interact:interact, vehOf:vehOf, enterVeh:enterVeh, exitVeh:e
   heightAt:heightAt, chunks:chunks, keys:keys, selectSlot:selectSlot,
   get selSlot(){ return P.selSlot; }, startGame:startGame, updateChunks:updateChunks, NOGL:NOGL,
   U:U, SKY:SKY, applyQuality:applyQuality, get QP(){ return QP; }, setTime:function(t){ tod=t; }, get tod(){ return tod; },
-  setScale:function(v){ renderScale=v; scaleLocked=true; }, TOUCH:TOUCH, get MOBILE(){ return MOBILE; }, enableTouch:enableTouch, get playing(){ return playing; }, forcePlay:function(){ helpShown=true; locked=true; steerMode=false; playing=true; ovmsg.style.display='block'; overlay.style.display='none'; if(helpOpen){ helpOpen=false; helpEl.style.display='none'; } }, fires:fires, ignite:ignite, explosionFX:explosionFX,
+  setScale:function(v){ renderScale=v; scaleLocked=true; }, TOUCH:TOUCH, get MOBILE(){ return MOBILE; }, enableTouch:enableTouch, get playing(){ return playing; }, forcePlay:function(){ TITLE.on=false; TITLE.swoop=0; overlay.classList.remove('title'); helpShown=true; locked=true; steerMode=false; playing=true; ovmsg.style.display='block'; overlay.style.display='none'; if(helpOpen){ helpOpen=false; helpEl.style.display='none'; } }, fires:fires, ignite:ignite, explosionFX:explosionFX,
   PS_ADD:PS_ADD, PS_ALPHA:PS_ALPHA, debris:debris, renderFrame:renderFrame, buildChunkMesh:buildChunkMesh, slopeAt:slopeAt, biomeOf:biomeOf, VOLC:VOLC, islandEdge:islandEdge, LANDMARKS:LANDMARKS, EXPLORE:EXPLORE, LIGHTHOUSES:LIGHTHOUSES, CASTLE:CASTLE, GIANT_TREE:GIANT_TREE, SKY_ISLANDS:SKY_ISLANDS, toggleJournal:toggleJournal,
   updateWater:updateWater, get WQ(){ return FW.q; }, get LQ(){ return FLV.q; }, setAurora:function(v){ SKY.aurora=v; U.uAurora.value=v; },
   setWeather:setWeather, WEATHER:WEATHER, strike:strike,
