@@ -1,4 +1,4 @@
-import { OUTFITS, outfitPortraits } from './character.js';
+import { OUTFITS } from './character.js';
 import { RARITY, TIPS, GAME_TITLE, WEAPONS, HEALS, AMMO_NAMES } from './config.js';
 import { paintArt } from './art.js';
 import { iconFor, iconUrl, itemName, weaponDamage } from './items.js';
@@ -63,7 +63,7 @@ export class Menus {
       <div class="topbar">${LOGO}<nav><button class="tab" data-nav data-go="lobby">PLAY</button><button class="tab sel" data-nav data-go="locker">LOCKER</button>
         <button class="tab" data-nav data-go="settings">SETTINGS</button><button class="tab" data-nav data-go="controls">CONTROLS</button></nav></div>
       <div class="locker-info"><h2 id="lk-name"></h2><div id="lk-rarity" class="rarity-pill"></div><p id="lk-desc"></p>
-        <div class="lk-parts">Outfit &middot; Glider &middot; Pickaxe trim</div>
+        <div class="lk-parts">Head &middot; Torso &middot; Arms &middot; Legs &middot; Backpack &middot; Glider</div>
         <div class="row"><button class="btn yellow" data-nav id="lk-equip">EQUIP</button><button class="btn" data-nav id="lk-glider">PREVIEW GLIDER</button></div>
         <div class="hint">Drag the model to rotate it</div></div>
       <div class="locker-grid" id="lk-grid"></div>`;
@@ -76,8 +76,7 @@ export class Menus {
       card.dataset.nav = '';
       card.dataset.id = o.id;
       card.style.setProperty('--rar', RARITY[o.rarity].color);
-      // a flat stand-in until the rendered portrait arrives (see show('locker'))
-      card.innerHTML = `<div class="swatch" style="background:radial-gradient(circle at 50% 38%, ${RARITY[o.rarity].color}cc, ${RARITY[o.rarity].color}33 70%)">
+      card.innerHTML = `<div class="swatch" style="background:linear-gradient(160deg, ${o.primary} 0 45%, ${o.secondary} 45% 75%, ${o.accent} 75%)">
         <div class="mini-head" style="background:${o.skin}"></div><div class="mini-body" style="background:${o.primary};border-color:${o.secondary}"></div></div>
         <div class="cname">${o.name}</div><div class="crar">${RARITY[o.rarity].name}</div>`;
       card.onclick = () => {
@@ -233,11 +232,6 @@ export class Menus {
       this.refreshLobby();
     }
     if (name === 'locker') {
-      // rendered portraits replace the stand-ins, one at a time, the first time the locker opens
-      outfitPortraits(g.renderer, (id, url) => {
-        const sw = this.screens.locker.querySelector(`.card[data-id="${id}"] .swatch`);
-        if (sw && !sw.querySelector('.portrait')) sw.innerHTML = `<img class="portrait" src="${url}" alt="">`;
-      });
       g.lobby.setLayout('locker');
       this.selectOutfit(g.settings.outfit);
     }

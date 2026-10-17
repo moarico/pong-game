@@ -8,8 +8,7 @@ import { Environment } from './world/environment.js';
 import { CollisionWorld } from './physics.js';
 import { Actor } from './actor.js';
 import { BotBrain } from './bots.js';
-import { OUTFITS, outfitById, fabricMat } from './character.js';
-import { loadAssets } from './assets.js';
+import { OUTFITS, outfitById } from './character.js';
 import { BuildSystem } from './building.js';
 import { LootSystem } from './loot.js';
 import { Storm } from './storm.js';
@@ -24,6 +23,7 @@ import { Menus } from './menus.js';
 import { LobbyStage } from './lobby.js';
 import { AudioSystem } from './zh/sound.js';
 import { ViewModel } from './zh/viewmodel.js';
+import { fabricMat } from './zh/soldier.js';
 import { PostChain, hdrSupported } from './zh/post.js';
 import { DAY, ATM } from './zh/atmos.js';
 import { GrassField } from './world/grass.js';
@@ -33,7 +33,7 @@ import { TitleCinematic } from './cinematic.js';
 const SETTINGS_KEY = 'stormdrop-settings-v1';
 const DEFAULTS = {
   mouseSens: 1, padSens: 1, invertY: false, fov: 72, volume: 0.7, music: 0.5, quality: 'medium', players: 25,
-  difficulty: 1, stormSpeed: 1, showFps: false, name: 'You', outfit: 'rookie', shoulder: 1, view: 'first',
+  difficulty: 1, stormSpeed: 1, showFps: false, name: 'You', outfit: 'recruit', shoulder: 1, view: 'first',
 };
 const tick = () => new Promise((r) => setTimeout(r, 16));
 
@@ -589,21 +589,4 @@ class Game {
   }
 }
 
-// a line of text while the art downloads, so a slow connection never looks like a blank page
-const boot = document.createElement('div');
-boot.textContent = 'Loading Stormdrop...';
-boot.style.cssText = "position:fixed;inset:0;display:flex;align-items:center;justify-content:center;color:#cfe0ff;font:700 22px 'Barlow Condensed',sans-serif;letter-spacing:2px;z-index:50";
-document.body.appendChild(boot);
-try {
-  await loadAssets(OUTFITS, (f) => (boot.textContent = `Loading Stormdrop... ${Math.round(f * 100)}%`));
-  new Game();
-  boot.remove();
-} catch (e) {
-  boot.remove();
-  // never leave a silent blank page: say what failed
-  const el = document.getElementById('screen-title');
-  el.innerHTML = `<div style="margin:auto;max-width:640px;padding:24px;color:#fff;font:600 18px 'Barlow Condensed',sans-serif;text-align:center">
-    <h2 style="font-size:32px;margin:0 0 12px">Stormdrop couldn't load its art</h2><p>${String(e && e.message ? e.message : e).replace(/[<>&]/g, '')}</p><p>Try reloading the page.</p></div>`;
-  el.style.display = 'flex';
-  console.error(e);
-}
+new Game();

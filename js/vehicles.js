@@ -1,67 +1,36 @@
 import * as THREE from 'three';
 import { VEHICLE } from './config.js';
-import { bakeModel, partCenters, kitMaterial } from './kit.js';
+import { truckGeometry, truckWheelGeometry, TRUCK, modelMaterial } from './zh/models.js';
 import { clamp } from './util.js';
 
-// Drivable cars are Kenney's car kit. Body, glass and each wheel are baked separately so the wheels roll
-// and steer and you can see the driver through the windows.
-const MODELS = ['truck', 'suv', 'police-car', 'taxi', 'hatchback', 'sports-sedan'];
-const RIGS = new Map();
-// Node names along a mesh's path; a road wheel is a node named wheel_frontLeft and so on.
-const HUB = /^wheel_(front|back)(Left|Right)\d*$/;
-const hubOf = (path) => path.split('/').find((n) => HUB.test(n));
-export function carRig(name) {
-  if (RIGS.has(name)) return RIGS.get(name);
-  const file = 'car-' + name;
-  const isGlass = (m) => m.toLowerCase().includes('window');
-  const body = bakeModel(file, { tag: 'body', keepOrigin: true, part: (p) => !hubOf(p), mat: (m) => !isGlass(m) });
-  const glass = bakeModel(file, { tag: 'glass', keepOrigin: true, part: (p) => !hubOf(p), mat: isGlass });
-  // Kenney's cars face +Z; the game drives toward -Z, so everything turns around
-  for (const g of [body, glass]) if (g) g.rotateY(Math.PI).computeBoundingBox();
-  const wheels = partCenters(file, (p) => !!hubOf(p)).map((w) => {
-    const geo = bakeModel(file, { tag: w.name, center: true, part: (p) => p.split('/').includes(w.name) });
-    geo.rotateY(Math.PI);
-    const x = -w.c.x, z = -w.c.z;
-    return { geo, x, y: w.c.y, z, r: w.size.y / 2, left: x < 0, front: z < 0 };
-  });
-  const bb = body.boundingBox;
-  const front = Math.min(...wheels.filter((w) => w.front).map((w) => w.z));
-  const rig = {
-    body, glass, wheels, wheelR: wheels.length ? wheels[0].r : 0.45,
-    half: [(bb.max.x - bb.min.x) / 2, (bb.max.z - bb.min.z) / 2], top: bb.max.y,
-    // the driver sits on the left, a little behind the front axle
-    seat: [bb.min.x * 0.38, 0.28, front + 1.05],
-  };
-  RIGS.set(name, rig);
-  return rig;
-}
-
+const COLORS = ['#4a5a3a', '#7a2a22', '#2f4f6f', '#c9a23a', '#3a3f45', '#d8d8d0'];
 export class Vehicle {
-  constructor(game, spot, model) {
+  constructor(game, spot, color) {
     this.game = game;
     this.kind = 'vehicle';
     this.spawn = spot;
-    this.model = model;
-    const R = (this.rig = carRig(model));
-    const mat = kitMaterial();
-    this.mesh = new THREE.Mesh(R.body, mat);
+    this.color = color;
+    const mat = modelMaterial();
+    this.mesh = new THREE.Mesh(truckGeometry(color), mat);
     this.mesh.castShadow = true;
     this.mesh.receiveShadow = true;
-    // wheels: an outer group that steers, an inner mesh that rolls
-    this.wheels = R.wheels.map((w) => {
+    // wheels: an outer group that steers (and faces the rim outward), an inner mesh that rolls
+    this.wheels = TRUCK.wheels.map(([x, z]) => {
       const group = new THREE.Group();
-      group.position.set(w.x, w.y, w.z);
-      const spin = new THREE.Mesh(w.geo, mat);
+      group.position.set(x, TRUCK.wheelY, z);
+      const spin = new THREE.Mesh(truckWheelGeometry(), mat);
       spin.castShadow = true;
       group.add(spin);
       this.mesh.add(group);
-      return { group, spin, left: w.left, front: w.front };
+      return { group, spin, left: x < 0, front: z < 0 };
     });
-    if (R.glass) {
-      const glass = new THREE.Mesh(R.glass, Vehicle.glassMat());
-      glass.renderOrder = 2;
-      this.mesh.add(glass);
-    }
+    // see-through windshield
+    const G = TRUCK.glass;
+    const glass = new THREE.Mesh(new THREE.PlaneGeometry(G.w, G.h), Vehicle.glassMat());
+    glass.position.set(0, G.y, G.z);
+    glass.rotation.x = G.tilt;
+    glass.renderOrder = 2;
+    this.mesh.add(glass);
     this.root = new THREE.Group();
     this.root.add(this.mesh);
     this.steer = 0;
@@ -97,14 +66,13 @@ export class Vehicle {
   updateCollider() {
     const c = this.collider;
     const cs = Math.abs(Math.cos(this.yaw)), sn = Math.abs(Math.sin(this.yaw));
-    const [ax, az] = this.rig.half;
-    const hx = ax * cs + az * sn, hz = ax * sn + az * cs;
+    const hx = 1.05 * cs + 2.4 * sn, hz = 1.05 * sn + 2.4 * cs;
     c.minx = this.pos.x - hx;
     c.maxx = this.pos.x + hx;
     c.minz = this.pos.z - hz;
     c.maxz = this.pos.z + hz;
     c.miny = this.pos.y + 0.3;
-    c.maxy = this.pos.y + this.rig.top;
+    c.maxy = this.pos.y + 2.0;
     this.game.collision.update(c);
   }
 
@@ -116,7 +84,7 @@ export class Vehicle {
   seatPosition(out) {
     const f = this.forward();
     const r = new THREE.Vector3(Math.cos(this.yaw), 0, -Math.sin(this.yaw));
-    const [x, y, z] = this.rig.seat;
+    const [x, y, z] = TRUCK.seat;
     return out.copy(this.pos).addScaledVector(r, x).addScaledVector(f, -z).add(new THREE.Vector3(0, y, 0));
   }
 
@@ -277,10 +245,10 @@ export class Vehicle {
     this.root.rotation.set(0, this.yaw, 0);
     this.mesh.rotation.set(pitch, 0, -this.roll);
     // roll the wheels and steer the front pair
-    this.spin = (this.spin || 0) + (this.speed * (dt || 0)) / this.rig.wheelR;
+    this.spin = (this.spin || 0) + (this.speed * (dt || 0)) / TRUCK.wheelR;
     for (const w of this.wheels) {
-      w.group.rotation.y = w.front ? -this.steer * 0.5 : 0;
-      w.spin.rotation.x = -this.spin;
+      w.group.rotation.y = (w.left ? Math.PI : 0) + (w.front ? -this.steer * 0.5 : 0);
+      w.spin.rotation.x = w.left ? this.spin : -this.spin;
     }
   }
 }
@@ -292,7 +260,7 @@ export class VehicleSystem {
   }
 
   spawnAll(spots) {
-    spots.forEach((s, i) => this.list.push(new Vehicle(this.game, s, MODELS[i % MODELS.length])));
+    spots.forEach((s, i) => this.list.push(new Vehicle(this.game, s, COLORS[i % COLORS.length])));
   }
 
   reset() {

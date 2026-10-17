@@ -165,7 +165,6 @@ vec3 buildingDetail() {
 	vec2 uv = wall ? ( a.x > a.z ? vBW.zy : vBW.xy ) : vBW.xz;
 	float s = floor( vSurf + 0.5 );
 	if ( s < 0.5 ) s = wall ? 1.0 : 7.0;
-	if ( s > 7.5 ) return vec3( 1.0 ); // plain: artist models keep their own colors
 	vec3 d;
 	if ( s < 1.5 ) d = bDet( tB1, uv / 3.0 );
 	else if ( s < 2.5 ) d = bDet( tB2, uv / 2.0 );

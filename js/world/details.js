@@ -4,7 +4,6 @@
 import * as THREE from 'three';
 import { POIS, ROAD_HALF_WIDTH } from './island.js';
 import { lerp } from '../util.js';
-import { bakeModel, addToBuilder } from '../kit.js';
 
 const POLE = '#6b5a48', DARK = '#3a3f45';
 const TOWNS = ['city', 'lake', 'suburb', 'outpost', 'beach'];
@@ -82,29 +81,32 @@ export function streetFurniture(S) {
       if (!inPoi(x, z, 10, TOWNS)) continue;
       const g = T.heightAt(x, z);
       if (g < 0.6 || !S.rectClear(x - 0.3, z - 0.3, x + 0.3, z + 0.3, 0.3, { ignoreRoads: true, maxSlope: 3 })) continue;
-      // KayKit's street lamp, its arm reaching out over the road
-      const lamp = bakeModel('city-streetlight', { keepOrigin: true, scale: 5.6 });
-      addToBuilder(gb, lamp, x, g - 0.05, z, Math.atan2(-nz * flip, nx * flip));
-      S.W.box(x - 0.15, g - 0.2, z - 0.15, x + 0.15, g + 5.3, z + 0.15);
-      // now and then a bench, a hydrant, a dumpster or a stack of boxes a little further along
+      // lamp: a pole curving out over the road with a lamp head
+      gb.cylinder(x, g - 0.2, z, 0.1, 0.07, 6.2, 7, DARK);
+      const hx = x - nx * flip * 1.4, hz = z - nz * flip * 1.4;
+      gb.boxRot((x + hx) / 2, g + 5.9, (z + hz) / 2, 0.1, 0.1, 1.5, Math.atan2(hx - x, hz - z), DARK);
+      gb.boxRot(hx, g + 5.7, hz, 0.36, 0.18, 0.7, Math.atan2(hx - x, hz - z), DARK);
+      gb.boxRot(hx, g + 5.66, hz, 0.28, 0.04, 0.56, Math.atan2(hx - x, hz - z), '#fff6d8');
+      S.W.box(x - 0.12, g - 0.2, z - 0.12, x + 0.12, g + 6, z + 0.12);
+      // now and then a bench, a hydrant or a bin a little further along
       const r = rng();
-      const px = x + (bx - ax) / len * 2.4, pz = z + (bz - az) / len * 2.4;
+      const px = x + (bx - ax) / len * 2.2, pz = z + (bz - az) / len * 2.2;
       const pg = T.heightAt(px, pz);
-      const along = Math.atan2(bz - az, bx - ax);
-      if (r < 0.28) {
-        addToBuilder(gb, bakeModel('city-bench'), px, pg - 0.02, pz, -along + (flip > 0 ? Math.PI : 0));
-        S.W.box(px - 0.6, pg, pz - 0.6, px + 0.6, pg + 0.5, pz + 0.6);
-      } else if (r < 0.48) {
-        addToBuilder(gb, bakeModel('city-firehydrant', { scale: 4 }), px, pg - 0.02, pz, along);
-        S.W.box(px - 0.25, pg, pz - 0.25, px + 0.25, pg + 0.9, pz + 0.25);
-      } else if (r < 0.62) {
-        const qx = px + nx * flip * 0.8, qz = pz + nz * flip * 0.8;
-        addToBuilder(gb, bakeModel('city-dumpster'), qx, T.heightAt(qx, qz) - 0.02, qz, -along);
-        S.W.box(qx - 1.4, pg, qz - 1.4, qx + 1.4, pg + 1.6, qz + 1.4);
-      } else if (r < 0.72) {
-        addToBuilder(gb, bakeModel('city-box_A'), px, pg - 0.02, pz, rng() * 6);
-        addToBuilder(gb, bakeModel('city-box_B'), px + 0.4, pg + 0.88, pz - 0.1, rng() * 6);
-        S.W.box(px - 0.6, pg, pz - 0.6, px + 0.6, pg + 1.7, pz + 0.6);
+      const yaw = Math.atan2(nx * flip, nz * flip);
+      if (r < 0.3) {
+        gb.boxRot(px, pg + 0.42, pz, 1.6, 0.06, 0.45, yaw + Math.PI / 2, '#8b5e3c');
+        gb.boxRot(px - nx * flip * 0.2, pg + 0.5, pz - nz * flip * 0.2, 1.6, 0.4, 0.05, yaw + Math.PI / 2, '#8b5e3c');
+        for (const o of [-0.7, 0.7]) gb.boxRot(px + (bx - ax) / len * o, pg, pz + (bz - az) / len * o, 0.08, 0.45, 0.4, yaw + Math.PI / 2, DARK);
+        S.W.box(px - 0.5, pg, pz - 0.5, px + 0.5, pg + 0.5, pz + 0.5);
+      } else if (r < 0.5) {
+        gb.cylinder(px, pg - 0.05, pz, 0.16, 0.14, 0.7, 8, '#c8342a');
+        gb.sphere(px, pg + 0.68, pz, 0.15, 8, 5, '#c8342a', 1, true);
+        gb.boxRot(px, pg + 0.42, pz, 0.46, 0.1, 0.1, yaw, '#c8342a');
+        S.W.box(px - 0.2, pg, pz - 0.2, px + 0.2, pg + 0.8, pz + 0.2);
+      } else if (r < 0.7) {
+        gb.cylinder(px, pg - 0.05, pz, 0.28, 0.3, 0.95, 10, '#3a6a4a');
+        gb.cylinder(px, pg + 0.9, pz, 0.32, 0.32, 0.06, 10, '#2f4a3a');
+        S.W.box(px - 0.3, pg, pz - 0.3, px + 0.3, pg + 1, pz + 0.3);
       }
     }
   }

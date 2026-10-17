@@ -10,7 +10,7 @@ export class TitleCinematic {
     this.group = new THREE.Group();
     this.bus = busModel();
     this.group.add(this.bus);
-    const pick = ['nightfall', 'circuit', 'kickflip', 'scrapper', 'marshal'];
+    const pick = ['nightfall', 'vanguard', 'woodland', 'arctic', 'marshal'];
     this.squad = pick.map((id, i) => {
       const o = OUTFITS.find((x) => x.id === id) || OUTFITS[i];
       const m = new CharacterModel(o, 'title-' + i);
