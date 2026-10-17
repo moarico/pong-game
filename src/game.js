@@ -41,12 +41,16 @@ function glowTexture() {
 // blocky world: a voxel ball with glowing blue energy cores and a soft halo
 let voxelBallGeo = null;
 function voxelBall() {
-  const mat = blockMaterial({ fog: false, emissiveBoost: 1.6 });
+  const mat = blockMaterial({ fog: false, emissiveBoost: 0.8 });
   mat.emissiveIntensity = 2.4; // ModeFx pulses this; mirrored into the block glow each frame
   // metres baked in: the victory cinematic animates the ball's own scale from 1
-  if (!voxelBallGeo) { voxelBallGeo = voxelBallGeometry().clone().scale(S, S, S); voxelBallGeo.userData.shared = true; }
-  const m = new THREE.Mesh(voxelBallGeo, mat);
+  if (!voxelBallGeo) {
+    voxelBallGeo = [16, 9].map((res) => { const g = voxelBallGeometry(res).clone().scale(S, S, S); g.userData.shared = true; return g; });
+  }
+  // a Mesh (the match and the cinematic treat the ball as one) whose finer blocks show up close
+  const m = new THREE.Mesh(voxelBallGeo[0], mat);
   m.castShadow = true;
+  m.userData.lod = voxelBallGeo;
   addHalo(m);
   return m;
 }
@@ -738,14 +742,21 @@ export class Match {
     const pulse = this.ballPulse * this.ballPulse;
     const mat = this.ball.material;
     if (mat.userData.emissiveBoost) {
-      mat.userData.emissiveBoost.value = 1.6 * (mat.emissiveIntensity / 2.4) + Math.min(1.6, sp / 2200) + pulse * 4;
+      mat.userData.emissiveBoost.value = 0.8 * (mat.emissiveIntensity / 2.4) + Math.min(0.9, sp / 3500) + pulse * 2;
     } else {
       // panel ball: ModeFx resets the base intensity each frame in its modes
       const base = this.modeFx ? mat.emissiveIntensity : 2.4;
       mat.emissiveIntensity = base + Math.min(1, sp / 3000) + pulse * 2.5;
     }
+    // voxel ball: finer blocks when any view's camera is close
+    const lod = this.ball.userData.lod;
+    if (lod) {
+      let d = Infinity;
+      for (const v of this.views) d = Math.min(d, v.camera.position.distanceTo(this.ball.position));
+      this.ball.geometry = d < 20 ? lod[0] : lod[1];
+    }
     const halo = this.ball.userData.halo;
-    halo.material.opacity = Math.min(0.9, (this.blocky ? 0.2 : 0.12) + Math.min(0.3, sp / 7000) + pulse * 0.55);
+    halo.material.opacity = Math.min(0.7, 0.1 + Math.min(0.25, sp / 8000) + pulse * 0.45);
     halo.scale.setScalar(BALL.radius * S * (4.2 + pulse * 2.5 + Math.min(1.2, sp / 3000)));
   }
 

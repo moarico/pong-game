@@ -3,7 +3,7 @@ import { CAR, S, TEAM_COLORS, EXHAUST_X } from '../config.js';
 import { treadTexture } from './textures.js';
 import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
 import { carGeometry, carTextures, bodyPoint, tyreHalf } from './carBody.js';
-import { voxelCarGeometry, voxelWheelGeometry } from './voxelCar.js';
+import { voxelCarGeometry, voxelWheelGeometry, voxelSideX } from './voxelCar.js';
 import { blockMaterial } from './world/blocks.js';
 
 const _a = new THREE.Vector3();
@@ -152,16 +152,26 @@ export class CarModel {
     this.paint = mat;
     this.chassis = new THREE.Group();
     this.body.add(this.chassis);
-    const shell = new THREE.Mesh(voxelCarGeometry(team), mat);
-    shell.castShadow = true;
-    shell.receiveShadow = true;
-    this.chassis.add(shell);
+    // fine blocks up close, coarser ones further than ~22 m from the camera (per view)
+    const lod = (geos, shadow) => {
+      const l = new THREE.LOD();
+      geos.forEach((g, i) => {
+        const m = new THREE.Mesh(g, mat);
+        m.castShadow = shadow;
+        m.receiveShadow = i === 0;
+        l.addLevel(m, i === 0 ? 0 : 22);
+      });
+      return l;
+    };
+    this.chassis.add(lod([voxelCarGeometry(team, 2), voxelCarGeometry(team, 3.5)], true));
+    this.exhausts = EXHAUST_X;
     if (number) {
       const numMat = new THREE.MeshStandardMaterial({ map: numberTexture(number, tc.css), transparent: true, depthWrite: false, roughness: 0.4, polygonOffset: true, polygonOffsetFactor: -4, polygonOffsetUnits: -4 });
       const plate = new THREE.PlaneGeometry(18, 11);
+      const side = voxelSideX(2, 7, 5) + 0.15;
       for (const sx of [-1, 1]) {
         const m = new THREE.Mesh(plate, numMat);
-        m.position.set(sx * 33.15, 7, 5);
+        m.position.set(sx * side, 7, 5);
         m.rotation.y = sx * Math.PI / 2;
         this.chassis.add(m);
       }
@@ -173,8 +183,7 @@ export class CarModel {
       pivot.position.set(sx * (Math.abs(w.x) + 7), -CAR.restHeight + w.r, w.z);
       const spin = new THREE.Group();
       pivot.add(spin);
-      const wheel = new THREE.Mesh(voxelWheelGeometry(w.r, team), mat);
-      wheel.castShadow = true;
+      const wheel = lod([voxelWheelGeometry(w.r, team, 1.5), voxelWheelGeometry(w.r, team, 3)], true);
       if (sx < 0) wheel.rotation.y = Math.PI;
       spin.add(wheel);
       this.body.add(pivot);

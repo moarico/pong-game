@@ -320,12 +320,13 @@ function logoScreenTexture() {
 }
 
 // roof canopy, lamp rows, hanging banners and logo screens (realistic stadium)
-function addRoof({ arena, pts, stripGeometry, cuttable, teamTint }) {
+function addRoof({ arena, pts, stripGeometry, cuttable, teamTint, pixel }) {
+  const px = (t) => { if (pixel) { t.magFilter = THREE.NearestFilter; t.needsUpdate = true; } return t; };
   const inner = RIM.offset - 1300;
   const top = RIM.y + 450, edge = RIM.y + 260; // roof edge height and the bottom of its lamp fascia
   const roofMat = cuttable(new THREE.MeshStandardMaterial({ color: 0x2c3038, roughness: 0.75, metalness: 0.5, side: THREE.DoubleSide }));
   arena.add(new THREE.Mesh(stripGeometry(pts, [[-RIM.offset - 40, RIM.y + 150], [-inner, top]], { uLen: 1000 }), roofMat));
-  const lamps = lampRowTexture();
+  const lamps = px(lampRowTexture());
   const lampMat = cuttable(new THREE.MeshStandardMaterial({ color: 0x0b0c0f, emissive: 0xffffff, emissiveMap: lamps, emissiveIntensity: 2.2, side: THREE.DoubleSide }));
   arena.add(new THREE.Mesh(stripGeometry(pts, [[-inner, top], [-inner, edge]], { uLen: 560, vOf: (j) => j }), lampMat));
   // banners
@@ -344,7 +345,7 @@ function addRoof({ arena, pts, stripGeometry, cuttable, teamTint }) {
   const bannerMats = [];
   for (const team of [0, 1]) {
     if (!geos[team].length) continue;
-    const tex = bannerTexture(team);
+    const tex = px(bannerTexture(team));
     const mat = cuttable(new THREE.MeshStandardMaterial({ map: tex, alphaTest: 0.5, side: THREE.DoubleSide, roughness: 0.85, emissive: 0xffffff, emissiveMap: tex, emissiveIntensity: 0.12 }));
     bannerMats.push(mat);
     arena.add(new THREE.Mesh(mergeGeometries(geos[team]), mat));
@@ -433,7 +434,7 @@ export function buildBlockStands({ arena, root, pts, stripGeometry, teamTint, cu
   const underMat = cuttable(new THREE.MeshStandardMaterial({ color: 0x24272d, roughness: 0.9, side: THREE.DoubleSide }));
   arena.add(new THREE.Mesh(stripGeometry(pts, [[t2start[0], CONCOURSE_TOP], [-RIM.offset, CONCOURSE_TOP]], { uLen: 1000 }), underMat));
 
-  const roof = real ? addRoof({ arena, pts, stripGeometry, cuttable, teamTint }) : null;
+  const roof = addRoof({ arena, pts, stripGeometry, cuttable, teamTint, pixel: !real });
 
   // floodlight towers around the outside
   const towerMat = real ? new THREE.MeshStandardMaterial({ color: 0x8a8f96, metalness: 0.7, roughness: 0.45 }) : blockMaterial();
@@ -482,11 +483,9 @@ export function buildBlockStands({ arena, root, pts, stripGeometry, teamTint, cu
       facadeMat.emissiveIntensity = 0.15 + night * 0.9 + dusk * 0.3;
       crowdMat.emissiveIntensity = 0.05 + night * 0.12;
       glowMat.opacity = real ? 0.04 + night * 0.45 + dusk * 0.12 : 0.35 + night * 0.65 + dusk * 0.35;
-      if (real) {
-        lampMat.emissiveIntensity = 1.2 + night * 1.6 + dusk * 0.6;
-        roof.lampMat.emissiveIntensity = 1.4 + night * 2.0 + dusk * 0.8;
-      }
+      if (real) lampMat.emissiveIntensity = 1.2 + night * 1.6 + dusk * 0.6;
       else towerMat.userData.emissiveBoost.value = 0.8 + night * 1.6 + dusk * 0.6;
+      roof.lampMat.emissiveIntensity = 1.4 + night * 2.0 + dusk * 0.8;
       if (flood) flood.intensity = Math.max(flood.intensity, 0);
     },
   };

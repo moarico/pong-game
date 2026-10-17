@@ -202,6 +202,8 @@ export function buildFeatures(root, quality, style = 'blocky') {
     { pos: [180, 235, -960], R: 18, v: 3, trees: 7, seed: 11 },
     { pos: [-840, 165, -260], R: 12, v: 2.5, trees: 4, seed: 13 },
     { pos: [780, 310, 140], R: 9, v: 2.5, trees: 2, seed: 17, stream: false },
+    // high and close enough to show above the stands from the pitch
+    { pos: [-380, 380, 330], R: 22, v: 2.6, castle: true, trees: 8, seed: 23 },
   ];
   const lowQ = quality === 'low';
   for (const isl of ISLANDS) {
@@ -241,7 +243,7 @@ export function buildFeatures(root, quality, style = 'blocky') {
   // airships
   const shipGeo = (() => { const b = new QuadBuilder(); airship().mesh(b, 1.6, [-20.8, -9.6, -8]); return b.build(); })();
   const ships = [
-    { r: 620, y: 230, speed: 0.012, phase: 0.6 },
+    { r: 330, y: 270, speed: 0.016, phase: 0.6 },
     { r: 980, y: 300, speed: -0.008, phase: 2.8 },
   ].map((s) => { const m = new THREE.Mesh(shipGeo, mat); group.add(m); return { ...s, mesh: m }; });
 

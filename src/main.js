@@ -19,16 +19,16 @@ function defaultQuality() {
 function loadSettings() {
   const d = {
     quality: defaultQuality(), volume: 0.7, rumble: true, ballCam: true, fov: 100, replays: true, showFps: false,
-    timeOfDay: 'sunset', world: 'realistic', weather: 'clear', split: 'horizontal', duration: 300, difficulty: 'pro',
+    timeOfDay: 'sunset', world: 'blocky', weather: 'clear', split: 'horizontal', duration: 300, difficulty: 'pro',
     teamSize_solo: 1, teamSize_versus: 1, teamSize_coop: 2, handling: 'easy', gameMode: 'soccar', items: 'all', victoryFx: true,
   };
   try {
     const s = JSON.parse(localStorage.getItem(SETTINGS_KEY) || '{}');
-    // older saves open on the realistic world at sunset (the block world is now an option)
-    if (s.worldVersion !== 2) {
-      if (s.timeOfDay && !s.world) s.timeOfDay = 'sunset';
-      if (!s.world || s.world === 'blocky') s.world = 'realistic';
-      s.worldVersion = 2;
+    // older saves open once on the new block world at sunset (the look of the reference photos)
+    if (s.worldVersion !== 3) {
+      s.world = 'blocky';
+      s.timeOfDay = 'sunset';
+      s.worldVersion = 3;
     }
     return { ...d, ...s };
   } catch (e) {

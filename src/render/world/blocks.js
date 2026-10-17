@@ -57,11 +57,11 @@ def(B.OBSIDIAN, L.obsidian, L.obsidian, L.obsidian, 0, 0.3, 0.2);
 def(B.PAINT, L.paint, L.paint, L.paint, 0, 0.26, 0.45);
 def(B.TINT_GLASS, L.tint, L.tint, L.tint, 0, 0.05, 0.4);
 def(B.CHROME, L.iron, L.iron, L.iron, 0, 0.14, 1);
-def(B.HEADLIGHT, L.light, L.light, L.light, 1.5, 0.2);
+def(B.HEADLIGHT, L.light, L.light, L.light, 1.0, 0.2);
 def(B.TAILLIGHT, L.light, L.light, L.light, 2.2, 0.2);
 def(B.RUBBER, L.rubber, L.rubber, L.rubber, 0, 0.9);
 def(B.CARBON, L.carbon, L.carbon, L.carbon, 0, 0.4, 0.3);
-def(B.BOOSTLIGHT, L.light, L.light, L.light, 2.2, 0.3);
+def(B.BOOSTLIGHT, L.light, L.light, L.light, 1.5, 0.3);
 
 // ------------------------------------------------------------------ pixel art
 function rng(seed) {

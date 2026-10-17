@@ -16,6 +16,24 @@ export const PITCH_LAYER = 2; // boost pads: skipped by the pitch reflection and
 
 // Wet pitch: a planar reflection of the stadium laid over the grass, rippled by the turf
 // and stronger at glancing angles.
+// 16x16 grey pixel pattern (mean ~0.77) multiplied over the pitch in the block world
+function pixelGrassTexture() {
+  const c = document.createElement('canvas');
+  c.width = c.height = 16;
+  const g = c.getContext('2d');
+  const r = T.rng(5);
+  for (let y = 0; y < 16; y++) for (let x = 0; x < 16; x++) {
+    const v = Math.round(150 + r() * 80 + (r() < 0.12 ? 25 : 0));
+    g.fillStyle = `rgb(${v},${v},${v})`;
+    g.fillRect(x, y, 1, 1);
+  }
+  const t = new THREE.CanvasTexture(c);
+  t.wrapS = t.wrapT = THREE.RepeatWrapping;
+  t.magFilter = THREE.NearestFilter;
+  t.anisotropy = 8;
+  return t;
+}
+
 function wetPitch(renderer, quality) {
   const size = new THREE.Vector2();
   renderer.getDrawingBufferSize(size);
@@ -384,6 +402,16 @@ export function buildStadium(renderer, scene, opts) {
   bump.needsUpdate = true;
   const floorGeo = floorShapeGeometry(pts, RR);
   const floorMat = new THREE.MeshStandardMaterial({ map: fieldTex, roughness: 0.92, metalness: 0, bumpMap: bump, bumpScale: 0.6 });
+  if (style === 'blocky' && blocky) {
+    // Minecraft-style turf: a fine pixel grass pattern over the stripes and markings (~1 m per tile)
+    const pix = pixelGrassTexture();
+    floorMat.onBeforeCompile = (sh) => {
+      sh.uniforms.tPix = { value: pix };
+      sh.fragmentShader = 'uniform sampler2D tPix;\n' + sh.fragmentShader.replace('#include <map_fragment>',
+        '#include <map_fragment>\n diffuseColor.rgb *= texture2D(tPix, vMapUv * vec2(82.0, 120.0)).rgb * 1.3;');
+    };
+    floorMat.customProgramCacheKey = () => 'pixelField';
+  }
   const floor = new THREE.Mesh(floorGeo, floorMat);
   floor.receiveShadow = true;
   arena.add(floor);
@@ -392,7 +420,7 @@ export function buildStadium(renderer, scene, opts) {
   const dryWet = style === 'blocky' ? 0.5 : 0.3;
   if (wet) root.add(wet);
 
-  if (quality === 'high') {
+  if (quality === 'high' && style !== 'blocky') {
     // grass shells: stacked alpha-tested layers that give the turf some depth
     const shellTex = grass.clone();
     shellTex.repeat.set(32, 47);

@@ -158,6 +158,7 @@ export class SkySystem {
     this.envTimer = 0;
     this.wind = new THREE.Vector2(Math.random() * 50, Math.random() * 50);
     this.sunDir = new THREE.Vector3();
+    this.skySun = new THREE.Vector3(); // where the sky draws the sun (raised near sunset)
     this.moonDir = new THREE.Vector3();
     this.lightDir = new THREE.Vector3();
     this.w = { night: 0, sunset: 0, day: 1 };
@@ -191,7 +192,13 @@ export class SkySystem {
     if (el > -3) this.lightDir.copy(this.sunDir); else this.lightDir.copy(this.moonDir);
     if (this.lightDir.y < 0.12) { this.lightDir.y = 0.12; this.lightDir.normalize(); }
     const u = this.mat.uniforms;
-    u.uSunDir.value.copy(this.sunDir);
+    // the stands hide the horizon, so near sunset the sky draws the sun higher (up to +26°)
+    // where it can glow above them; the lighting still comes from the real, low sun
+    const lift = THREE.MathUtils.degToRad(26) * smooth(-8, 0, el) * (1 - smooth(5, 40, el));
+    const az = Math.atan2(this.sunDir.z, this.sunDir.x);
+    const ve = Math.asin(THREE.MathUtils.clamp(this.sunDir.y, -1, 1)) + lift;
+    this.skySun.set(Math.cos(ve) * Math.cos(az), Math.sin(ve), Math.cos(ve) * Math.sin(az));
+    u.uSunDir.value.copy(this.skySun);
     u.uMoonDir.value.copy(this.moonDir);
     u.uZenith.value.copy(this.colors.zenith);
     u.uHorizon.value.copy(this.colors.horizon);

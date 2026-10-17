@@ -224,7 +224,7 @@ export class Menu {
   // world look: shared by match setup and settings
   worldOptions(p) {
     const s = this.app.settings;
-    this.option(p, 'World', [{ label: 'Realistic', value: 'realistic' }, { label: 'Minecraft blocks', value: 'blocky' }, { label: 'Classic night city', value: 'classic' }], () => s.world, (v) => { s.world = v; });
+    this.option(p, 'World', [{ label: 'Block world', value: 'blocky' }, { label: 'Realistic', value: 'realistic' }, { label: 'Classic night city', value: 'classic' }], () => s.world, (v) => { s.world = v; });
     this.option(p, 'Time of day', [
       { label: 'Sunset', value: 'sunset' }, { label: 'Day', value: 'day' }, { label: 'Night', value: 'night' }, { label: 'Day–night cycle', value: 'cycle' },
     ], () => s.timeOfDay, (v) => { s.timeOfDay = v; });

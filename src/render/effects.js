@@ -140,6 +140,7 @@ const _m4 = new THREE.Matrix4();
 const _q4 = new THREE.Quaternion();
 const _s3 = new THREE.Vector3();
 const rand = (a, b) => a + Math.random() * (b - a);
+const DIRT_COLS = [[0.12, 0.24, 0.06], [0.16, 0.3, 0.08], [0.22, 0.15, 0.08], [0.18, 0.12, 0.07]];
 
 export class Effects {
   constructor(scene, quality, style = 'classic') {
@@ -159,8 +160,8 @@ export class Effects {
   initCubes(max) {
     const mat = new THREE.MeshStandardMaterial({ roughness: 0.55, metalness: 0.05, emissive: 0xffffff, emissiveIntensity: 0 });
     mat.onBeforeCompile = (sh) => {
-      // emissive follows the instance colour so team blocks glow
-      sh.fragmentShader = sh.fragmentShader.replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\n totalEmissiveRadiance = vColor.rgb * 0.9;');
+      // bright (team, fire) blocks glow; dark dirt and debris do not
+      sh.fragmentShader = sh.fragmentShader.replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\n totalEmissiveRadiance = vColor.rgb * 0.9 * smoothstep(0.65, 0.8, max(vColor.r, max(vColor.g, vColor.b)));');
     };
     this.cubes = new THREE.InstancedMesh(new THREE.BoxGeometry(1, 1, 1), mat, max);
     this.cubes.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(max * 3), 3);
@@ -239,9 +240,9 @@ export class Effects {
       const cv = _v.copy(car.vel).multiplyScalar(S);
       const n = Math.max(1, Math.round(dt * (this.blocky ? 150 : 210) * this.mult));
       const fl = tc.flame, fe = tc.flameEnd;
-      // the realistic Octane has twin exhausts; the block car one in the middle
-      const side = this.blocky ? 0 : EXHAUST_X[1] * S;
-      const life = this.blocky ? [0.1, 0.2] : [0.16, 0.3];
+      // both cars have twin exhausts either side of the centre
+      const side = EXHAUST_X[1] * S;
+      const life = [0.16, 0.3];
       for (let i = 0; i < n; i++) {
         const back = rand(7, 12);
         const j = Math.random() * dt;
@@ -249,7 +250,7 @@ export class Effects {
         this.glow.emit(
           _e.x + _l.x * o - _f.x * back * j + rand(-0.03, 0.03), _e.y + _l.y * o - _f.y * back * j + rand(-0.03, 0.03), _e.z + _l.z * o - _f.z * back * j + rand(-0.03, 0.03),
           cv.x * 0.2 - _f.x * back + rand(-0.5, 0.5), cv.y * 0.2 - _f.y * back + rand(-0.5, 0.5), cv.z * 0.2 - _f.z * back + rand(-0.5, 0.5),
-          rand(life[0], life[1]), rand(0.12, 0.2), rand(0.3, this.blocky ? 0.55 : 0.75),
+          rand(life[0], life[1]), rand(0.12, 0.2), rand(0.3, 0.75),
           [fl[0] * 1.1, fl[1] * 1.1, fl[2] * 1.1, 0.55], [fe[0], fe[1], fe[2], 0], 2, 0,
         );
       }
@@ -288,6 +289,18 @@ export class Effects {
     if (k <= 0) return;
     _f.set(0, 0, 1).applyQuaternion(quat);
     _l.set(1, 0, 0).applyQuaternion(quat);
+    if (this.blocky) {
+      // Minecraft-style: little grass and dirt blocks kicked up by the tyres
+      if (Math.random() < dt * 26 * k * this.mult) {
+        const w = Math.random() < 0.5 ? 1 : -1;
+        _e.copy(pos).addScaledVector(_l, w * 34).addScaledVector(_f, -36).multiplyScalar(S);
+        _e.y = 0.15;
+        this.blocks(_e, DIRT_COLS, 2, 4, 0.13);
+        const c = this.cubeList;
+        for (let j = c.length - 2; j < c.length; j++) if (j >= 0) { c[j].v.addScaledVector(_f, -3); c[j].life = rand(0.5, 0.9); }
+      }
+      return;
+    }
     const n = Math.round(dt * 70 * k * this.mult + Math.random());
     for (let i = 0; i < n; i++) {
       const w = i % 2 ? 1 : -1;
