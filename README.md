@@ -131,4 +131,4 @@ Open the page, click **Press to start**, then **Play**. Click the game once if t
 | `js/hud.js`, `js/menus.js`, `js/lobby.js`, `js/art.js` | HUD, menus, locker stage, generated key art |
 | `js/zh/` | Ported from Zero Hour: part models (`parts.js`), guns (`guns.js`), first-person hands and feel (`viewmodel.js`), synthesized sound (`sound.js`), sprite textures, icons and the sky environment map |
 
-Three.js r186 and its glTF/HDR loaders are vendored in `vendor/` (MIT, see `vendor/THREE-LICENSE.txt`). Characters, cars and street props in `assets/` are CC0; see [CREDITS.md](CREDITS.md).
+Three.js r186 and its glTF loader are vendored in `vendor/` (MIT, see `vendor/THREE-LICENSE.txt`). Characters, cars and street props in `assets/` are CC0; see [CREDITS.md](CREDITS.md).

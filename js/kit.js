@@ -14,7 +14,7 @@ export const CARS = [
   ['sedan', 6], ['suv', 5], ['suv-luxury', 3], ['hatchback', 5], ['taxi', 2], ['police-car', 2], ['van', 3],
   ['truck', 4], ['truck-flat', 2], ['delivery-truck', 2], ['ambulance', 1], ['garbage-truck', 1], ['sports-sedan', 2], ['firetruck', 1],
 ];
-export const CITY_PROPS = ['streetlight', 'trafficlight_A', 'firehydrant', 'dumpster', 'trash_A', 'trash_B', 'bench', 'watertower', 'box_A', 'box_B'];
+export const CITY_PROPS = ['streetlight', 'firehydrant', 'dumpster', 'bench', 'box_A', 'box_B'];
 export const KIT_FILES = [...CARS.map(([n]) => 'car-' + n), ...CITY_PROPS.map((n) => 'city-' + n)];
 
 // What each material is made of, by name: [metalness, roughness].
