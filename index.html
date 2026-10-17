@@ -85,6 +85,14 @@
   #help .hint { margin-top:9px; font-size:11.5px; color:#444; max-width:520px; }
   #pad { position:absolute; top:8px; right:8px; color:#8f8; font-size:12px; text-shadow:1px 1px 0 #000; background:rgba(0,0,0,.4); padding:3px 8px; display:none; }
   .pslot.pksel { background:#a8a8ff; box-shadow:inset 0 0 0 3px #fff; }
+  #journal { position:absolute; left:50%; top:50%; transform:translate(-50%,-50%); background:#d8c9a3; border:4px solid #5a4630;
+             box-shadow:0 0 0 4px #f3e6c4,0 0 60px rgba(0,0,0,.85); padding:14px 20px; display:none; pointer-events:auto; max-height:90vh; overflow:auto;
+             min-width:min(460px,92vw); color:#3a2c18; touch-action:pan-y; }
+  #journal h2 { font-size:17px; letter-spacing:2px; margin-bottom:8px; }
+  #jlist div { font-size:13px; padding:3px 0; border-bottom:1px dashed rgba(90,70,48,.35); }
+  #jlist .got { color:#2c5a1c; font-weight:bold; }
+  #jlist .no { color:#6a5a40; }
+  #journal .hint { margin-top:8px; font-size:11.5px; color:#5a4630; max-width:460px; }
 
   /* ---------- phones and tablets ---------- */
   html,body { touch-action:none; -webkit-user-select:none; user-select:none; -webkit-touch-callout:none; -webkit-tap-highlight-color:transparent; overscroll-behavior:none; }
@@ -158,6 +166,7 @@
       <div class="tsm" id="tb-time">&#9728;</div>
       <div class="tsm" id="tb-weather">&#9729;</div>
       <div class="tsm" id="tb-gfx">&#9881;</div>
+      <div class="tsm" id="tb-journal">&#128220;</div>
       <div class="tsm" id="tb-help">?</div>
       <div class="tsm" id="tb-pause">&#10074;&#10074;</div>
     </div>
@@ -206,6 +215,7 @@
       <tr><td><b>Graphics quality</b></td><td>Q (Low &rarr; Medium &rarr; High &rarr; Ultra)</td><td>&mdash;</td></tr>
       <tr><td><b>Time of day</b></td><td>T (sunrise, noon, golden hour, sunset, night)</td><td>&mdash;</td></tr>
       <tr><td><b>Weather</b></td><td>Y (clear &rarr; cloudy &rarr; rain &rarr; thunderstorm)</td><td>&mdash;</td></tr>
+      <tr><td><b>Explorer's journal</b></td><td>J (places found, treasure, hints)</td><td>&mdash;</td></tr>
       <tr><td>Start a fire</td><td>Place the Fire block (E picker)</td><td>LT with Fire selected</td></tr>
       <tr><td>Pause</td><td>Esc</td><td>Menu button</td></tr>
     </table>
@@ -216,6 +226,11 @@
     <b>GRAPHICS:</b> Real-time sun shadows, a physically based sky with sunsets and volumetric clouds, god rays, reflective water, swaying grass and leaves, glowing lava. Press <b>Q</b> to trade looks for speed if it stutters, and <b>T</b> to jump to the golden hour.<br>
     <b>FIRE &amp; LAVA:</b> Explosions set the ground alight and fire spreads through grass, leaves and wood. Lava pools glow at the bottom of deep caves &mdash; it burns, so keep unlimited health on or stay out.<br>
     <b>Weapons:</b> Sword (melee), Bow (arc arrows), Rifle (fast bullets), Rocket Launcher (blows craters in the world). Water really flows: dig into a lake and it pours in, break a dam and it cascades down. The roller coaster is <b>underground</b> &mdash; find the gold beacon and climb down the shaft. Press H to close.</div>
+  </div>
+  <div id="journal">
+    <h2>EXPLORER'S JOURNAL</h2>
+    <div id="jlist"></div>
+    <div class="hint">Places you have found, and hints at where the rest lie. Treasure chests hide in every one of them. <span class="donly">J to close</span><span class="tonly">Tap to close</span></div>
   </div>
   <div id="picker">
     <h2>SELECT BLOCK</h2>
@@ -252,7 +267,9 @@ const MOBILE=(function(){ try{ return matchMedia('(pointer:coarse)').matches&&((
 /* ============================== BLOCKS ============================== */
 const B={AIR:0,GRASS:1,DIRT:2,STONE:3,SAND:4,WATER:5,LOG:6,LEAF:7,PLANK:8,COBBLE:9,GLASS:10,BRICK:11,SNOW:12,BEDROCK:13,COAL:14,IRON:15,DIAMOND:16,GOLD:17,SANDSTONE:18,TNT:19,TNT1K:20,NUKE:21,
   TALLGRASS:22,ROSE:23,DANDELION:24,DAISY:25,FIRE:26,LAVA:27,BIRCH_LOG:28,BIRCH_LEAF:29,SPRUCE_LOG:30,SPRUCE_LEAF:31,GRAVEL:32,GLOW:33,
-  WF1:34,WF2:35,WF3:36,WF4:37,WF5:38,WF6:39,WF7:40,WFALL:41,LILY:42,REEDS:43,FERN:44};
+  WF1:34,WF2:35,WF3:36,WF4:37,WF5:38,WF6:39,WF7:40,WFALL:41,LILY:42,REEDS:43,FERN:44,
+  CACTUS:45,ICE:46,OBSIDIAN:47,BASALT:48,MAGMA:49,TERRA_O:50,TERRA_R:51,TERRA_W:52,RED_SAND:53,AMETHYST:54,
+  CORAL_R:55,CORAL_Y:56,CORAL_B:57,LF1:58,LF2:59,LF3:60,LFALL:61,MOSSY:62,CHEST:63,SPRING:64};
 // tiles: [top, side, bottom]  kind: opaque | cutout | water | plant | lava | fire   burn: how readily it catches fire
 const DEFS=[];
 DEFS[B.GRASS]  ={name:'Grass',     t:[0,1,2],   solid:1, kind:'opaque'};
@@ -294,31 +311,56 @@ DEFS[B.WFALL]    ={name:'Water',       t:[5,5,5],   solid:0, kind:'water'};
 DEFS[B.LILY]     ={name:'Lily Pad',    t:[40,40,40],solid:0, kind:'plant', burn:3};
 DEFS[B.REEDS]    ={name:'Reeds',       t:[41,41,41],solid:0, kind:'plant', burn:3};
 DEFS[B.FERN]     ={name:'Fern',        t:[42,42,42],solid:0, kind:'plant', burn:3};
+DEFS[B.CACTUS]   ={name:'Cactus',      t:[43,44,43],solid:1, kind:'opaque', burn:1};
+DEFS[B.ICE]      ={name:'Ice',         t:[45,45,45],solid:1, kind:'opaque'};
+DEFS[B.OBSIDIAN] ={name:'Obsidian',    t:[46,46,46],solid:1, kind:'opaque'};
+DEFS[B.BASALT]   ={name:'Basalt',      t:[47,47,47],solid:1, kind:'opaque'};
+DEFS[B.MAGMA]    ={name:'Magma',       t:[48,48,48],solid:1, kind:'opaque'};
+DEFS[B.TERRA_O]  ={name:'Orange Terracotta',t:[49,49,49],solid:1, kind:'opaque'};
+DEFS[B.TERRA_R]  ={name:'Red Terracotta',t:[50,50,50],solid:1, kind:'opaque'};
+DEFS[B.TERRA_W]  ={name:'White Terracotta',t:[51,51,51],solid:1, kind:'opaque'};
+DEFS[B.RED_SAND] ={name:'Red Sand',    t:[52,52,52],solid:1, kind:'opaque'};
+DEFS[B.AMETHYST] ={name:'Amethyst',    t:[53,53,53],solid:1, kind:'opaque'};
+DEFS[B.CORAL_R]  ={name:'Fire Coral',  t:[54,54,54],solid:1, kind:'opaque'};
+DEFS[B.CORAL_Y]  ={name:'Horn Coral',  t:[55,55,55],solid:1, kind:'opaque'};
+DEFS[B.CORAL_B]  ={name:'Tube Coral',  t:[56,56,56],solid:1, kind:'opaque'};
+// flowing lava: LF1 is the thin end of a flow, LF3 sits right next to its source, LFALL pours straight down
+for(let s=1;s<=3;s++) DEFS[B.LF1+s-1]={name:'Lava', t:[34,34,34], solid:0, kind:'lava'};
+DEFS[B.LFALL]    ={name:'Lava',        t:[34,34,34],solid:0, kind:'lava'};
+DEFS[B.MOSSY]    ={name:'Mossy Cobblestone',t:[57,57,57],solid:1, kind:'opaque'};
+DEFS[B.CHEST]    ={name:'Treasure Chest',t:[59,58,59],solid:1, kind:'opaque'};
+// a spring (or water you place) feeds a stream but never spreads into a sea of its own
+DEFS[B.SPRING]   ={name:'Water',       t:[5,5,5],   solid:0, kind:'water'};
 
 // fully opaque blocks hide their neighbours' faces and block sky light
-const OPAQUE=new Uint8Array(64);
+const OPAQUE=new Uint8Array(128);
 for(let i=0;i<DEFS.length;i++) if(DEFS[i]&&DEFS[i].kind==='opaque') OPAQUE[i]=1;
 // blocks that give off light (flood-filled through the air around them when a chunk is meshed)
-const EMIT=new Uint8Array(64); EMIT[B.LAVA]=15; EMIT[B.GLOW]=15;
+const EMIT=new Uint8Array(128); EMIT[B.LAVA]=15; EMIT[B.GLOW]=15; EMIT[B.MAGMA]=7;
+for(let s=0;s<4;s++) EMIT[B.LF1+s]=15;
 // every kind of water and how strong it runs (8 = a source or falling water, 1 = the last trickle)
-const WATERY=new Uint8Array(64), WLEVEL=new Uint8Array(64);
-WATERY[B.WATER]=1; WLEVEL[B.WATER]=8; WATERY[B.WFALL]=1; WLEVEL[B.WFALL]=8;
+const WATERY=new Uint8Array(128), WLEVEL=new Uint8Array(128);
+WATERY[B.WATER]=1; WLEVEL[B.WATER]=8; WATERY[B.WFALL]=1; WLEVEL[B.WFALL]=8; WATERY[B.SPRING]=1; WLEVEL[B.SPRING]=8;
 for(let s=1;s<=7;s++){ WATERY[B.WF1+s-1]=1; WLEVEL[B.WF1+s-1]=s; }
 const DIR4=[[1,0],[-1,0],[0,1],[0,-1]];
+const LAVAY=new Uint8Array(128), LLEVEL=new Uint8Array(128);   // lava: 4 = a source or falling lava, 1 = the thin end of a flow
+LAVAY[B.LAVA]=1; LLEVEL[B.LAVA]=4; LAVAY[B.LFALL]=1; LLEVEL[B.LFALL]=4;
+for(let s=1;s<=3;s++){ LAVAY[B.LF1+s-1]=1; LLEVEL[B.LF1+s-1]=s; }
 
 const IT={SWORD:-1,BOW:-2,RIFLE:-3,ROCKET:-4};
 const ITEMINFO={'-1':{name:'Iron Sword'},'-2':{name:'Bow'},'-3':{name:'Rifle'},'-4':{name:'Rocket Launcher'}};
 function nameOf(e){ return e<0?ITEMINFO[e].name:DEFS[e].name; }
 const PLACEABLE=[B.GRASS,B.DIRT,B.STONE,B.SAND,B.SANDSTONE,B.GRAVEL,B.LOG,B.BIRCH_LOG,B.SPRUCE_LOG,B.LEAF,B.BIRCH_LEAF,B.SPRUCE_LEAF,
   B.PLANK,B.COBBLE,B.GLASS,B.BRICK,B.SNOW,B.GOLD,B.TNT,B.TNT1K,B.NUKE,B.FIRE,B.LAVA,B.WATER,
-  B.TALLGRASS,B.ROSE,B.DANDELION,B.DAISY,B.FERN,B.REEDS,B.GLOW,B.COAL,B.IRON,B.DIAMOND];
+  B.TALLGRASS,B.ROSE,B.DANDELION,B.DAISY,B.FERN,B.REEDS,B.GLOW,B.COAL,B.IRON,B.DIAMOND,
+  B.CACTUS,B.ICE,B.OBSIDIAN,B.BASALT,B.MAGMA,B.TERRA_O,B.TERRA_R,B.TERRA_W,B.RED_SAND,B.AMETHYST,B.CORAL_R,B.CORAL_Y,B.CORAL_B,B.MOSSY];
 function isPlant(b){ return b>0&&DEFS[b].kind==='plant'; }
 function replaceable(b){ return b===B.AIR||WATERY[b]||b===B.FIRE||b===B.LAVA||isPlant(b); }
 
 /* ============================== TEXTURE ATLAS ============================== */
 // every tile is painted into this canvas (hotbar icons and held blocks read it), then copied
 // into WebGL2 texture arrays with mipmaps, normal maps and a material map for the world
-const COLS=8, ROWS=6, TP=16, NTILES=COLS*ROWS;
+const COLS=8, ROWS=8, TP=16, NTILES=COLS*ROWS;
 const atlas=document.createElement('canvas');
 atlas.width=COLS*TP; atlas.height=ROWS*TP;
 const actx=atlas.getContext('2d');
@@ -470,6 +512,39 @@ function paintAtlas(){
         if(t>1.5&&Math.round(t*2)%2===0){ const l=Math.max(1,(1-t/L)*3.4);
           for(let q=1;q<=l;q++){ px(ox,oy,Math.round(x+Math.cos(a+1.2)*q),Math.round(y+Math.sin(a+1.2)*q),shade(0x4f8a32,.85+rnd()*.3));
             px(ox,oy,Math.round(x+Math.cos(a-1.2)*q),Math.round(y+Math.sin(a-1.2)*q),shade(0x4f8a32,.85+rnd()*.3)); } } } } })();
+  // ---- island biomes, the volcano and treasure ----
+  (function(){ fillNoise(43,0x5f8f3a,.85,1.1); const [ox,oy]=tileXY(43);               // cactus top
+    for(let y=0;y<16;y++)for(let x=0;x<16;x++){ const d=Math.hypot(x-7.5,y-7.5);
+      if(d>6.6) px(ox,oy,x,y,shade(0x3a6a26,.9+rnd()*.15)); else if(d<2.2) px(ox,oy,x,y,shade(0x93c05e,.9+rnd()*.15)); } })();
+  (function(){ const [ox,oy]=tileXY(44);                                                // cactus side: ribs and spines
+    for(let y=0;y<16;y++)for(let x=0;x<16;x++) px(ox,oy,x,y,shade(x%4===1?0x5a9a3a:0x3b7027,.85+rnd()*.22));
+    for(let i=0;i<16;i++){ const x=(Math.floor(rnd()*4)*4+3)&15, y=Math.floor(rnd()*16); px(ox,oy,x,y,'#ece6b8'); } })();
+  (function(){ fillNoise(45,0x9fcaf2,.93,1.05); const [ox,oy]=tileXY(45);              // ice with white cracks
+    for(let i=0;i<6;i++){ let x=rnd()*16, y=rnd()*16; const a=rnd()*6.28;
+      for(let k=0;k<7;k++){ px(ox,oy,Math.floor(x)&15,Math.floor(y)&15,shade(0xeaf7ff,1)); x+=Math.cos(a); y+=Math.sin(a); } } })();
+  (function(){ fillNoise(46,0x1b1126,.7,1.25); const [ox,oy]=tileXY(46);                // obsidian
+    for(let i=0;i<12;i++) px(ox,oy,Math.floor(rnd()*16),Math.floor(rnd()*16),shade(0x5c3c8e,.8+rnd()*.4)); })();
+  (function(){ const [ox,oy]=tileXY(47);                                                // basalt: vertical grain
+    for(let x=0;x<16;x++){ const c=rnd()<.3?0x48423f:0x34302f; for(let y=0;y<16;y++) px(ox,oy,x,y,shade(c,.8+rnd()*.3)); } })();
+  (function(){ fillNoise(48,0x3a1309,.7,1.2); const [ox,oy]=tileXY(48);                 // magma: crust split by glowing cracks
+    for(let i=0;i<5;i++){ let x=rnd()*16, y=rnd()*16;
+      for(let k=0;k<12;k++){ px(ox,oy,Math.floor(x)&15,Math.floor(y)&15,k%3?'#ff8a1e':'#ffd34a'); x+=rnd()*2-1; y+=rnd()*1.4+.3; } } })();
+  fillNoise(49,0xb4622e,.9,1.08); fillNoise(50,0x8f3e2c,.9,1.08); fillNoise(51,0xcfb2a0,.92,1.06);   // terracotta
+  fillNoise(52,0xbd6a2c,.82,1.12);                                                        // red sand
+  (function(){ fillNoise(53,0x6a3fb0,.8,1.15); const [ox,oy]=tileXY(53);               // amethyst crystals
+    for(let i=0;i<9;i++){ const x=Math.floor(rnd()*14), y=Math.floor(rnd()*14); px(ox,oy,x,y,'#dcbcff'); px(ox,oy,x+1,y,'#b48cf0'); px(ox,oy,x,y+1,'#9a6ce0'); } })();
+  [[54,0xd04a70],[55,0xe0c03a],[56,0x3a70d8]].forEach(function(c){ fillNoise(c[0],c[1],.8,1.15); const [ox,oy]=tileXY(c[0]);   // corals
+    for(let i=0;i<20;i++){ const x=Math.floor(rnd()*15), y=Math.floor(rnd()*15); px(ox,oy,x,y,shade(c[1],1.35)); px(ox,oy,x+1,y+1,shade(c[1],.6)); } });
+  (function(){ const [ox,oy]=tileXY(57), [cx0,cy0]=tileXY(10); actx.drawImage(atlas,cx0,cy0,16,16,ox,oy,16,16);   // mossy cobblestone
+    for(let i=0;i<7;i++){ const x0=rnd()*16, y0=rnd()*16, r=1.5+rnd()*2.5;
+      for(let y=0;y<16;y++)for(let x=0;x<16;x++) if(Math.hypot(x-x0,y-y0)<r&&rnd()<.8) px(ox,oy,x,y,shade(rnd()<.5?0x4f7a2a:0x6a8f36,.85+rnd()*.25)); } })();
+  (function(){ const [ox,oy]=tileXY(58);                                                // chest front: planks, iron bands, gold latch
+    for(let y=0;y<16;y++)for(let x=0;x<16;x++){ const edge=x===0||x===15||y===0||y===15, band=y===5||y===6;
+      px(ox,oy,x,y,edge?shade(0x3a2410,.9+rnd()*.2):(band?shade(0x5a5a5a,.9+rnd()*.2):shade(y%4===3?0x6a4520:0x9a6a34,.88+rnd()*.2))); }
+    for(let y=5;y<10;y++)for(let x=6;x<10;x++) px(ox,oy,x,y,(x===6||x===9||y===9)?'#8a6a10':'#f2c84a'); })();
+  (function(){ const [ox,oy]=tileXY(59);                                                // chest lid
+    for(let y=0;y<16;y++)for(let x=0;x<16;x++){ const edge=x===0||x===15||y===0||y===15;
+      px(ox,oy,x,y,edge?shade(0x3a2410,.9+rnd()*.2):shade(x%4===3?0x6a4520:0x9a6a34,.88+rnd()*.2)); } })();
 }
 paintAtlas();
 
@@ -486,7 +561,10 @@ const TILEP={0:{n:.9,r:.92,tint:'all'},1:{n:1.1,r:.92,tint:'green'},2:{n:1.3,r:.
   25:{n:0,r:.7,tint:'all',tr:.9},26:{n:0,r:.65,tr:.85},27:{n:0,r:.65,tr:.85},28:{n:0,r:.65,tr:.85},
   29:{n:1.6,r:.75},30:{n:1.0,r:.6,tint:'all',tr:.85},31:{n:2.4,r:.88},32:{n:1.0,r:.7,tint:'all',tr:.6},
   33:{n:2.6,r:.86},34:{n:.6,r:.4,e:1},35:{n:0,r:1,e:1},36:{n:0,r:1,e:1},37:{n:0,r:1,e:1},38:{n:0,r:1,e:1},39:{n:1.2,r:.6,e:.9},
-  40:{n:.8,r:.35,tint:'all',tr:.5},41:{n:0,r:.7,tint:'green',tr:.8},42:{n:0,r:.7,tint:'all',tr:.85}};
+  40:{n:.8,r:.35,tint:'all',tr:.5},41:{n:0,r:.7,tint:'green',tr:.8},42:{n:0,r:.7,tint:'all',tr:.85},
+  43:{n:1.2,r:.7},44:{n:1.5,r:.7},45:{n:.3,r:.05},46:{n:1.0,r:.1},47:{n:2.2,r:.85},48:{n:1.6,r:.75,e:.5},
+  49:{n:.9,r:.85},50:{n:.9,r:.85},51:{n:.9,r:.85},52:{n:.7,r:.92},53:{n:1.5,r:.15,e:.55},
+  54:{n:1.8,r:.6},55:{n:1.8,r:.6},56:{n:1.8,r:.6},57:{n:2.8,r:.86},58:{n:1.5,r:.6},59:{n:1.5,r:.6}};
 function buildTileArrays(){
   const S=16, N=NTILES, img=actx.getImageData(0,0,atlas.width,atlas.height).data;
   const alb=new Uint8Array(S*S*4*N), nrm=new Uint8Array(S*S*4*N), mat=new Uint8Array(S*S*4*N);
@@ -590,13 +668,71 @@ function clamp01(v){ return v<0?0:(v>1?1:v); }
 function ridged(x,z){ let s=0,a=.55,f=1,w=1;
   for(let i=0;i<5;i++){ let n=1-Math.abs(vnoise(x*f+17*i,z*f-9*i)*2-1); n*=n; n*=w; w=clamp01(n*1.7); s+=n*a; a*=.5; f*=2.03; }
   return s; }
-// rolling lowlands plus ridged mountain ranges that rise well above the old ceiling
+// ---------- one big island in an open sea ----------
+const ISLAND_R=720;                                        // the coast wanders around this far from the middle
+const VOLC={x:330, z:-300, R:175, CR:20};                 // the volcano: foot radius and crater radius
+VOLC.RIM=14+Math.pow(1-VOLC.CR/VOLC.R,1.6)*104; VOLC.LAVA=VOLC.RIM-4;
+function islandEdge(x,z){                                 // > 0 on the island, < 0 out at sea (one unit is ~150 blocks)
+  const wob=(fbm(x*.0024+900,z*.0024-300)-.5)*320+(fbm(x*.011-60,z*.011+40)-.5)*80;
+  return (ISLAND_R+wob-Math.hypot(x,z))/150;
+}
+// how much of each biome is here; meadows and forest get whatever is left
+const BIO_NAMES=['Meadows','Snowy Peaks','Desert','Jungle','Badlands'];
+function biomeW(x,z,o){
+  const t=fbm(x*.0026+13,z*.0026-71), w=fbm(x*.0029-210,z*.0029+33);
+  o.snow=smooth(clamp01((.405-t)/.07));
+  o.jungle=smooth(clamp01((t-.52)/.07))*smooth(clamp01((w-.54)/.06));
+  o.desert=smooth(clamp01((fbm(x*.0029-900,z*.0029+400)-.535)/.05))*(1-o.snow)*(1-o.jungle);
+  o.mesa=smooth(clamp01((fbm(x*.0033+500,z*.0033+800)-.6)/.05))*(1-o.snow)*(1-o.jungle)*(1-o.desert);
+  return o;
+}
+function biomeOf(x,z,o){ biomeW(x,z,o); let best=0, bv=.5;
+  if(o.snow>bv){ best=1; bv=o.snow; } if(o.desert>bv){ best=2; bv=o.desert; } if(o.jungle>bv){ best=3; bv=o.jungle; } if(o.mesa>bv){ best=4; } return best; }
+function volcanoH(x,z){                                   // the cone with gullies down its flanks and a crater on top
+  const dx=x-VOLC.x, dz=z-VOLC.z, d=Math.hypot(dx,dz);
+  if(d>=VOLC.R) return -1;
+  if(d<VOLC.CR) return VOLC.RIM-15*smooth(1-d/VOLC.CR);
+  const f=1-d/VOLC.R;
+  return 14+Math.pow(f,1.6)*104+(vnoise(Math.atan2(dz,dx)*6+20,d*.04)-.5)*40*f*(1-f);
+}
+const _bwH={}, _bwG={}, _bwT={}, _bwV={};
 function heightRaw(x,z){
-  let h=5+fbm(x*.014+100, z*.014+100)*32;
-  const m=smooth(clamp01((fbm(x*.0042+311, z*.0042-127)-.5)/.16));
-  if(m>0.001) h+=m*(10+ridged(x*.0105+50, z*.0105-80)*100*m);
+  const bw=biomeW(x,z,_bwH);
+  let h=17+fbm(x*.012+100,z*.012+100)*18;                 // rolling hills
+  // mountain ranges: tall and jagged in the cold north, foothills elsewhere
+  const mr=smooth(clamp01((fbm(x*.0042+311,z*.0042-127)-.5)/.15));
+  const m=Math.max(mr*.6,bw.snow*.95)*(1-bw.desert)*(1-bw.mesa*.8);
+  if(m>0.01) h+=m*(6+ridged(x*.0105+50,z*.0105-80)*92*m);
+  if(bw.desert>0){                                        // rolling dunes
+    const a=x*.045+z*.021+fbm(x*.01,z*.01)*6, dn=Math.abs(Math.sin(a))*.7+fbm(x*.03+9,z*.03)*.6;
+    h=h*(1-bw.desert)+(18.5+dn*7)*bw.desert;
+  }
+  if(bw.mesa>0){                                          // flat-topped mesas with stepped cliffs
+    const p=fbm(x*.010+40,z*.010-80), top=smooth(clamp01((p-.47)/.035));
+    const mh=Math.floor((20+top*(24+fbm(x*.03,z*.03)*14))/3)*3;
+    h=h*(1-bw.mesa)+mh*bw.mesa;
+  }
+  if(bw.jungle>0) h+=bw.jungle*(fbm(x*.02-30,z*.02+60)-.4)*16;
+  const lk=smooth(clamp01((fbm(x*.0065-500,z*.0065+200)-.63)/.07));   // lakes
+  if(lk>0) h=h*(1-lk)+10*lk;
+  const rv=Math.abs(fbm(x*.0032+77,z*.0032-33)*2-1);      // rivers, cutting canyons through the hills
+  if(rv<.06&&h>12){ const rk=smooth(clamp01((rv-.012)/.045)); h=12+(h-12)*rk; }
+  const hv=volcanoH(x,z);
+  if(hv>h) h=hv;
+  // the coast: land slopes down to beaches, the sea floor drops away offshore, a few small islets
+  const e=islandEdge(x,z);
+  if(e<1.3){
+    let floor=12-24*smooth(clamp01(-e/1.4));
+    const isl=smooth(clamp01((vnoise(x*.012+50,z*.012+70)-.8)/.09))*smooth(clamp01((-e-.35)/.3));
+    if(isl>0) floor+=isl*(22+fbm(x*.04,z*.04)*12);
+    const land=smooth(clamp01(e/1.3));
+    h=floor+(Math.max(h,17)-floor)*land;
+  }
   return DEPTH+Math.min(118,Math.max(2,Math.floor(h)));
 }
+// orange, red and cream terracotta in bands, the way badland cliffs are layered
+const TERRA_SEQ=[50,50,51,52,50,51,53];
+function terraBand(x,y,z){ return TERRA_SEQ[((Math.floor((y+vnoise(x*.015,z*.015)*4)/2)%7)+7)%7]; }
 // heightAt is hit thousands of times per chunk (trees, structures, slopes): cache it
 const HC_SIZE=1<<18, hcX=new Int32Array(HC_SIZE).fill(0x7fffffff), hcZ=new Int32Array(HC_SIZE), hcV=new Int16Array(HC_SIZE);
 function heightAt(x,z){
@@ -605,18 +741,24 @@ function heightAt(x,z){
   if(hcX[k]===x&&hcZ[k]===z) return hcV[k];
   const v=heightRaw(x,z); hcX[k]=x; hcZ[k]=z; hcV[k]=v; return v;
 }
-function snowLine(x,z){ return DEPTH+66+Math.floor(vnoise(x*.03+40,z*.03-70)*10); }
+function snowLine(x,z){ return DEPTH+60+Math.floor(vnoise(x*.03+40,z*.03-70)*10); }
 function slopeAt(x,z){ return Math.max(Math.abs(heightAt(x+1,z)-heightAt(x-1,z)), Math.abs(heightAt(x,z+1)-heightAt(x,z-1))); }
 function treeAt(x,z){
   const h=heightAt(x,z);
   if(h<=SEA+1||h>=snowLine(x,z)-3) return null;
+  if(Math.hypot(x-VOLC.x,z-VOLC.z)<VOLC.R*.9) return null;
+  const bw=biomeW(x,z,_bwT);
+  if(bw.desert>.5||bw.mesa>.5) return null;
   const forest=fbm(x*.0085+700, z*.0085-410);
   let p=.0035+Math.max(0,forest-.4)*.17;
   if(h>DEPTH+46) p=p*1.25+.004;
+  if(bw.jungle>.5) p=Math.max(p,.045);
+  if(bw.snow>.5) p=Math.max(p,.012);
   if(hash2(x*7+5310, z*11-7741)>=p) return null;
   if(slopeAt(x,z)>2) return null;
   const r=hash2(x+91,z*3+17), r2=hash2(x*5-3,z+77);
-  if(h>DEPTH+44) return {k:'spruce', th:7+Math.floor(r2*6)};
+  if(bw.jungle>.5) return r<.25?{k:'bush', th:1}:{k:'jungle', th:11+Math.floor(r2*9)};
+  if(h>DEPTH+44||bw.snow>.5) return {k:'spruce', th:7+Math.floor(r2*6)};
   if(forest>.52&&r<.32) return {k:'birch', th:5+Math.floor(r2*3)};
   if(r>.86) return {k:'bigoak', th:7+Math.floor(r2*3)};
   return {k:'oak', th:4+Math.floor(r2*3)};
@@ -633,6 +775,21 @@ function stampTree(tr,wx,wz,h,set){
     }
     set(wx,top+1,wz,B.SPRUCE_LEAF,true);
     for(let dy=1;dy<=th;dy++) set(wx,h+dy,wz,B.SPRUCE_LOG,false);
+  }else if(tr.k==='jungle'){                       // tall trunk, a broad crown and leaves trailing down like vines
+    const cy=h+th;
+    for(let dy=-2;dy<=2;dy++)for(let dx=-5;dx<=5;dx++)for(let dz=-5;dz<=5;dz++){
+      const d=(dx*dx+dz*dz)/22+dy*dy/4.5;
+      if(d>1) continue;
+      if(d>.7&&hash2(wx+dx*13+dy*7,wz+dz*11-dy*3)<.4) continue;
+      set(wx+dx,cy+dy,wz+dz,B.LEAF,true);
+      if(dy===-2&&d>.55&&hash2(wx+dx*5,wz+dz*9)<.3) for(let k=1;k<=1+Math.floor(hash2(wx+dx,wz+dz)*4);k++) set(wx+dx,cy-2-k,wz+dz,B.LEAF,true);
+    }
+    for(let dy=1;dy<=th;dy++) set(wx,h+dy,wz,B.LOG,false);
+    if(th>14) for(const bd of [[1,0],[-1,0],[0,1],[0,-1]]) if(hash2(wx+bd[0]*3,wz+bd[1]*5)<.6) set(wx+bd[0],h+1,wz+bd[1],B.LOG,false);
+  }else if(tr.k==='bush'){
+    set(wx,h+1,wz,B.LEAF,true);
+    for(const bd of [[1,0],[-1,0],[0,1],[0,-1]]) if(hash2(wx*3+bd[0],wz*5+bd[1])<.6) set(wx+bd[0],h+1,wz+bd[1],B.LEAF,true);
+    if(hash2(wx,wz*7)<.5) set(wx,h+2,wz,B.LEAF,true);
   }else if(tr.k==='bigoak'){
     const cy=h+th-1;
     for(let dy=-3;dy<=3;dy++)for(let dx=-4;dx<=4;dx++)for(let dz=-4;dz<=4;dz++){
@@ -655,10 +812,19 @@ function stampTree(tr,wx,wz,h,set){
     for(let dy=1;dy<=th;dy++) set(wx,h+dy,wz,log,false);
   }
 }
+function treeNear(x,z,r){
+  for(let dx=-r;dx<=r;dx++)for(let dz=-r;dz<=r;dz++) if(treeAt(x+dx,z+dz)) return true;
+  return false;
+}
 function findSpawn(){
+  const o={};
+  for(let pass=0;pass<2;pass++)
   for(let r=0;r<40;r++)for(let a=0;a<Math.max(1,r*6);a++){
-    const x=Math.round(Math.cos(a/(r*6||1)*6.283)*r*8), z=Math.round(Math.sin(a/(r*6||1)*6.283)*r*8);
-    if(heightAt(x,z)>SEA+2) return {x:x+.5, z:z+.5};
+    const x=Math.round(Math.cos(a/(r*6||1)*6.283)*r*8), z=Math.round(Math.sin(a/(r*6||1)*6.283)*r*8), h=heightAt(x,z);
+    if(h<=SEA+2||h>DEPTH+40) continue;
+    if(pass===0&&(biomeOf(x,z,o)!==0||slopeAt(x,z)>1)) continue;     // first try for flat meadow
+    if(pass===0&&treeNear(x,z,7)) continue;                            // in an open clearing, not inside a canopy
+    return {x:x+.5, z:z+.5};
   }
   return {x:8.5, z:8.5};
 }
@@ -772,6 +938,8 @@ function villageAt(vx,vz){
   const cz=vz*96+48+Math.floor((hash2(vx,vz*3+2)-.5)*24);
   const h=heightAt(cx,cz);
   if(h<=SEA+1||h>DEPTH+26) return null;
+  if(Math.hypot(cx-VOLC.x,cz-VOLC.z)<VOLC.R+30) return null;
+  { const bw=biomeW(cx,cz,_bwV); if(bw.desert>.4||bw.snow>.4||bw.mesa>.4) return null; }
   for(const o of [[14,2],[-13,4],[3,14],[-2,-13]]){
     const hh=heightAt(cx+o[0],cz+o[1]);
     if(hh<=SEA||Math.abs(hh-h)>5) return null;
@@ -851,6 +1019,7 @@ function stampShip(sp,setW){
   setW(sp.x+3,D+2,sp.z,B.AIR,false);
   setW(sp.x,D+7,sp.z,B.GLOW,false);                           // masthead light
   setW(sp.x+5,D+3,sp.z,B.GLOW,false);                         // cabin lamp
+  setW(sp.x+5,D+1,sp.z,B.CHEST,false);                        // the captain's chest
 }
 function templeAt(tx,tz){
   if(hash2(tx*733+17, tz*397+23)>0.36) return null;
@@ -858,6 +1027,7 @@ function templeAt(tx,tz){
   const z=tz*104+52+Math.floor((hash2(tx+4,tz*5)-.5)*22);
   const h=heightAt(x,z);
   if(h<=SEA||h>DEPTH+24) return null;
+  if(Math.hypot(x-VOLC.x,z-VOLC.z)<VOLC.R+30) return null;
   for(const o of [[8,0],[-8,0],[0,8],[0,-8]]){
     const hh=heightAt(x+o[0],z+o[1]);
     if(hh<=SEA-1||Math.abs(hh-h)>6) return null;
@@ -880,7 +1050,7 @@ function stampTemple(t,setW){
     for(let y=by+1;y<=by+5;y++) setW(t.x+pp[0],y,t.z+pp[1],B.SANDSTONE,false);
   for(let dx=6;dx<=10;dx++)for(let dz=-1;dz<=1;dz++)                // entrance corridor
     for(let y=by+1;y<=by+3;y++) setW(t.x+dx,y,t.z+dz,B.AIR,false);
-  setW(t.x,by+1,t.z,B.GOLD,false); setW(t.x-1,by+1,t.z,B.GOLD,false);   // treasure!
+  setW(t.x,by+1,t.z,B.CHEST,false); setW(t.x-1,by+1,t.z,B.GOLD,false);   // treasure!
   setW(t.x,by+1,t.z-1,B.GOLD,false); setW(t.x-1,by+1,t.z-1,B.DIAMOND,false);
   setW(t.x,by+2,t.z,B.GOLD,false);
   for(const pp of [[-4,-4],[4,-4],[-4,4],[4,4]]) setW(t.x+pp[0],by+3,t.z+pp[1],B.GLOW,false);  // braziers set in the pillars
@@ -892,6 +1062,7 @@ function towerAt(tx,tz){
   const z=tz*88+44+Math.floor((hash2(tx+8,tz*7)-.5)*18);
   const h=heightAt(x,z);
   if(h<=SEA+1||h>DEPTH+26) return null;
+  if(Math.hypot(x-VOLC.x,z-VOLC.z)<VOLC.R+20) return null;
   if(Math.abs(heightAt(x+3,z)-h)>4||Math.abs(heightAt(x,z+3)-h)>4) return null;
   return {x:x,z:z,h:h};
 }
@@ -994,6 +1165,159 @@ const COASTER_BUCKETS=(function(){
   return m;
 })();
 function coasterSamplesNear(cx,cz){ return COASTER_BUCKETS.get(cx+','+cz)||[]; }
+
+/* ====== LANDMARKS: lighthouses, a castle, a giant tree, floating islands, sunken ruins ====== */
+const _bwL={};
+function findFlat(x0,z0,rmax,half,ok){              // nearest spot with fairly level ground around it
+  for(let r=0;r<=rmax;r+=12)for(let a=0;a<Math.max(1,Math.round(r/6));a++){
+    const ang=a/Math.max(1,Math.round(r/6))*6.283, x=Math.round(x0+Math.cos(ang)*r), z=Math.round(z0+Math.sin(ang)*r), h=heightAt(x,z);
+    if(h<=SEA+2||h>DEPTH+48) continue;
+    if(Math.hypot(x-VOLC.x,z-VOLC.z)<VOLC.R+40) continue;
+    let flat=true;
+    for(const o of [[-half,-half],[half,-half],[-half,half],[half,half],[0,half],[half,0],[0,-half],[-half,0]]){ const hh=heightAt(x+o[0],z+o[1]); if(hh<=SEA+1||Math.abs(hh-h)>4){ flat=false; break; } }
+    if(flat&&(!ok||ok(x,z))) return {x:x,z:z,h:h};
+  }
+  return null;
+}
+function findCoast(ang){                            // the last bit of dry land before the sea along a line from the middle
+  for(let r=150;r<1100;r+=2){
+    const x=Math.round(Math.cos(ang)*r), z=Math.round(Math.sin(ang)*r);
+    if(heightAt(x,z)<=SEA+1&&islandEdge(x,z)<.3){            // the real coast, not a lake or a river
+      for(let k=4;k<40;k++){ const bx=Math.round(Math.cos(ang)*(r-k)), bz=Math.round(Math.sin(ang)*(r-k)), h=heightAt(bx,bz);
+        if(h>=SEA+2&&h<=SEA+14&&Math.hypot(bx-VOLC.x,bz-VOLC.z)>VOLC.R+10) return {x:bx,z:bz,h:h,ang:ang}; }
+      return null;
+    }
+  }
+  return null;
+}
+const LIGHTHOUSES=[];
+for(const a of [.55,2.15,3.75,5.35]){ for(let t=0;t<12;t++){ const L=findCoast(a+t*.07); if(L){ LIGHTHOUSES.push(L); break; } } }
+const CASTLE=findFlat(SPAWN.x-190,SPAWN.z-150,260,17,function(x,z){ return biomeOf(x,z,_bwL)===0; });
+const GIANT_TREE=findFlat(SPAWN.x+170,SPAWN.z+210,260,8,function(x,z){ const b=biomeOf(x,z,_bwL); return b===0||b===3; });
+const SKY_ISLANDS=[];
+for(const a of [.9,2.5,4.0,5.6]){
+  const x=Math.round(SPAWN.x+Math.cos(a)*310), z=Math.round(SPAWN.z+Math.sin(a)*310);
+  let below=0; for(let dx=-16;dx<=16;dx+=4)for(let dz=-16;dz<=16;dz+=4) below=Math.max(below,heightAt(x+dx,z+dz));
+  const y=Math.min(WH-16,Math.max(SEA+92,below+42));
+  if(y-14>below+8) SKY_ISLANDS.push({x:x,y:y,z:z,R:10+Math.round(hash2(x,z)*4)});
+}
+function ruinsAt(gx,gz){                            // sunken ruins in the shallows off the coast
+  if(hash2(gx*613+29,gz*421+7)>.55) return null;
+  const x=gx*140+70+Math.floor((hash2(gx,gz*5)-.5)*40), z=gz*140+70+Math.floor((hash2(gx*5,gz)-.5)*40), h=heightAt(x,z);
+  if(h<SEA-14||h>SEA-4) return null;
+  const e=islandEdge(x,z); if(e>0||e<-1.4) return null;
+  return {x:x,z:z,h:h};
+}
+function stampLighthouse(L,setW){                   // red and cream bands, a lantern room on top
+  const x=L.x, z=L.z, g=L.h;
+  for(let dx=-4;dx<=4;dx++)for(let dz=-4;dz<=4;dz++){
+    const d=Math.hypot(dx,dz); if(d>4.3) continue;
+    for(let y=g-5;y<=g;y++) setW(x+dx,y,z+dz,B.COBBLE,false);
+    if(d>3.3) continue;
+    for(let y=g+1;y<=g+22;y++) setW(x+dx,y,z+dz,d>2.3?(Math.floor((y-g-1)/4)%2?B.BRICK:B.TERRA_W):B.AIR,false);
+    setW(x+dx,g+23,z+dz,d>3.3?B.AIR:B.COBBLE,false);
+    for(let y=g+24;y<=g+26;y++) setW(x+dx,y,z+dz,d>2.3?B.GLASS:(d<1.2?B.GLOW:B.AIR),false);
+    setW(x+dx,g+27,z+dz,B.BRICK,false); if(d<2.2) setW(x+dx,g+28,z+dz,B.BRICK,false); if(d<1) setW(x+dx,g+29,z+dz,B.GOLD,false);
+  }
+  const ring=[[-1,-1],[0,-1],[1,-1],[1,0],[1,1],[0,1],[-1,1],[-1,0]];
+  for(let st=0;st<22;st++){ const r=ring[st%8]; setW(x+r[0],g+1+st,z+r[1],B.COBBLE,false); }
+  const dx=-Math.round(Math.cos(L.ang)*3), dz=-Math.round(Math.sin(L.ang)*3);
+  setW(x+dx,g+1,z+dz,B.AIR,false); setW(x+dx,g+2,z+dz,B.AIR,false);
+  setW(x,g+1,z,B.CHEST,false);
+}
+function stampCastle(C,setW){                       // curtain walls, four towers, a gatehouse and a keep
+  const x0=C.x, z0=C.z, by=C.h;
+  const mossy=function(x,y,z){ return hash3(x,y,z)<.3?B.MOSSY:B.COBBLE; };
+  for(let dx=-17;dx<=17;dx++)for(let dz=-17;dz<=17;dz++){
+    const x=x0+dx, z=z0+dz, g=heightAt(x,z), wall=Math.abs(dx)>=16||Math.abs(dz)>=16;
+    for(let y=Math.min(g,by)-1;y<=by;y++) setW(x,y,z,B.COBBLE,false);
+    for(let y=by+1;y<=by+16;y++) setW(x,y,z,B.AIR,false);
+    if(Math.abs(dx)<=16&&Math.abs(dz)<=16){
+      if(wall&&(Math.abs(dx)===16||Math.abs(dz)===16)){
+        for(let y=by+1;y<=by+8;y++) setW(x,y,z,mossy(x,y,z),false);
+        if((dx+dz)%2===0) setW(x,by+9,z,mossy(x,by+9,z),false);
+      }else if(Math.abs(dx)<=1) setW(x,by,z,B.GRAVEL,false);       // a path from the gate to the keep
+    }
+  }
+  for(const c of [[-16,-16],[16,-16],[-16,16],[16,16]])
+    for(let dx=-4;dx<=4;dx++)for(let dz=-4;dz<=4;dz++){
+      const d=Math.hypot(dx,dz), x=x0+c[0]+dx, z=z0+c[1]+dz; if(d>3.6) continue;
+      for(let y=by+1;y<=by+14;y++) setW(x,y,z,d>2.6?mossy(x,y,z):B.AIR,false);
+      setW(x,by+15,z,d>2.6&&((dx+dz)%2===0)?B.COBBLE:B.AIR,false);
+      if(d<2.6) setW(x,by+7,z,B.PLANK,false);
+      if(d<.8) setW(x,by+13,z,B.GLOW,false);
+    }
+  for(let dx=-1;dx<=1;dx++)for(let y=by+1;y<=by+4;y++) setW(x0+dx,y,z0+16,B.AIR,false);   // the gate
+  setW(x0-2,by+5,z0+17,B.GLOW,false); setW(x0+2,by+5,z0+17,B.GLOW,false);
+  for(let dx=-6;dx<=6;dx++)for(let dz=-6;dz<=6;dz++){                                      // the keep
+    const x=x0+dx, z=z0+dz, edge=Math.abs(dx)===6||Math.abs(dz)===6;
+    for(let y=by+1;y<=by+16;y++){
+      let b=edge?mossy(x,y,z):B.AIR;
+      if(edge&&(y-by)%5===3&&(dx+dz)%3===0) b=B.GLASS;
+      if(!edge&&(y===by+6||y===by+11)) b=B.PLANK;
+      setW(x,y,z,b,false);
+    }
+    if(edge&&(dx+dz)%2===0) setW(x,by+17,z,B.COBBLE,false);
+    if(!edge&&Math.abs(dx)<=1&&Math.abs(dz)<=1){ setW(x,by+6,z,B.AIR,false); setW(x,by+11,z,B.AIR,false); }
+  }
+  for(let y=by+1;y<=by+15;y++) setW(x0+2,y,z0-2,B.COBBLE,false);                          // a stair column to climb
+  for(let k=0;k<15;k++) setW(x0+1+(k%2),by+1+k,z0-1,B.COBBLE,false);
+  setW(x0,by+1,z0+6,B.AIR,false); setW(x0,by+2,z0+6,B.AIR,false);
+  setW(x0,by+5,z0,B.GLOW,false); setW(x0,by+10,z0,B.GLOW,false); setW(x0,by+15,z0,B.GLOW,false);
+  setW(x0-4,by+12,z0-4,B.CHEST,false); setW(x0+4,by+1,z0+4,B.CHEST,false);
+}
+function stampGiantTree(T,setW){                    // an ancient oak, a hundred blocks across the canopy
+  const x0=T.x, z0=T.z, g=T.h, top=g+30;
+  for(let y=g-2;y<=top;y++)for(let dx=-1;dx<=1;dx++)for(let dz=-1;dz<=1;dz++) setW(x0+dx,y,z0+dz,B.LOG,false);
+  for(const r of [[1,0],[-1,0],[0,1],[0,-1],[1,1],[-1,-1],[1,-1],[-1,1]])        // roots
+    for(let k=2;k<6;k++) setW(x0+r[0]*k,g+Math.max(0,2-k),z0+r[1]*k,B.LOG,false);
+  const blobs=[[0,top+2,0,9]];
+  for(let i=0;i<6;i++){ const a=i*1.05+.3, by=g+17+(i%3)*4, L=7+i%3*2;
+    for(let k=1;k<=L;k++) setW(x0+Math.round(Math.cos(a)*k),by+Math.floor(k*.5),z0+Math.round(Math.sin(a)*k),B.LOG,false);
+    blobs.push([Math.round(Math.cos(a)*L),by+Math.floor(L*.5)+1,Math.round(Math.sin(a)*L),5+i%2]); }
+  for(const bl of blobs){ const R=bl[3];
+    for(let dx=-R;dx<=R;dx++)for(let dy=-R;dy<=R;dy++)for(let dz=-R;dz<=R;dz++){
+      const d=(dx*dx+dz*dz)/(R*R)+dy*dy/(R*R*.45); if(d>1) continue;
+      if(d>.75&&hash3(x0+bl[0]+dx,bl[1]+dy,z0+bl[2]+dz)<.35) continue;
+      setW(x0+bl[0]+dx,bl[1]+dy,z0+bl[2]+dz,B.LEAF,true);
+    } }
+  setW(x0,g+1,z0-2,B.CHEST,false); setW(x0,g+1,z0+2,B.GLOW,false);
+}
+function stampSkyIsland(S,setW,springs){            // a chunk of land floating high above, a waterfall pouring off its edge
+  let top=0;
+  for(let dx=-S.R-3;dx<=S.R+3;dx++)for(let dz=-S.R-3;dz<=S.R+3;dz++){
+    const x=S.x+dx, z=S.z+dz, r=Math.hypot(dx,dz)/(S.R*(.85+vnoise(x*.15,z*.15)*.3));
+    if(r>=1) continue;
+    const y0=S.y+Math.floor(vnoise(x*.2+5,z*.2)*2), th=Math.floor(Math.pow(1-r*r,.6)*(7+S.R*.6)+vnoise(x*.3,z*.3)*4);
+    for(let y=y0-th;y<=y0;y++) setW(x,y,z,y===y0?B.GRASS:(y>y0-3?B.DIRT:(hash3(x,y,z)<.04?B.IRON:B.STONE)),false);
+    if(r<.8&&hash2(x*7,z*3)<.35) setW(x,y0+1,z,B.TALLGRASS,true);
+    top=Math.max(top,y0);
+  }
+  const set=function(x,y,z,b,keep){ setW(x,y,z,b,keep); };
+  stampTree({k:'oak',th:5},S.x+2,S.z-1,S.y+1,set); stampTree({k:'birch',th:6},S.x-4,S.z+3,S.y+1,set);
+  setW(S.x,S.y+1,S.z+2,B.CHEST,false);
+  const a=hash2(S.x,S.z*3)*6.283, ex=S.x+Math.round(Math.cos(a)*S.R*.62), ez=S.z+Math.round(Math.sin(a)*S.R*.62);
+  setW(ex,S.y+1,ez,B.SPRING,false);
+  if(springs) springs.push([ex,S.y+1,ez]);
+  return top+12;
+}
+function stampRuins(R,setW){                        // a drowned temple: broken columns, a fallen arch, a chest in the sand
+  const x0=R.x, z0=R.z, g=R.h;
+  for(let dx=-5;dx<=5;dx++)for(let dz=-5;dz<=5;dz++){ if(hash2(x0+dx*7,z0+dz*5)<.25) continue; setW(x0+dx,g,z0+dz,hash3(dx,g,dz)<.4?B.MOSSY:B.COBBLE,false); }
+  for(const p of [[-4,-4],[4,-4],[-4,4],[4,4],[0,-5],[-5,0]]){
+    const ht=2+Math.floor(hash2(x0+p[0],z0+p[1])*6);
+    for(let y=g+1;y<=Math.min(g+ht,SEA-1);y++) setW(x0+p[0],y,z0+p[1],B.MOSSY,false);
+  }
+  for(let dx=-4;dx<=4;dx++) if(hash2(x0+dx,z0)<.7) setW(x0+dx,Math.min(g+5,SEA-1),z0-4,B.COBBLE,false);
+  setW(x0,g+1,z0,B.CHEST,false); setW(x0+2,g+1,z0+1,B.GLOW,false);
+}
+const LANDMARKS=[{name:'The Fire Mountain',kind:'volcano',x:VOLC.x,z:VOLC.z,r:140}];
+if(CASTLE) LANDMARKS.push({name:'Stormwatch Castle',kind:'castle',x:CASTLE.x,z:CASTLE.z,r:45});
+if(GIANT_TREE) LANDMARKS.push({name:'The Elder Oak',kind:'tree',x:GIANT_TREE.x,z:GIANT_TREE.z,r:40});
+LIGHTHOUSES.forEach(function(L){ const a=Math.atan2(L.x,-L.z), d=['North','Northeast','East','Southeast','South','Southwest','West','Northwest'][((Math.round(a/(Math.PI/4))%8)+8)%8];
+  LANDMARKS.push({name:d+' Lighthouse',kind:'lighthouse',x:L.x,z:L.z,r:40}); });
+['Cloud Isle','Skyreach','Drifting Grove','Highfall'].forEach(function(n,i){ const S=SKY_ISLANDS[i]; if(S) LANDMARKS.push({name:n+' (sky island)',kind:'sky',x:S.x,y:S.y,z:S.z,r:34}); });
+LANDMARKS.push({name:'The Dragon\'s Lair',kind:'lair',x:LAIR.x,z:LAIR.z,r:45});
 function stampStructures(cx,cz,data){
   const x0=cx*CH, z0=cz*CH;
   let sAir=WH, eLo=WH, eHi=-1;
@@ -1024,6 +1348,14 @@ function stampStructures(cx,cz,data){
     const tw=towerAt(wx2,wz2); if(tw) stampTower(tw,setW);
   }
   if(Math.abs(x0+CH/2-LAIR.x)<LAIR.R+22&&Math.abs(z0+CH/2-LAIR.z)<LAIR.R+22) stampLair(setW);
+  const nearLm=function(p,r){ return p&&Math.abs(x0+CH/2-p.x)<r+CH/2&&Math.abs(z0+CH/2-p.z)<r+CH/2; };
+  for(const L of LIGHTHOUSES) if(nearLm(L,6)) stampLighthouse(L,setW);
+  if(nearLm(CASTLE,22)) stampCastle(CASTLE,setW);
+  if(nearLm(GIANT_TREE,18)) stampGiantTree(GIANT_TREE,setW);
+  let skyTop=0, sprs=null;
+  for(const S of SKY_ISLANDS) if(nearLm(S,S.R+4)){ sprs=sprs||[]; skyTop=Math.max(skyTop,stampSkyIsland(S,setW,sprs)); }
+  for(let gx=Math.floor((x0-8)/140);gx<=Math.floor((x0+CH+8)/140);gx++)
+  for(let gz=Math.floor((z0-8)/140);gz<=Math.floor((z0+CH+8)/140);gz++){ const R=ruinsAt(gx,gz); if(R&&nearLm(R,7)) stampRuins(R,setW); }
   // hollow out the coaster cavern - only the samples near this chunk
   const near=coasterSamplesNear(cx,cz);
   for(let k=0;k<near.length;k++){
@@ -1062,7 +1394,7 @@ function stampStructures(cx,cz,data){
     setW(ex,gTop+2,ez,B.AIR,false);
     setW(ex+2,heightAt(ex+2,ez)+2,ez,B.GOLD,false);          // marker beacon
   }
-  return {air:sAir, lo:eLo, hi:eHi};
+  return {air:sAir, lo:eLo, hi:eHi, top:skyTop, springs:sprs};
 }
 
 const chunks=new Map();   // "cx,cz" -> {data:Uint8Array, meshes:[], built:false}
@@ -1077,13 +1409,19 @@ function genChunk(cx,cz){
   let minAir=WH, lavaLo=WH, lavaHi=-1;
   for(let lx=0;lx<CH;lx++)for(let lz=0;lz<CH;lz++){
     const wx=cx*CH+lx, wz=cz*CH+lz, h=heightAt(wx,wz), slope=slopeAt(wx,wz);
+    const bw=biomeW(wx,wz,_bwG), vd=Math.hypot(wx-VOLC.x,wz-VOLC.z);
     const beach=h<=SEA+1, rocky=!beach&&(slope>=3||(h>DEPTH+56&&slope>=2));
-    let top, sub, subDepth=3;
-    if(beach){
+    let top, sub, subDepth=3, mesa=false, desert=false;
+    if(vd<VOLC.R*.92&&h>SEA){                       // the volcano: black basalt, glowing magma round the crater
+      const hr=hash2(wx*7,wz*3);
+      top=(vd<VOLC.CR+6&&hr<.55)?B.MAGMA:(hr<.07?B.OBSIDIAN:B.BASALT); sub=B.BASALT; subDepth=8;
+    }else if(beach){
       if(h<SEA-3){ const g=vnoise(wx*.08+5,wz*.08-9); top=g>.64?B.GRAVEL:((h<SEA-8&&vnoise(wx*.05,wz*.05)>.55)?B.DIRT:B.SAND); }
-      else top=B.SAND;
+      else top=bw.snow>.6?B.GRAVEL:(bw.mesa>.5?B.RED_SAND:B.SAND);
       sub=top===B.GRAVEL?B.GRAVEL:B.SAND;
-    }else if(h>=snowLine(wx,wz)){ top=slope>=4?B.STONE:B.SNOW; sub=B.STONE; }
+    }else if(bw.mesa>.5){ mesa=true; top=slope>=3?terraBand(wx,h,wz):B.RED_SAND; sub=B.TERRA_O; subDepth=34; }
+    else if(bw.desert>.5){ desert=true; top=B.SAND; sub=B.SAND; subDepth=4; }
+    else if(h>=snowLine(wx,wz)||bw.snow>.55){ top=slope>=4?B.STONE:B.SNOW; sub=slope>=4?B.STONE:B.DIRT; }
     else if(rocky){ top=(h>DEPTH+50&&hash2(wx*3,wz*5)<.25)?B.GRAVEL:B.STONE; sub=B.STONE; }
     else{ top=B.GRASS; sub=B.DIRT; if(h>DEPTH+50) subDepth=2; }
     if(h+1<minAir) minAir=h+1;                       // air begins above the surface
@@ -1101,8 +1439,9 @@ function genChunk(cx,cz){
           else if(y<58&&r>0.4&&r<0.405) b=B.DIAMOND;
         }
       }
-      else if(y<h) b=sub;
+      else if(y<h) b=mesa?terraBand(wx,y,wz):sub;
       else b=top;
+      if(desert&&b===B.STONE&&y>=h-subDepth-6) b=B.SANDSTONE;
       if(y>2&&y>=caveBot&&y<=caveTop&&isCave(wx,y,wz,h)){
         if(y<minAir) minAir=y;                       // caves push air deeper
         if(y<=LAVA_Y){ data[idx(lx,y,lz)]=B.LAVA; if(y<lavaLo) lavaLo=y; if(y>lavaHi) lavaHi=y; }
@@ -1111,6 +1450,11 @@ function genChunk(cx,cz){
       data[idx(lx,y,lz)]=b;
     }
     for(let y=h+1;y<=SEA;y++) data[idx(lx,y,lz)]=B.WATER;
+    if(h<SEA&&bw.snow>.6) data[idx(lx,SEA,lz)]=B.ICE;          // lakes and rivers freeze over in the cold
+    if(vd<VOLC.CR+1&&h<DEPTH+VOLC.LAVA){                        // the crater holds a lake of lava
+      for(let y=h+1;y<=DEPTH+VOLC.LAVA;y++) data[idx(lx,y,lz)]=B.LAVA;
+      if(h+1<lavaLo) lavaLo=h+1; if(DEPTH+VOLC.LAVA>lavaHi) lavaHi=DEPTH+VOLC.LAVA;
+    }
   }
   // trees (scan beyond borders so canopies cross chunk edges)
   const set=function(x,y,z,b,keep){ const lx=x-cx*CH, lz=z-cz*CH;
@@ -1122,20 +1466,33 @@ function genChunk(cx,cz){
     if(isCave(wx,h,wz,h)) continue;                  // never plant a tree over a cave mouth
     stampTree(tr,wx,wz,h,set);
   }
-  // meadows: tall grass everywhere, flowers in patches
+  // meadows: tall grass everywhere, flowers in patches; cacti in the desert, thick undergrowth in the jungle
   for(let lx=0;lx<CH;lx++)for(let lz=0;lz<CH;lz++){
     const wx=cx*CH+lx, wz=cz*CH+lz, h=heightAt(wx,wz);
-    if(h+1>=WH||data[idx(lx,h,lz)]!==B.GRASS||data[idx(lx,h+1,lz)]!==B.AIR) continue;
+    if(h+4>=WH||data[idx(lx,h+1,lz)]!==B.AIR) continue;
+    const tb=data[idx(lx,h,lz)];
+    if(tb===B.SAND||tb===B.RED_SAND){
+      const rc=hash2(wx*17-5,wz*13+11);
+      if(h>SEA+2&&rc<(tb===B.SAND?.008:.003)&&slopeAt(wx,wz)<2){ const ht=1+Math.floor(hash2(wx,wz*5)*3); for(let k=1;k<=ht;k++) data[idx(lx,h+k,lz)]=B.CACTUS; }
+      continue;
+    }
+    if(tb!==B.GRASS) continue;
     const r=hash2(wx*13+7,wz*17-3);
-    const meadow=fbm(wx*.02-55,wz*.02+91), pG=Math.min(.62,Math.max(.03,(meadow-.3)*1.2));
+    const jung=biomeW(wx,wz,_bwG).jungle;
+    const meadow=fbm(wx*.02-55,wz*.02+91), pG=jung>.5?.75:Math.min(.62,Math.max(.03,(meadow-.3)*1.2));
     const fz=vnoise(wx*.07+300,wz*.07-200);
-    if(r<pG) data[idx(lx,h+1,lz)]=(r<pG*.55&&vnoise(wx*.035+500,wz*.035-700)>.58)?B.FERN:B.TALLGRASS;
+    if(r<pG) data[idx(lx,h+1,lz)]=((jung>.5&&r<pG*.5)||(r<pG*.55&&vnoise(wx*.035+500,wz*.035-700)>.58))?B.FERN:B.TALLGRASS;
     else if(fz>.7&&r<pG+.28){ const k=vnoise(wx*.05-90,wz*.05+40);
       data[idx(lx,h+1,lz)]=k<.4?B.ROSE:(k<.68?B.DANDELION:B.DAISY); }
   }
   // lily pads on sheltered shallow water, reeds along the banks
   for(let lx=0;lx<CH;lx++)for(let lz=0;lz<CH;lz++){
     const wx=cx*CH+lx, wz=cz*CH+lz, h=heightAt(wx,wz), r=hash2(wx*29-11,wz*31+5);
+    if(h<SEA-1&&h>=SEA-10&&islandEdge(wx,wz)<.25&&biomeW(wx,wz,_bwG).snow<.2){   // coral reefs in the warm shallows off the coast
+      const cn=vnoise(wx*.09+70,wz*.09-40);
+      if(cn>.58&&r<.55){ const kind=[B.CORAL_R,B.CORAL_Y,B.CORAL_B][Math.floor(vnoise(wx*.05-9,wz*.05+3)*2.999)];
+        data[idx(lx,h+1,lz)]=kind; if(r<.15&&h+2<SEA) data[idx(lx,h+2,lz)]=kind; }
+    }
     if(h<SEA&&h>=SEA-4){
       if(r<.42&&vnoise(wx*.08+17,wz*.08-31)>.6&&data[idx(lx,SEA,lz)]===B.WATER&&data[idx(lx,SEA+1,lz)]===B.AIR) data[idx(lx,SEA+1,lz)]=B.LILY;
     }else if(h>=SEA+1&&h<=SEA+2&&r<.5&&h+1<WH){
@@ -1144,13 +1501,24 @@ function genChunk(cx,cz){
          Math.min(heightAt(wx+2,wz),heightAt(wx-2,wz),heightAt(wx,wz+2),heightAt(wx,wz-2))<SEA) data[idx(lx,h+1,lz)]=B.REEDS;
     }
   }
+  // amethyst geodes: rare glowing pockets deep in the rock
+  if(hash2(cx*41+7,cz*29-3)<.06){
+    const gx=6+Math.floor(hash2(cx,cz*3)*4), gz=6+Math.floor(hash2(cx*5,cz)*4), h0=heightAt(cx*CH+gx,cz*CH+gz);
+    const gy=Math.max(14,h0-26-Math.floor(hash2(cx*3,cz*7)*22)), R=4.2+hash2(cx*9,cz*11)*1.6;
+    for(let dy=-6;dy<=6;dy++)for(let dz=-6;dz<=6;dz++)for(let dx=-6;dx<=6;dx++){
+      const d=Math.hypot(dx,dy,dz), lx=gx+dx, lz=gz+dz, y=gy+dy;
+      if(d>R||lx<0||lx>=CH||lz<0||lz>=CH||y<3) continue;
+      data[idx(lx,y,lz)]=d<R-2.2?B.AIR:(d<R-1.1?B.AMETHYST:B.BASALT);
+      if(d<R-2.2&&y<minAir) minAir=y;
+    }
+  }
   const st=stampStructures(cx,cz,data);             // tunnels/rooms dug into the rock
   if(st.air<minAir) minAir=st.air;
   if(st.hi>=0){ lavaLo=Math.min(lavaLo,st.lo); lavaHi=Math.max(lavaHi,st.hi); }
   // top-most opaque block per column: the mesher derives sky light from it
   const hmap=new Int16Array(CH*CH);
   for(let lx=0;lx<CH;lx++)for(let lz=0;lz<CH;lz++){
-    let y=Math.min(WH-1,heightAt(cx*CH+lx,cz*CH+lz)+28);
+    let y=Math.min(WH-1,Math.max(heightAt(cx*CH+lx,cz*CH+lz)+28,st.top||0));
     while(y>=0&&!OPAQUE[data[lx+(lz<<4)+(y<<8)]]) y--;
     hmap[lx+(lz<<4)]=y;
   }
@@ -1165,9 +1533,18 @@ function genChunk(cx,cz){
     if(d1<2||d2<7) continue;
     const y=h-1;
     if(!OPAQUE[data[idx(lx,y,lz)]]||!OPAQUE[data[idx(lx,y+1,lz)]]||!OPAQUE[data[idx(lx,y-1,lz)]]) continue;
-    data[idx(lx,y,lz)]=B.WATER; springs=[[wx,y,wz]]; break;
+    data[idx(lx,y,lz)]=B.SPRING; springs=[[wx,y,wz]]; break;
   }
-  c={data:data, meshes:[], built:false, minAir:Math.max(0,Math.min(minAir,WH)), hmap:hmap, lavaLo:lavaLo, lavaHi:lavaHi, cx:cx, cz:cz, springs:springs};
+  if(st.springs&&st.springs.length) springs=(springs||[]).concat(st.springs.filter(function(p){ return p[0]>=cx*CH&&p[0]<cx*CH+CH&&p[2]>=cz*CH&&p[2]<cz*CH+CH; }));
+  let lavaSprings=null;
+  for(let k=0;k<4;k++){
+    const a=k*1.71+.4, wx=Math.round(VOLC.x+Math.cos(a)*(VOLC.CR+3)), wz=Math.round(VOLC.z+Math.sin(a)*(VOLC.CR+3)), lx=wx-cx*CH, lz=wz-cz*CH;
+    if(lx<0||lx>=CH||lz<0||lz>=CH) continue;
+    const y=heightAt(wx,wz); data[idx(lx,y,lz)]=B.LAVA;
+    if(y<lavaLo) lavaLo=y; if(y>lavaHi) lavaHi=y;
+    (lavaSprings||(lavaSprings=[])).push([wx,y,wz]);
+  }
+  c={data:data, meshes:[], built:false, minAir:Math.max(0,Math.min(minAir,WH)), hmap:hmap, lavaLo:lavaLo, lavaHi:lavaHi, cx:cx, cz:cz, springs:springs, lavaSprings:lavaSprings};
   chunks.set(key,c);
   return c;
 }
@@ -1194,7 +1571,8 @@ const U={
   uRefl:{value:null}, uReflMat:{value:new THREE.Matrix4()}, uReflOn:{value:0}, uWaterY:{value:SEA+.875},
   uRip:{value:Array.from({length:16},function(){ return new THREE.Vector4(0,0,-100,0); })}, uRain:{value:0}, uWave:{value:1},
   uStarRot:{value:new THREE.Matrix3()}, uAurora:{value:0}, uMetA:{value:new THREE.Vector4(0,1,0,-100)}, uMetB:{value:new THREE.Vector4(1,0,0,1)},
-  uOvercast:{value:0}, uMist:{value:0}, uSnowK:{value:0}, uRainH:{value:null}, uRainO:{value:new THREE.Vector2()}
+  uOvercast:{value:0}, uMist:{value:0}, uSnowK:{value:0}, uRainH:{value:null}, uRainO:{value:new THREE.Vector2()},
+  tOpaque:{value:null}, tDepthLin:{value:null}, uRefrOn:{value:0}, uRes:{value:new THREE.Vector2(1,1)}
 };
 function bindU(sh){ for(const k in U) sh.uniforms[k]=U[k]; }
 
@@ -1416,18 +1794,19 @@ const FLUID_VS=`attribute vec4 aLight;
 varying vec3 vW; varying vec4 vL; varying vec3 vN;
 void main(){ vec4 w=modelMatrix*vec4(position,1.0); vW=w.xyz; vL=aLight; vN=normal; gl_Position=projectionMatrix*viewMatrix*w; }`;
 const WATER_VS=`attribute vec4 aLight; uniform float uTime; uniform float uWaterY; uniform float uWave;
-varying vec3 vW; varying vec4 vL; varying vec3 vN;
+varying vec3 vW; varying vec4 vL; varying vec3 vN; varying float vVZ;
 void main(){
   vec4 w=modelMatrix*vec4(position,1.0);
   if(abs(w.y-uWaterY)<0.04){                       // a gentle swell rolls across open water
     float sw=sin(w.x*0.45+uTime*1.1)*0.5+sin(w.z*0.38-uTime*0.9)*0.35+sin((w.x-w.z)*0.21+uTime*0.6)*0.45;
     w.y+=sw*0.028*uWave;
   }
-  vW=w.xyz; vL=aLight; vN=normal; gl_Position=projectionMatrix*viewMatrix*w;
+  vW=w.xyz; vL=aLight; vN=normal; vec4 vp=viewMatrix*w; vVZ=-vp.z; gl_Position=projectionMatrix*vp;
 }`;
 const WATER_FS=`uniform sampler2D uWaterN; uniform sampler2D uRefl; uniform mat4 uReflMat; uniform float uReflOn; uniform float uWaterY;
 uniform vec4 uRip[16]; uniform float uRain;
-varying vec3 vW; varying vec4 vL; varying vec3 vN;
+uniform sampler2D tOpaque; uniform sampler2D tDepthLin; uniform float uRefrOn; uniform vec2 uRes;
+varying vec3 vW; varying vec4 vL; varying vec3 vN; varying float vVZ;
 `+GLSL_ATMOS+`
 vec2 wN(vec2 uv){ return texture(uWaterN,uv).xy*2.0-1.0; }
 vec2 stillN(vec2 p){
@@ -1504,9 +1883,26 @@ void main(){
   }else refl=vec3(0.01,0.05,0.06)*uAmbient*4.0;
   float sd=max(dot(R,uSunDir),0.0);
   vec3 spec=under?vec3(0.0):uSunCol*(pow(sd,2200.0)*70.0+pow(sd,180.0)*1.0)*sky*cloudShade(vW)*(1.0-uRain*0.8);
+  vec3 lightIn=uAmbient*(0.3+0.9*sky)+uSunCol*max(uSunDir.y,0.0)*1.1*sky;
+  if(uRefrOn>0.5&&!under&&!fall){
+    // look through the surface at what lies beneath, bent by the waves; the deeper it is, the more the water swallows
+    vec2 suv=gl_FragCoord.xy/uRes;
+    float th0=max(texture(tDepthLin,suv).r-vVZ,0.0);
+    vec2 ruv=suv+n.xz*0.045*clamp(th0*0.5,0.0,1.0)/max(vVZ*0.05,1.0);
+    if(texture(tDepthLin,ruv).r<vVZ) ruv=suv;                 // never pull in things standing in front of the water
+    float th=max(texture(tDepthLin,ruv).r-vVZ,0.0);
+    vec3 below=texture(tOpaque,ruv).rgb;
+    vec3 trans=exp(-th*vec3(0.46,0.13,0.075));                // red goes first, blue-green carries furthest
+    vec3 refr=below*trans+vec3(0.012,0.085,0.125)*lightIn*2.4*(1.0-exp(-th*0.2));
+    float wv=texture(uWaterN,vW.xz*0.12+uTime*vec2(0.02,0.013)).z;
+    float shore=smoothstep(0.6,0.0,th)*smoothstep(0.4,0.75,wv+0.22*sin(th*13.0-uTime*1.8));   // foam where it laps the shore
+    foam=max(foam,shore*0.6);
+    vec3 col=mix(refr,atmosphere(refl,vW),F)+(spec+foam*lightIn*1.1)*(1.0-fogAmt(vW));
+    gl_FragColor=vec4(col,1.0);
+    return;
+  }
   float depth=fall?1.5:vL.x*12.0;
   vec3 bodyC=mix(vec3(0.16,0.62,0.55),vec3(0.035,0.22,0.34),1.0-exp(-depth*0.25));
-  vec3 lightIn=uAmbient*(0.3+0.9*sky)+uSunCol*max(uSunDir.y,0.0)*1.1*sky;
   float alpha=mix(0.55,0.94,1.0-exp(-depth*0.25));
   if(top&&!under&&sp<0.004){ float fn=texture(uWaterN,vW.xz*0.08+uTime*0.012).z; foam=smoothstep(0.35,0.0,depth)*smoothstep(0.45,0.8,fn)*0.45; }
   vec3 col=mix(bodyC*lightIn,refl,F)+spec+foam*lightIn*1.1;
@@ -1521,7 +1917,10 @@ matWater.userData.atmo=true;
 const LAVA_FS=`varying vec3 vW; varying vec4 vL; varying vec3 vN;
 `+GLSL_ATMOS+`
 void main(){
+  bool top=vN.y>0.5;
   vec2 p=abs(vN.y)>0.5?vW.xz:(abs(vN.x)>0.5?vec2(vW.z,vW.y*1.6):vec2(vW.x,vW.y*1.6));
+  if(vL.w>0.5) p.y+=uTime*0.8;                                // a lava fall streams downward
+  else if(top) p-=vN.xz*(127.0/7.0/16.0)*uTime*1.6;          // the crust drifts down the slope
   p=floor(p*24.0)/24.0;
   float t=uTime;
   float h=texture(uNoise,p*0.07+vec2(t*0.006,t*0.004)).r*0.6+texture(uNoise,p*0.19-vec2(t*0.009,-t*0.005)).g*0.4
@@ -1554,7 +1953,7 @@ function faceVisible(cur,nb){
   if(nb===cur) return false;              // water-water, leaf-leaf, glass-glass
   const ck=DEFS[cur].kind, nk=DEFS[nb].kind;
   if(ck==='water') return nk!=='lava'&&!WATERY[nb];
-  if(ck==='lava') return true;
+  if(ck==='lava') return !LAVAY[nb];
   return true;
 }
 
@@ -1643,15 +2042,16 @@ function buildChunkMesh(cx,cz){
     if(d===undefined){ d=0; while(d<12&&WATERY[bl(x,y-d,z)]) d++; wDepth.set(k,d); } return d; };
   // water surface height (1/16 block) where four cells meet: full when water sits above, sources weigh
   // more than thin flows, and open air beside it pulls the edge down so the surface slopes the way it runs
-  const wCH=new Map();
-  const wCorner=function(X,y,Z){ const key=(X+2)+(Z+2)*21+y*441; let h=wCH.get(key); if(h!==undefined) return h;
+  const wCH=new Map(), lCH=new Map();
+  const fCorner=function(FL,X,y,Z){ const cache=FL===FW?wCH:lCH, key=(X+2)+(Z+2)*21+y*441; let h=cache.get(key); if(h!==undefined) return h;
     let s=0, w=0, any=false, full=false;
+    const top=FL===FW?14:13, per=FL===FW?1.75:3.25;
     for(let ez=-1;ez<=0&&!full;ez++)for(let ex=-1;ex<=0;ex++){ const q=bl(X+ex,y,Z+ez);
-      if(WATERY[q]){ any=true; if(WATERY[bl(X+ex,y+1,Z+ez)]){ full=true; break; }
-        const lv=WLEVEL[q], wt=q===B.WATER?6:1; s+=(lv>=8?14:lv*1.75)*wt; w+=wt; }
+      if(FL.is[q]){ any=true; if(FL.is[bl(X+ex,y+1,Z+ez)]){ full=true; break; }
+        const lv=FL.lv[q], wt=FL.isSrc(q)?6:1; s+=(lv>=FL.max?top:lv*per)*wt; w+=wt; }
       else if(!(DEFS[q]&&DEFS[q].solid)) w+=1;
     }
-    h=full?16:(any?s/w:-1); wCH.set(key,h); return h; };
+    h=full?16:(any?s/w:-1); cache.set(key,h); return h; };
   const WTH=[0,0,0,0], splashes=[];
   for(const k in MBUF) MBUF[k].n=0;
   const ox=cx*CH, oz=cz*CH, lavaTops=[];
@@ -1686,10 +2086,11 @@ function buildChunkMesh(cx,cz){
     }
     if(OPAQUE[q0]&&OPAQUE[q1]&&OPAQUE[q2]&&OPAQUE[q3]&&OPAQUE[q4]&&OPAQUE[q5]) continue;
     const QS=[q0,q1,q2,q3,q4,q5];
-    if(kind==='water'){                                   // surfaces slope down the way the water runs
-      const mb=MBUF.water, fall=b===B.WFALL?255:0, sk0=skyAt(lx,y,lz), full=WATERY[q0], th=WTH;
-      for(let k=0;k<4;k++) th[k]=full?16:Math.max(0,wCorner(lx+(k&1),y,lz+(k>>1)));
-      if(fall&&splashes.length<32&&WATERY[bl(lx,y+2,lz)]&&(q1===B.WATER||(q1!==B.AIR&&DEFS[q1].solid))) splashes.push([ox+lx+.5,y,oz+lz+.5]);
+    if(kind==='water'||kind==='lava'){                    // surfaces slope down the way the liquid runs
+      const FL=kind==='water'?FW:FLV, mb=MBUF[kind], fall=b===FL.fall?255:0, sk0=skyAt(lx,y,lz), full=FL.is[q0], th=WTH;
+      for(let k=0;k<4;k++) th[k]=full?16:Math.max(0,fCorner(FL,lx+(k&1),y,lz+(k>>1)));
+      if(FL===FW&&fall&&splashes.length<32&&WATERY[bl(lx,y+2,lz)]&&(FW.isSrc(q1)||(q1!==B.AIR&&DEFS[q1].solid))) splashes.push([ox+lx+.5,y,oz+lz+.5]);
+      if(FL===FLV&&q0===B.AIR&&lavaTops.length<48) lavaTops.push([ox+lx,y,oz+lz]);
       for(let fi=0;fi<6;fi++){
         const nb=QS[fi];
         if(!faceVisible(b,nb)) continue;
@@ -1699,11 +2100,11 @@ function buildChunkMesh(cx,cz){
           const cn=F[1][k], X=lx+cn[0], Z=lz+cn[2], hc=th[cn[0]+cn[2]*2];
           let a0=255, vnx=dir[0]*127, vny=dir[1]*127, vnz=dir[2]*127;
           if(fi===0){
-            let dsum=0;
-            for(let ez=-1;ez<=0;ez++)for(let ex=-1;ex<=0;ex++){ if(WATERY[bl(X+ex,y,Z+ez)]) dsum+=waterDepth(X+ex,y,Z+ez); }
-            a0=Math.min(255,Math.round(dsum/4*21));
+            if(FL===FW){ let dsum=0;
+              for(let ez=-1;ez<=0;ez++)for(let ex=-1;ex<=0;ex++){ if(WATERY[bl(X+ex,y,Z+ez)]) dsum+=waterDepth(X+ex,y,Z+ez); }
+              a0=Math.min(255,Math.round(dsum/4*21)); }
             // which way the surface runs downhill rides along in the normal's x/z
-            const hl=wCorner(X-1,y,Z), hr=wCorner(X+1,y,Z), hd=wCorner(X,y,Z-1), hu=wCorner(X,y,Z+1);
+            const hl=fCorner(FL,X-1,y,Z), hr=fCorner(FL,X+1,y,Z), hd=fCorner(FL,X,y,Z-1), hu=fCorner(FL,X,y,Z+1);
             const gx=((hl<0?hc:hl)-(hr<0?hc:hr))*.5, gz=((hd<0?hc:hd)-(hu<0?hc:hu))*.5;
             vnx=Math.max(-110,Math.min(110,Math.round(gx*7))); vny=100; vnz=Math.max(-110,Math.min(110,Math.round(gz*7)));
           }
@@ -1835,22 +2236,32 @@ function setDataOnly(x,y,z,b){
   touchCell(cc,lx,y,lz,b);
 }
 
-/* ====== FLOWING WATER ====== */
-// sources (the sea, lakes, springs, water you place) stay put; flowing water creeps up to 7 blocks
-// across solid ground, pours straight down over every edge, cools lava into stone and dries up when cut off
+/* ====== FLOWING WATER AND LAVA ====== */
+// one simulation, two liquids.
+// Water: the sea and lakes pour into any hole dug beside them and fill it up to their own level; springs and
+// water you pour make streams that run up to 7 blocks toward the nearest drop and tumble over every edge.
+// Lava: thick and slow, it creeps 3 blocks at a time, pours down slopes, sets things alight, and freezes to
+// obsidian, cobblestone or stone where it meets water.
 const WSIM_R=72, WQ_MAX=40000;
-let WQ=new Set(), wTimer=0, wSleepT=0;
-const WSLEEP=new Map();
+function mkFluid(o){ o.q=new Set(); o.t=0; o.mask=new Map(); o.sleep=new Map(); return o; }
+const FW=mkFluid({name:'water', is:WATERY, lv:WLEVEL, src:B.WATER, fall:B.WFALL, f1:B.WF1, max:8, step:.12, cap:900, drop:4,
+  isSrc:function(b){ return b===B.WATER||b===B.SPRING; }});
+const FLV=mkFluid({name:'lava', is:LAVAY, lv:LLEVEL, src:B.LAVA, fall:B.LFALL, f1:B.LF1, max:4, step:.55, cap:500, drop:3,
+  isSrc:function(b){ return b===B.LAVA; }});
+const FLUIDS=[FW,FLV];
+let fSleepT=0;
+const N7=[[0,0,0],[1,0,0],[-1,0,0],[0,0,1],[0,0,-1],[0,1,0],[0,-1,0]];
 function wKey(x,y,z){ return ((x+1048576)*2097152+(z+1048576))*512+y; }
-function wakeCell(x,y,z){ if(y>0&&y<WH-1&&WQ.size<WQ_MAX) WQ.add(wKey(x,y,z)); }
-// something changed here: let any water next to it settle again
+function fWake(F,x,y,z){ if(y>0&&y<WH-1&&F.q.size<WQ_MAX) F.q.add(wKey(x,y,z)); }
+function fWakeAround(F,x,y,z){ for(const c of N7) fWake(F,x+c[0],y+c[1],z+c[2]); }
+// something changed here: let any water or lava next to it settle again
 function wakeWater(x,y,z){
-  if(!(WATERY[getBlock(x,y,z)]||WATERY[getBlock(x,y+1,z)]||WATERY[getBlock(x+1,y,z)]||WATERY[getBlock(x-1,y,z)]||
-       WATERY[getBlock(x,y,z+1)]||WATERY[getBlock(x,y,z-1)]||WATERY[getBlock(x,y-1,z)])) return;
-  wakeCell(x,y,z); wakeCell(x+1,y,z); wakeCell(x-1,y,z); wakeCell(x,y,z+1); wakeCell(x,y,z-1); wakeCell(x,y+1,z); wakeCell(x,y-1,z);
+  let w=0, l=0;
+  for(const c of N7){ const b=getBlock(x+c[0],y+c[1],z+c[2]); if(WATERY[b]) w=1; else if(LAVAY[b]) l=1; }
+  if(w||l){ fWakeAround(FW,x,y,z); fWakeAround(FLV,x,y,z); }
 }
-function wSupports(b){ return b===B.WATER||(b!==B.AIR&&!!DEFS[b].solid); }     // water spreads sideways over this
-function wOpen(b){ return b===B.AIR||b===B.FIRE||isPlant(b)||(WATERY[b]&&b!==B.WATER); }
+function fSupports(F,b){ return F.isSrc(b)||(b!==B.AIR&&!!DEFS[b].solid); }        // a liquid spreads sideways over this
+function fOpen(F,b){ return b===B.AIR||b===B.FIRE||isPlant(b)||(F.is[b]&&!F.isSrc(b)); }
 // block reads for the simulation, remembering the last chunk (cleared every tick)
 let wbC=null, wbX=1e9, wbZ=1e9;
 function wb(x,y,z){
@@ -1859,28 +2270,27 @@ function wb(x,y,z){
   if(cx!==wbX||cz!==wbZ){ wbC=genChunk(cx,cz); wbX=cx; wbZ=cz; }
   return wbC.data[(x&15)+((z&15)<<4)+(y<<8)];
 }
-// like real water, a flow heads for the nearest place it can drop (up to 4 blocks away) instead of spreading everywhere
-const wMask=new Map();
-function wDropDist(x,y,z,from,depth){
-  if(!wSupports(wb(x,y-1,z))) return 0;
-  if(depth>=4) return 99;
+// a flow heads for the nearest place it can drop instead of spreading everywhere
+function fDropDist(F,x,y,z,from,depth){
+  if(!fSupports(F,wb(x,y-1,z))) return 0;
+  if(depth>=F.drop) return 99;
   let best=99;
   for(let i=0;i<4;i++){
     if(i===(from^1)) continue;
     const d=DIR4[i], a=wb(x+d[0],y,z+d[1]);
-    if(!wOpen(a)) continue;
-    const r=wDropDist(x+d[0],y,z+d[1],i,depth+1)+1; if(r<best) best=r;
+    if(!fOpen(F,a)) continue;
+    const r=fDropDist(F,x+d[0],y,z+d[1],i,depth+1)+1; if(r<best) best=r;
   }
   return best;
 }
-function wMaskOf(x,y,z){
-  const k=wKey(x,y,z); let m=wMask.get(k);
+function fMaskOf(F,x,y,z){
+  const k=wKey(x,y,z); let m=F.mask.get(k);
   if(m!==undefined) return m;
   let best=1e9, nb=0; m=0;
   for(let i=0;i<4;i++){
     const d=DIR4[i];
-    if(!wOpen(wb(x+d[0],y,z+d[1]))) continue;
-    const dd=wDropDist(x+d[0],y,z+d[1],i,1);
+    if(!fOpen(F,wb(x+d[0],y,z+d[1]))) continue;
+    const dd=fDropDist(F,x+d[0],y,z+d[1],i,1);
     if(dd<best){ best=dd; m=1<<i; nb=1; } else if(dd===best){ m|=1<<i; nb++; }
   }
   if(best>=99) m|=16;                              // nowhere to run: it only pools out a little way
@@ -1888,7 +2298,7 @@ function wMaskOf(x,y,z){
     let pick=(((x*73856093)^(z*19349663)^(y*83492791))>>>0)%nb;
     for(let i=0;i<4;i++) if(m&(1<<i)){ if(pick===0){ m=1<<i; break; } pick--; }
   }
-  wMask.set(k,m); return m;
+  F.mask.set(k,m); return m;
 }
 // natural caves stay dry unless someone is right there to watch it pour in (a whole cave system would flood)
 function wCaveBlocked(x,y,z){
@@ -1897,58 +2307,60 @@ function wCaveBlocked(x,y,z){
   for(const pl of players) if(Math.abs(pl.pos.x-x)<20&&Math.abs(pl.pos.z-z)<20&&Math.abs(pl.pos.y-y)<16) return false;
   return true;
 }
-function wDesired(x,y,z,b){
-  if(b===B.LAVA){                                  // water meeting lava hardens it
-    if(WATERY[wb(x,y+1,z)]) return B.STONE;
-    for(const d of DIR4) if(WATERY[wb(x+d[0],y,z+d[1])]) return B.COBBLE;
+// is the sea (or a lake) pouring down into this spot? then water piles up here until it reaches the sea's level
+function fedByBody(x,y,z){
+  let yy=y+1, k=0;
+  while(k<64&&WATERY[wb(x,yy,z)]){ if(wb(x,yy,z)===B.WATER) return true; yy++; k++; }
+  yy--;
+  for(const d of DIR4) if(wb(x+d[0],yy,z+d[1])===B.WATER) return true;
+  return false;
+}
+function fDesired(F,x,y,z,b){
+  if(F===FW){
+    if(LAVAY[b]){                                  // water meeting lava freezes it: obsidian from a pool, cobblestone from a flow
+      let wet=WATERY[wb(x,y+1,z)];
+      for(const d of DIR4) if(WATERY[wb(x+d[0],y,z+d[1])]) wet=1;
+      return wet?(b===B.LAVA?B.OBSIDIAN:B.COBBLE):b;
+    }
+  }else if(WATERY[b]){                             // lava running into water sets as stone
+    if(LAVAY[wb(x,y+1,z)]) return B.STONE;
+    for(const d of DIR4){ const n=wb(x+d[0],y,z+d[1]); if(LAVAY[n]&&fSupports(FLV,wb(x+d[0],y-1,z+d[1]))) return B.STONE; }
     return b;
   }
-  if(!wOpen(b)||(b===B.AIR&&wCaveBlocked(x,y,z))) return b;
-  let best=0, src=0;
+  if(!fOpen(F,b)||(b===B.AIR&&wCaveBlocked(x,y,z))) return b;
+  let best=0, body=0;
   for(let i=0;i<4;i++){
     const d=DIR4[i], n=wb(x+d[0],y,z+d[1]);
-    if(!WATERY[n]) continue;
-    if(n===B.WATER) src++;
-    if(!wSupports(wb(x+d[0],y-1,z+d[1]))) continue;           // that water is pouring down, not spreading
-    const m=wMaskOf(x+d[0],y,z+d[1]);
+    if(!F.is[n]) continue;
+    if(n===B.WATER) body++;
+    if(!fSupports(F,wb(x+d[0],y-1,z+d[1]))) continue;           // that liquid is pouring down, not spreading
+    const m=fMaskOf(F,x+d[0],y,z+d[1]);
     if(!(m&(1<<(i^1)))) continue;                                // it is running off another way
-    const lv=WLEVEL[n]-(m&16?3:1); if(lv>best) best=lv;
+    const lv=F.lv[n]-((m&16)&&F===FW?3:1); if(lv>best) best=lv;
   }
-  if(src>=2&&wSupports(wb(x,y-1,z))) return B.WATER;          // fed from two sides it fills in for good
-  if(WATERY[wb(x,y+1,z)]) return B.WFALL;
-  if(best<=0) return WATERY[b]?B.AIR:b;
-  return B.WF1+best-1;
+  const up=wb(x,y+1,z);
+  if(F===FW&&y<=SEA&&fSupports(F,wb(x,y-1,z))){                  // (only the sea and its lakes find their level)
+    if(body>0) return B.WATER;                                   // the sea spills in and fills to its own level
+    if(WATERY[up]&&fedByBody(x,y,z)) return B.WATER;             // a hole under the sea fills up from the bottom
+  }
+  if(F.is[up]) return F.fall;
+  if(best<=0) return F.is[b]?B.AIR:b;
+  return F.f1+best-1;
 }
 function nearPlayer(x,z,r){ for(const pl of players) if(Math.abs(pl.pos.x-x)<r&&Math.abs(pl.pos.z-z)<r) return true; return false; }
-function updateWater(dt){
-  wTimer+=dt; wSleepT+=dt;
-  if(wSleepT>1.2){
-    wSleepT=0;
-    WSLEEP.forEach(function(a,k){ const p=k.split(',');
-      if(nearPlayer((+p[0]+.5)*CH,(+p[1]+.5)*CH,WSIM_R-12)){ WSLEEP.delete(k); for(const q of a) if(WQ.size<WQ_MAX) WQ.add(q); } });
-    for(const pl of players){                       // springs start to run once someone is close enough to see them
-      const pcx=Math.floor(pl.pos.x/CH), pcz=Math.floor(pl.pos.z/CH), r=Math.floor(WSIM_R/CH)-1;
-      for(let dz=-r;dz<=r;dz++)for(let dx=-r;dx<=r;dx++){
-        const c=chunks.get((pcx+dx)+','+(pcz+dz));
-        if(!c||!c.springs||c.springOn) continue;
-        c.springOn=true;
-        for(const sp of c.springs) wakeWater(sp[0],sp[1],sp[2]);
-      }
-    }
-  }
-  if(wTimer<.2||!WQ.size) return;
-  wTimer=0; wbX=1e9; wMask.clear();
-  const cur=WQ, edits=[]; WQ=new Set();
+function fStep(F){
+  wbX=1e9; F.mask.clear();
+  const cur=F.q, edits=[]; F.q=new Set();
   let n=0;
   for(const k of cur){
-    if(n>=900){ WQ.add(k); continue; }             // the rest waits for the next tick
+    if(n>=F.cap){ F.q.add(k); continue; }           // the rest waits for the next tick
     const y=k%512, r=(k-y)/512, z=r%2097152-1048576, x=(r-(r%2097152))/2097152-1048576;
     if(!nearPlayer(x,z,WSIM_R)){                    // too far away to matter: park it until someone comes back
-      const key=Math.floor(x/CH)+','+Math.floor(z/CH); let a=WSLEEP.get(key);
-      if(!a){ a=[]; WSLEEP.set(key,a); } if(a.length<4000) a.push(k); continue;
+      const key=Math.floor(x/CH)+','+Math.floor(z/CH); let a=F.sleep.get(key);
+      if(!a){ a=[]; F.sleep.set(key,a); } if(a.length<4000) a.push(k); continue;
     }
     n++;
-    const b=wb(x,y,z), nb=wDesired(x,y,z,b);
+    const b=wb(x,y,z), nb=fDesired(F,x,y,z,b);
     if(nb!==b) edits.push([x,y,z,nb,b]);
   }
   if(!edits.length) return;
@@ -1956,25 +2368,45 @@ function updateWater(dt){
   setBlocksBatch(edits,true);
   const fall=[];
   for(const e of edits){
-    if(e[3]===B.STONE||e[3]===B.COBBLE){ lavaHiss(e[0],e[1],e[2]); continue; }
-    if(!WATERY[e[3]]) continue;
-    // falling water drops the whole way at once
+    const nb=e[3];
+    if(nb===B.STONE||nb===B.COBBLE||nb===B.OBSIDIAN){ lavaHiss(e[0],e[1],e[2]); continue; }
+    if(!F.is[nb]) continue;
+    if(F===FLV&&Math.random()<.2) igniteAround(e[0]+.5,e[1]+.5,e[2]+.5,1.8,.35,1);   // lava sets the grass and trees alight
+    // a falling liquid drops the whole way at once
     let y=e[1]-1, k=0;
     while(y>1&&k<160){
       const b=getBlock(e[0],y,e[2]);
-      if(!(b===B.AIR||b===B.FIRE||isPlant(b)||(WATERY[b]&&b!==B.WATER&&b!==B.WFALL))||(b===B.AIR&&wCaveBlocked(e[0],y,e[2]))) break;
+      if(!(b===B.AIR||b===B.FIRE||isPlant(b)||(F.is[b]&&!F.isSrc(b)&&b!==F.fall))||(b===B.AIR&&wCaveBlocked(e[0],y,e[2]))) break;
       if(b===B.FIRE) douse(e[0],y,e[2]);
-      fall.push([e[0],y,e[2],B.WFALL]); y--; k++;
+      fall.push([e[0],y,e[2],F.fall]); y--; k++;
     }
   }
   if(fall.length) setBlocksBatch(fall,true);
+}
+function updateWater(dt){
+  fSleepT+=dt;
+  if(fSleepT>1.2){
+    fSleepT=0;
+    for(const F of FLUIDS) F.sleep.forEach(function(a,k){ const p=k.split(',');
+      if(nearPlayer((+p[0]+.5)*CH,(+p[1]+.5)*CH,WSIM_R-12)){ F.sleep.delete(k); for(const q of a) if(F.q.size<WQ_MAX) F.q.add(q); } });
+    for(const pl of players){                       // springs and lava wells start to run once someone is close enough to see them
+      const pcx=Math.floor(pl.pos.x/CH), pcz=Math.floor(pl.pos.z/CH), r=Math.floor(WSIM_R/CH)-1;
+      for(let dz=-r;dz<=r;dz++)for(let dx=-r;dx<=r;dx++){
+        const c=chunks.get((pcx+dx)+','+(pcz+dz));
+        if(!c||c.springOn||!(c.springs||c.lavaSprings)) continue;
+        c.springOn=true;
+        for(const sp of (c.springs||[]).concat(c.lavaSprings||[])) wakeWater(sp[0],sp[1],sp[2]);
+      }
+    }
+  }
+  for(const F of FLUIDS){ F.t+=dt; if(F.t>=F.step&&F.q.size){ F.t=0; fStep(F); } }
 }
 // how a swimmer gets pushed: downhill along a flow, straight down in a waterfall
 const _flow=[0,0,0];
 function waterFlowAt(x,y,z){
   _flow[0]=_flow[1]=_flow[2]=0;
   const b=getBlock(x,y,z);
-  if(!WATERY[b]||b===B.WATER) return _flow;
+  if(!WATERY[b]||FW.isSrc(b)) return _flow;
   if(b===B.WFALL){ _flow[2]=1; return _flow; }
   const lv=WLEVEL[b];
   for(const d of DIR4){
@@ -2037,7 +2469,7 @@ const rainGeo=new THREE.InstancedBufferGeometry();
 const rainMat=new THREE.ShaderMaterial({uniforms:U,vertexShader:RAIN_VS,fragmentShader:RAIN_FS,transparent:true,depthWrite:false});
 rainMat.userData.atmo=true;
 const rainMesh=new THREE.Mesh(rainGeo,rainMat);
-rainMesh.frustumCulled=false; rainMesh.renderOrder=5; rainMesh.layers.set(2); rainMesh.visible=false;
+rainMesh.frustumCulled=false; rainMesh.renderOrder=5; rainMesh.layers.set(4); rainMesh.visible=false;
 let rainHX=1e9, rainHZ=1e9, rainHT=0;
 function updateRainMap(force){
   const cp=P.cam.position, ox=Math.floor(cp.x)-32, oz=Math.floor(cp.z)-32;
@@ -2070,7 +2502,7 @@ function strike(){
   for(const f of forks){ const fp=new THREE.CurvePath(); let q=f.clone(); const dx=rs()*2, dz=rs()*2;
     for(let k=0;k<6;k++){ const n=q.clone().add(new THREE.Vector3(dx*5+rs()*4,-5-Math.random()*4,dz*5+rs()*4)); fp.add(new THREE.LineCurve3(q,n)); q=n; }
     m.add(new THREE.Mesh(new THREE.TubeGeometry(fp,12,.18,4,false),boltMat)); }
-  m.traverse(function(o){ o.layers.set(2); }); scene.add(m);
+  m.traverse(function(o){ o.layers.set(4); }); scene.add(m);
   if(WEATHER.bolt) dropBolt();
   WEATHER.bolt={m:m,t:0,x:x,y:g,z:z};
   SKY.flash=Math.max(SKY.flash,.07+Math.random()*.06);
@@ -2407,10 +2839,15 @@ function updateLod(px,pz){
     N3[i*3]=Math.round(nx/l*127); N3[i*3+1]=Math.round(127/l); N3[i*3+2]=Math.round(nz/l*127);
     const steep=Math.max(Math.abs(hr-hl),Math.abs(hd-hu))/(2*LOD_S);
     let r,g,bb;
+    const bw=biomeW(wx,wz,_bwV), vd=Math.hypot(wx-VOLC.x,wz-VOLC.z);
     if(water){ r=g=bb=0; }
+    else if(vd<VOLC.R*.92){ r=.2; g=.19; bb=.19; if(vd<VOLC.CR+12){ r=.55; g=.2; bb=.08; } }
     else if(h<=SEA+1){ r=.86; g=.81; bb=.6; }
-    else if(h>=snowLine(wx,wz)){ r=.93; g=.95; bb=.98; if(steep>.9){ r=.55; g=.55; bb=.56; } }
+    else if(bw.mesa>.5){ const k=Math.floor(h/2)%3; r=[.72,.58,.8][k]; g=[.4,.27,.68][k]; bb=[.22,.2,.6][k]; }
+    else if(bw.desert>.5){ r=.86; g=.78; bb=.55; }
+    else if(h>=snowLine(wx,wz)||bw.snow>.55){ r=.93; g=.95; bb=.98; if(steep>.9){ r=.55; g=.55; bb=.56; } }
     else if(steep>.38){ r=.5; g=.5; bb=.5; }
+    else if(bw.jungle>.5){ r=.18; g=.46; bb=.12; }
     else{ const f=smooth(clamp01((fbm(wx*.0085+700,wz*.0085-410)-.4)/.25)), hi=clamp01((h-DEPTH-44)/12);
       r=.37-.15*f-.05*hi; g=.62-.18*f-.12*hi; bb=.22-.08*f-.03*hi; }
     C4[i*4]=Math.round(r*255); C4[i*4+1]=Math.round(g*255); C4[i*4+2]=Math.round(bb*255); C4[i*4+3]=water?255:0;
@@ -2536,8 +2973,8 @@ void main(){
   }
   c=aces(c*1.6);
   float l=dot(c,vec3(0.2126,0.7152,0.0722));
-  c=mix(vec3(l),c,1.12);
-  c=mix(c,c*c*(3.0-2.0*c),0.22);
+  c=mix(vec3(l),c,1.2);
+  c=mix(c,c*c*(3.0-2.0*c),0.26);
   c*=mix(vec3(0.97,1.0,1.04),vec3(1.04,1.0,0.95),smoothstep(0.2,0.8,l));
   vec2 q=(vUv-0.5)*vec2(1.0,0.9); c*=1.0-0.30*pow(clamp(length(q)*1.35,0.0,1.0),2.5);
   c=pow(max(c,0.0),vec3(1.0/2.2));
@@ -2589,11 +3026,15 @@ const volMat=postMat(VOL_FS,{tDepth:{value:null},tShadow:{value:null},uShadowM:{
 const lumMat=postMat(LUM_FS,{tIn:{value:null}});
 const adaptMat=postMat(ADAPT_FS,{tLum:{value:null},tPrev:{value:null},uDt:{value:.016},uKey:{value:.135},uRange:{value:new THREE.Vector2(.05,4)}});
 const lumRT=new THREE.WebGLRenderTarget(64,64,{type:THREE.UnsignedByteType,format:THREE.RGBAFormat,minFilter:THREE.LinearMipmapLinearFilter,magFilter:THREE.LinearFilter,generateMipmaps:true,depthBuffer:false});
-const adaptRT=[0,1].map(function(){ return new THREE.WebGLRenderTarget(1,1,{type:THREE.UnsignedByteType,format:THREE.RGBAFormat,minFilter:THREE.NearestFilter,magFilter:THREE.NearestFilter,depthBuffer:false}); });
+// half-float: in 8 bits the exposure could only move in ~15% steps, so at 60 fps it froze wherever it happened to be
+const adaptRT=[0,1].map(function(){ return new THREE.WebGLRenderTarget(1,1,{type:HDR_TYPE,format:THREE.RGBAFormat,minFilter:THREE.NearestFilter,magFilter:THREE.NearestFilter,depthBuffer:false}); });
 let adaptI=0, adaptDt=.016;
 const fxaaMat=postMat(FXAA_FS,{tIn:{value:null},uInv:{value:new THREE.Vector2()}});
+const copyMat=postMat(`uniform sampler2D tIn; varying vec2 vUv; void main(){ gl_FragColor=texture(tIn,vUv); }`,{tIn:{value:null}});
+const linMat=postMat(`uniform sampler2D tDepth; uniform vec2 uNF; varying vec2 vUv;
+void main(){ float d=texture(tDepth,vUv).r; gl_FragColor=vec4((uNF.x*uNF.y)/(uNF.y-(uNF.y-uNF.x)*d),0.0,0.0,1.0); }`,{tDepth:{value:null},uNF:{value:new THREE.Vector2()}});
 
-let rtScene=null, rtCloud=null, rtLDR=null, rtRefl=null, rtRayA=null, rtRayB=null, rtVol=null, bloomRTs=[], rtKey='';
+let rtScene=null, rtCloud=null, rtLDR=null, rtRefl=null, rtRayA=null, rtRayB=null, rtVol=null, rtOpaque=null, rtDepthLin=null, bloomRTs=[], rtKey='';
 function makeRT(w,h,o){ return new THREE.WebGLRenderTarget(Math.max(2,w|0),Math.max(2,h|0),Object.assign({minFilter:THREE.LinearFilter,magFilter:THREE.LinearFilter,
   format:THREE.RGBAFormat,type:HDR_TYPE,depthBuffer:false,stencilBuffer:false},o||{})); }
 const _dbs=new THREE.Vector2();
@@ -2603,13 +3044,15 @@ function ensureTargets(){
   const key=dw+'x'+dh+':'+sw+'x'+sh+':'+QP.reflect;
   if(key===rtKey) return;
   rtKey=key;
-  for(const t of [rtScene,rtCloud,rtLDR,rtRefl,rtRayA,rtRayB,rtVol].concat(bloomRTs)) if(t) t.dispose();
+  for(const t of [rtScene,rtCloud,rtLDR,rtRefl,rtRayA,rtRayB,rtVol,rtOpaque,rtDepthLin].concat(bloomRTs)) if(t) t.dispose();
   rtScene=makeRT(sw,sh,{depthBuffer:true});
   rtScene.depthTexture=new THREE.DepthTexture(sw,sh); rtScene.depthTexture.type=THREE.UnsignedIntType;
   rtCloud=makeRT(sw,sh);
   rtLDR=makeRT(dw,dh,{type:THREE.UnsignedByteType});
   rtRefl=QP.reflect>0?makeRT(sw*QP.reflect,sh*QP.reflect,{depthBuffer:true}):null;
   rtRayA=makeRT(sw/4,sh/4); rtRayB=makeRT(sw/4,sh/4); rtVol=makeRT(sw/2,sh/2);
+  rtOpaque=makeRT(sw,sh); rtDepthLin=makeRT(sw,sh,{minFilter:THREE.NearestFilter,magFilter:THREE.NearestFilter});
+  U.tOpaque.value=rtOpaque.texture; U.tDepthLin.value=rtDepthLin.texture; U.uRes.value.set(rtScene.width,rtScene.height);
   bloomRTs=[]; let bw=sw>>1, bh=sh>>1;
   for(let i=0;i<6&&bw>=4&&bh>=4;i++){ bloomRTs.push(makeRT(bw,bh)); bw>>=1; bh>>=1; }
 }
@@ -2693,7 +3136,19 @@ function renderFrame(dt){
     rtScene.viewport.set(0,vy,W,vh); rtScene.scissor.set(0,vy,W,vh); rtScene.scissorTest=split;
     renderer.setRenderTarget(rtScene);
     renderer.shadowMap.needsUpdate=sun.castShadow&&!shadowDone;
-    renderer.render(scene,pl.cam);
+    const refr=!split&&QI>0&&!SKY.under;
+    U.uRefrOn.value=refr?1:0; matWater.depthWrite=refr;
+    if(refr){
+      pl.cam.layers.set(0); pl.cam.layers.enable(2); pl.cam.layers.enable(3);
+      renderer.render(scene,pl.cam);                                   // the solid world first
+      renderer.shadowMap.needsUpdate=false;
+      copyMat.uniforms.tIn.value=rtScene.texture; pass(copyMat,rtOpaque);
+      linMat.uniforms.tDepth.value=rtScene.depthTexture; linMat.uniforms.uNF.value.set(pl.cam.near,pl.cam.far); pass(linMat,rtDepthLin);
+      renderer.setRenderTarget(rtScene);
+      pl.cam.layers.set(1); renderer.render(scene,pl.cam);             // then the water, looking into it
+      pl.cam.layers.set(4); renderer.render(scene,pl.cam);             // then spray, smoke, sparks and rain on top
+      pl.cam.layers.enableAll();
+    }else renderer.render(scene,pl.cam);
     const ivp=vi===0?cloudMat.uniforms.uInvVP0.value:cloudMat.uniforms.uInvVP1.value;
     ivp.multiplyMatrices(pl.cam.matrixWorld,pl.cam.projectionMatrixInverse);
     (vi===0?cloudMat.uniforms.uCam0.value:cloudMat.uniforms.uCam1.value).setFromMatrixPosition(pl.cam.matrixWorld);
@@ -2927,7 +3382,7 @@ function PSys(max,additive){
   const m=new THREE.ShaderMaterial({uniforms:U,vertexShader:PART_VS,fragmentShader:additive?PART_ADD_FS:PART_ALPHA_FS,transparent:true,depthWrite:false});
   if(additive){ m.blending=THREE.CustomBlending; m.blendSrc=THREE.OneFactor; m.blendDst=THREE.OneFactor; }
   m.userData.atmo=true;
-  this.mesh=new THREE.Mesh(g,m); this.mesh.frustumCulled=false; this.mesh.renderOrder=additive?4:3; scene.add(this.mesh);
+  this.mesh=new THREE.Mesh(g,m); this.mesh.frustumCulled=false; this.mesh.renderOrder=additive?4:3; this.mesh.layers.set(4); scene.add(this.mesh);
 }
 PSys.prototype.spawn=function(kind,x,y,z,vx,vy,vz,life,s0,s1,r,g,b,a,drag,grav,em){
   let i=this.n;
@@ -3068,7 +3523,7 @@ function updateWaterFx(dt){
     pl.wadeT=(pl.wadeT||0)-dt;
     const sp=Math.hypot(pl.vel.x,pl.vel.z);
     if(pl.wadeT<=0&&(sp>.8||Math.abs(pl.vel.y)>1.2)){
-      pl.wadeT=.3; addRipple(pl.pos.x,pl.pos.z,.4+Math.min(.5,sp*.1));
+      pl.wadeT=.26; addRipple(pl.pos.x,pl.pos.z,.7+Math.min(.7,sp*.15));
       if(sp>2) for(let i=0;i<3;i++) fx(PT.SPLASH,pl.pos.x+rs()*.6,sy+.95,pl.pos.z+rs()*.6,rs()+pl.vel.x*.2,1+Math.random()*1.5,rs()+pl.vel.z*.2,.4,.06,.15,.86,.93,.97,.7,.5,-12,0);
     }
   }
@@ -3829,8 +4284,8 @@ function updateBlasts(dt){
         const h2=dx*dx+dz*dz; if(h2<R0*R0||h2>R1*R1) continue;
         const x=Math.floor(b.x)+dx, z=Math.floor(b.z)+dz;
         for(let y=wy0;y<=wy1;y++) if(WATERY[getBlock(x,y,z)]){
-          for(const d of DIR4) if(getBlock(x+d[0],y,z+d[1])===B.AIR) wakeCell(x+d[0],y,z+d[1]);
-          if(getBlock(x,y-1,z)===B.AIR) wakeCell(x,y-1,z);
+          for(const d of DIR4) if(getBlock(x+d[0],y,z+d[1])===B.AIR) fWake(FW,x+d[0],y,z+d[1]);
+          if(getBlock(x,y-1,z)===B.AIR) fWake(FW,x,y-1,z);
         }
       }
       blasts.splice(bi,1);
@@ -4153,7 +4608,7 @@ function step(pl,dt){
   const len=Math.max(1,Math.hypot(fx,fz)); fx/=len; fz/=len;
   const sin=Math.sin(pl.yaw), cos=Math.cos(pl.yaw);
   const wx=fx*cos + fz*sin, wz=-fx*sin + fz*cos;
-  const sprint=IN.sprint||(pl===P&&(keys.ShiftLeft||keys.ShiftRight||(pl.fly?TOUCH.down:TOUCH.sprint)));
+  const sprint=IN.sprint||(pl===P&&(keys.ShiftLeft||keys.ShiftRight||((pl.fly||pl.inWater)?TOUCH.down:TOUCH.sprint)));
   const jump=IN.jump||(pl===P&&(keys.Space||TOUCH.jump));
   let speed=pl.fly?14:(sprint?5.6:4.3);
   const wasWater=pl.inWater;
@@ -4174,10 +4629,14 @@ function step(pl,dt){
   if(pl.fly){
     const up=(jump?1:0)-(sprint?1:0);
     pl.vel.y += (up*10-pl.vel.y)*Math.min(1,40*dt);
-  }else if(pl.inWater||pl.inLava){
+  }else if(pl.inLava){
     pl.vel.y -= 10*dt;
     if(pl.vel.y<-3.2) pl.vel.y=-3.2;
     if(jump) pl.vel.y=4.2;
+  }else if(pl.inWater){                          // water holds you up: you bob at the surface unless you dive (sprint / DOWN)
+    const eyeWet=WATERY[getBlock(Math.floor(pl.pos.x),Math.floor(pl.pos.y+1.5),Math.floor(pl.pos.z))];
+    const target=jump?4.2:(sprint?-3.4:(eyeWet?1.5:-.35));
+    pl.vel.y+=(target-pl.vel.y)*Math.min(1,(jump?9:3.2)*dt);
   }else{
     pl.vel.y -= 24*dt;
     if(jump&&pl.onGround){ pl.vel.y=8.3; sfx('jump'); }
@@ -4308,6 +4767,8 @@ function sfx(name){
     case 'land':   noiseHit(.13,300,.32); tone(95,.1,'sine',.18,-40); break;
     case 'splash': noiseHit(.3,2200,.3,500); tone(220,.18,'sine',.1,-120); break;
     case 'thunder': noiseHit(3.2,240,.5,45); tone(38,2.6,'sine',.22,-8); break;
+    case 'chime':  tone(784,.35,'triangle',.12); setTimeout(function(){ tone(988,.35,'triangle',.12); },110); setTimeout(function(){ tone(1319,.6,'triangle',.12); },220); break;
+    case 'found':  tone(523,.5,'sine',.12); setTimeout(function(){ tone(659,.5,'sine',.12); },150); setTimeout(function(){ tone(784,.5,'sine',.12); },300); setTimeout(function(){ tone(1047,.9,'sine',.14); },450); break;
     case 'thunderNear': noiseHit(.25,5000,.6,900); noiseHit(3.4,420,.7,50); tone(46,2.8,'sine',.3,-14); break;
     case 'clack':  noiseHit(.025,3200,.22); break;
     case 'ride':   tone(620,.12,'triangle',.2,160); break;
@@ -4502,6 +4963,7 @@ function primaryAction(pl){
   if(hit&&hit.b!==B.BEDROCK){
     if(hit.b===B.FIRE){ douse(hit.x,hit.y,hit.z); sfx('sizzle'); handSwing(pl); return; }
     if(hit.b===B.TNT||hit.b===B.NUKE){ primeTNT(hit.x,hit.y,hit.z); handSwing(pl); return; }
+    if(hit.b===B.CHEST){ openChest(hit.x,hit.y,hit.z); handSwing(pl); return; }
     setBlock(hit.x,hit.y,hit.z,B.AIR); sfx('break'); spawnBurst(hit.x,hit.y,hit.z,hit.b); handSwing(pl);
   }else handSwing(pl);
 }
@@ -4521,12 +4983,13 @@ function secondaryAction(pl){
   if(it===B.TNT1K){ placeTNTStack(px2,py,pz); handSwing(pl); return; }
   if(it===B.FIRE){ if(t===B.FIRE) return; if(ignite(px2,py,pz,10+Math.random()*10)){ sfx('ignite'); handSwing(pl); } return; }
   if(t===B.FIRE) douse(px2,py,pz);
+  const put=it===B.WATER?B.SPRING:it;
   const blocked=players.some(function(q){
     return DEFS[it].solid &&
       px2+1>q.pos.x-HALF && px2<q.pos.x+HALF &&
       pz+1>q.pos.z-HALF && pz<q.pos.z+HALF &&
       py+1>q.pos.y && py<q.pos.y+PH; });
-  if(!blocked){ setBlock(px2,py,pz,it); sfx('place'); handSwing(pl); }
+  if(!blocked){ setBlock(px2,py,pz,put); sfx('place'); handSwing(pl); }
 }
 let mouse1=false, mouse2=false;
 document.addEventListener('mousedown',function(e){
@@ -4561,6 +5024,7 @@ document.addEventListener('keydown',function(e){
   if(e.code==='KeyQ'){ applyQuality(QI+1); }
   if(e.code==='KeyT'){ nextTimeOfDay(); }
   if(e.code==='KeyY'){ setWeather(WEATHER.state+1); }
+  if(e.code==='KeyJ'){ toggleJournal(); }
   if(e.code==='KeyG'){
     godMode=!godMode;
     for(const pl of players){ pl.hp=MAXHP; pl.dead=false; renderHearts(pl); }
@@ -4614,7 +5078,8 @@ function toggleFly(pl){ pl=pl||P; pl.fly=!pl.fly; pl.vel.y=0; toast(pl.fly?'Flyi
 function touchTick(){
   if(!TOUCH.on) return;
   if(TOUCH.look!==null&&!TOUCH.hold&&TOUCH.moved<14&&performance.now()-TOUCH.lt>420) TOUCH.hold=true;
-  if(TOUCH.flyShown!==P.fly){ TOUCH.flyShown=P.fly; document.body.classList.toggle('flying',P.fly); flyBtn.classList.toggle('lit',P.fly); }
+  const dn=P.fly||P.inWater;
+  if(TOUCH.flyShown!==dn+'|'+P.fly){ TOUCH.flyShown=dn+'|'+P.fly; document.body.classList.toggle('flying',dn); flyBtn.classList.toggle('lit',P.fly); }
 }
 window.addEventListener('pointerdown',function(e){ if(e.pointerType!=='mouse'){ TOUCH.lastT=performance.now(); enableTouch(); } },true);
 window.addEventListener('pointerup',function(e){ if(e.pointerType!=='mouse') TOUCH.lastT=performance.now(); },true);
@@ -4674,6 +5139,7 @@ tbtn('tb-time',function(){ nextTimeOfDay(); });
 tbtn('tb-weather',function(){ setWeather(WEATHER.state+1); });
 tbtn('tb-gfx',function(){ applyQuality(QI+1); });
 tbtn('tb-help',function(){ toggleHelp(); });
+tbtn('tb-journal',function(){ toggleJournal(); });
 tbtn('tb-pause',function(){ touchRelease(); if(pickerOpen) togglePicker(false); overlay.style.display='flex'; ovmsg.style.display='block'; playing=false; });
 // tap a hotbar slot to use it, double-tap it to swap what is in it
 P.barEl.addEventListener('pointerdown',function(e){
@@ -4692,8 +5158,82 @@ P.barEl.addEventListener('pointerdown',function(e){
 });
 document.getElementById('pclose').addEventListener('click',function(e){ e.stopPropagation(); togglePicker(false); });
 helpEl.addEventListener('click',function(){ if(TOUCH.on&&helpOpen) toggleHelp(false); });
+document.getElementById('journal').addEventListener('click',function(){ if(TOUCH.on) toggleJournal(false); });
 window.addEventListener('resize',function(){ if(TOUCH.on&&TOUCH.joy===null) joyIdle(); });
 if(MOBILE) enableTouch();
+
+/* ============================== EXPLORING ============================== */
+const EXPLORE={found:[], treasure:0, t:0, biome:-1, biomeT:0, smokeT:0};
+try{ const sv=JSON.parse(localStorage.getItem('mcjs-explore')||'{}'); if(Array.isArray(sv.found)) EXPLORE.found=sv.found.filter(function(n){ return LANDMARKS.some(function(L){ return L.name===n; }); }); EXPLORE.treasure=sv.treasure|0; }catch(e){}
+function saveExplore(){ try{ localStorage.setItem('mcjs-explore',JSON.stringify({found:EXPLORE.found,treasure:EXPLORE.treasure})); }catch(e){} }
+const journalEl=document.getElementById('journal');
+let journalOpen=false;
+function compass(dx,dz){ const a=Math.atan2(dx,-dz); return ['N','NE','E','SE','S','SW','W','NW'][((Math.round(a/(Math.PI/4))%8)+8)%8]; }
+function renderJournal(){
+  const rows=LANDMARKS.map(function(L){
+    const dx=L.x-P.pos.x, dz=L.z-P.pos.z, d=Math.round(Math.hypot(dx,dz)), dir=compass(dx,dz), got=EXPLORE.found.indexOf(L.name)>=0;
+    return got?'<div class="got">&#9733; '+L.name+' &mdash; '+d+' m '+dir+'</div>'
+              :'<div class="no">? ? ? &mdash; something waits '+(d>500?'far ':'')+'to the '+dir+(L.kind==='sky'?' (look up!)':'')+'</div>';
+  });
+  rows.push('<div><b>Treasure chests opened: '+EXPLORE.treasure+'</b></div>');
+  document.getElementById('jlist').innerHTML=rows.join('');
+}
+function toggleJournal(open){
+  journalOpen=open===undefined?!journalOpen:open;
+  if(journalOpen) renderJournal();
+  journalEl.style.display=journalOpen?'block':'none';
+  if(journalOpen&&document.exitPointerLock) document.exitPointerLock();
+  else if(!journalOpen&&playing&&!pickerOpen&&!P.dead) lockPointer();
+}
+function openChest(x,y,z){
+  setBlock(x,y,z,B.AIR);
+  for(let i=0;i<40;i++) fx(PT.SPARK,x+.5,y+.5,z+.5,rs()*5,2+Math.random()*5,rs()*5,.8+Math.random()*.8,.12,.04,3.2,2.2,.4,1,.6,-6,0);
+  for(let i=0;i<12;i++) fx(PT.GLOW,x+.5+rs(),y+.6+Math.random(),z+.5+rs(),rs(),.6,rs(),2+Math.random()*2,.12,.1,2,1.5,.3,2.5,.5,0,0);
+  EXPLORE.treasure++; saveExplore(); sfx('chime');
+  const loot=['a bag of gold','a fistful of diamonds','an ancient crown','a glowing amethyst','a pirate\'s compass','a golden apple','a dragon scale'];
+  toast('Treasure! You found '+loot[Math.floor(Math.random()*loot.length)]+'  ('+EXPLORE.treasure+' opened)');
+}
+// lighthouse beams sweep the sea at night
+const BEAM_VS=`varying float vT; varying vec3 vW; void main(){ vT=uv.y; vec4 w=modelMatrix*vec4(position,1.0); vW=w.xyz; gl_Position=projectionMatrix*viewMatrix*w; }`;
+const BEAM_FS=`uniform float uNight; uniform float uRain; varying float vT; varying vec3 vW;
+`+GLSL_ATMOS+`
+void main(){ float a=pow(vT,2.2)*uNight*(0.6+0.4*uRain)*(1.0-fogAmt(vW)); gl_FragColor=vec4(vec3(1.0,0.86,0.6)*a*1.8,1.0); }`;
+const beamMat=new THREE.ShaderMaterial({uniforms:U,vertexShader:BEAM_VS,fragmentShader:BEAM_FS,transparent:true,depthWrite:false,side:THREE.DoubleSide,
+  blending:THREE.CustomBlending,blendSrc:THREE.OneFactor,blendDst:THREE.OneFactor});
+beamMat.userData.atmo=true;
+const beamGeo=new THREE.CylinderGeometry(.5,9,170,20,1,true); beamGeo.translate(0,-85,0); beamGeo.rotateZ(Math.PI/2);
+const BEAMS=LIGHTHOUSES.map(function(L,i){
+  const g=new THREE.Group(); g.position.set(L.x+.5,L.h+25.5,L.z+.5);
+  const a=new THREE.Mesh(beamGeo,beamMat), b=new THREE.Mesh(beamGeo,beamMat); b.rotation.y=Math.PI;
+  for(const m of [a,b]){ m.frustumCulled=false; m.layers.set(4); g.add(m); }
+  g.rotation.y=i*1.3; g.visible=false; scene.add(g); return g;
+});
+function updateExplore(dt){
+  for(const g of BEAMS){ g.rotation.y+=dt*.55; g.visible=U.uNight.value>.05&&Math.hypot(g.position.x-P.pos.x,g.position.z-P.pos.z)<900; }
+  // the volcano breathes smoke day and night
+  const vd=Math.hypot(VOLC.x-P.pos.x,VOLC.z-P.pos.z);
+  EXPLORE.smokeT-=dt;
+  if(vd<1000&&EXPLORE.smokeT<=0){
+    EXPLORE.smokeT=.12;
+    const top=DEPTH+VOLC.LAVA+2;
+    fx(PT.SMOKE,VOLC.x+rs()*10,top+Math.random()*4,VOLC.z+rs()*10,rs()*1.2+1.5,3+Math.random()*2,rs()*1.2+.8,14+Math.random()*8,6,26+Math.random()*12,.32,.3,.29,.55,.05,.35,.5);
+    if(Math.random()<.3) fx(PT.SPARK,VOLC.x+rs()*8,top,VOLC.z+rs()*8,rs()*6,8+Math.random()*10,rs()*6,2+Math.random(),.25,.1,3.2,1.2,.3,1,.1,-9,0);
+  }
+  EXPLORE.t-=dt; if(EXPLORE.t>0) return; EXPLORE.t=.5;
+  for(const L of LANDMARKS){
+    if(EXPLORE.found.indexOf(L.name)>=0) continue;
+    if(Math.hypot(L.x-P.pos.x,L.z-P.pos.z)>L.r) continue;
+    if(L.y!==undefined&&Math.abs(L.y-P.pos.y)>40) continue;
+    EXPLORE.found.push(L.name); saveExplore(); sfx('found');
+    toast('★ Discovered: '+L.name+'  ('+EXPLORE.found.length+'/'+LANDMARKS.length+')');
+    if(journalOpen) renderJournal();
+  }
+  // say where you are when you cross into new country
+  let bi=biomeOf(P.pos.x,P.pos.z,{});
+  if(vd<VOLC.R*.9) bi=5; else if(heightAt(P.pos.x,P.pos.z)<SEA-4&&islandEdge(P.pos.x,P.pos.z)<0) bi=6;
+  if(bi!==EXPLORE.biome){ EXPLORE.biomeT+=.5; if(EXPLORE.biomeT>=1.5){ EXPLORE.biome=bi; EXPLORE.biomeT=0; if(frame>200) toast(BIO_NAMES.concat(['The Fire Mountain','Open Sea'])[bi]); } }
+  else EXPLORE.biomeT=0;
+}
 
 /* ============================== XBOX CONTROLLER ============================== */
 const padEl=document.getElementById('pad');
@@ -4834,7 +5374,7 @@ function updateChunks(){
 }
 
 /* ============================== DAY/NIGHT + LOOP ============================== */
-const DAY_LEN=1500;                                // seconds for a full day at normal speed
+const DAY_SECS=1200, NIGHT_SECS=600;               // 20 minutes of daylight, 10 of night
 let tod=.455;                                      // start in the golden hour, sun low in the west
 function lerp(a,b,t){ return a+(b-a)*t; }
 const _starM4=new THREE.Matrix4();
@@ -4888,9 +5428,7 @@ function skyAccessAt(x,y,z){
   return y>top?1:clamp01(1-(top-y)/10);
 }
 function updateSky(dt){
-  const sy0=SKY.sunDir.y;
-  const speed=Math.abs(sy0)<.25?.5:(sy0<-.1?2.4:1);           // linger in golden hour, hurry through the night
-  tod=(tod+dt*speed/DAY_LEN)%1;
+  tod=(tod+dt*.5/(tod<.5?DAY_SECS:NIGHT_SECS))%1;            // the sun is up for the first half of the cycle
   U.uTime.value+=dt;
   const sd=sunDirAt(tod,SKY.sunDir), sy=sd.y;
   U.uLutSun.value.copy(sd); U.uMoonDir.value.copy(sd).negate();
@@ -5055,6 +5593,7 @@ function tick(dt){
   updateWaterFx(dt);
   updateFireflies(dt);
   updateBirds(dt);
+  updateExplore(dt);
   PS_ADD.update(dt,cpos); PS_ALPHA.update(dt,cpos);
   assignLights(dt,cpos);
   if(frame%30===0) patchSceneMaterials();
@@ -5070,7 +5609,8 @@ function tick(dt){
   // hud
   document.getElementById('coords').textContent=
     'XYZ '+Math.floor(P.pos.x)+' '+Math.floor(P.pos.y)+' '+Math.floor(P.pos.z)+
-    (P.fly?'  ✈':'')+(P.inWater?'  ~water':'')+
+    (P.fly?'  ✈':'')+(P.inWater?'  ~water':'')+'  ★'+EXPLORE.found.length+'/'+LANDMARKS.length+
+
     (coop?'   2P':'')+'   '+Math.round(1000/Math.max(1,frameMsAvg))+' fps '+QP.name+(renderScale<.99?' '+Math.round(renderScale*100)+'%':'')+'   '+clockText();
   frame++;
 }
@@ -5129,8 +5669,8 @@ window.MC={SPAWN:SPAWN, DEPTH:DEPTH, SEA:SEA, WH:WH,
   get selSlot(){ return P.selSlot; }, startGame:startGame, updateChunks:updateChunks, NOGL:NOGL,
   U:U, SKY:SKY, applyQuality:applyQuality, get QP(){ return QP; }, setTime:function(t){ tod=t; }, get tod(){ return tod; },
   setScale:function(v){ renderScale=v; scaleLocked=true; }, TOUCH:TOUCH, get MOBILE(){ return MOBILE; }, enableTouch:enableTouch, get playing(){ return playing; }, forcePlay:function(){ helpShown=true; locked=true; steerMode=false; playing=true; ovmsg.style.display='block'; overlay.style.display='none'; if(helpOpen){ helpOpen=false; helpEl.style.display='none'; } }, fires:fires, ignite:ignite, explosionFX:explosionFX,
-  PS_ADD:PS_ADD, PS_ALPHA:PS_ALPHA, debris:debris, renderFrame:renderFrame, buildChunkMesh:buildChunkMesh, slopeAt:slopeAt,
-  updateWater:updateWater, get WQ(){ return WQ; }, setAurora:function(v){ SKY.aurora=v; U.uAurora.value=v; },
+  PS_ADD:PS_ADD, PS_ALPHA:PS_ALPHA, debris:debris, renderFrame:renderFrame, buildChunkMesh:buildChunkMesh, slopeAt:slopeAt, biomeOf:biomeOf, VOLC:VOLC, islandEdge:islandEdge, LANDMARKS:LANDMARKS, EXPLORE:EXPLORE, LIGHTHOUSES:LIGHTHOUSES, CASTLE:CASTLE, GIANT_TREE:GIANT_TREE, SKY_ISLANDS:SKY_ISLANDS, toggleJournal:toggleJournal,
+  updateWater:updateWater, get WQ(){ return FW.q; }, get LQ(){ return FLV.q; }, setAurora:function(v){ SKY.aurora=v; U.uAurora.value=v; },
   setWeather:setWeather, WEATHER:WEATHER, strike:strike,
   meteor:function(){ SKY.metT=0; }, WATERY:WATERY, splash:splash, addRipple:addRipple, wakeWater:wakeWater};
 })();
