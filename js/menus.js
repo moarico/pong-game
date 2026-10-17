@@ -76,9 +76,9 @@ export class Menus {
       card.dataset.nav = '';
       card.dataset.id = o.id;
       card.style.setProperty('--rar', RARITY[o.rarity].color);
-      const pic = outfitPortraits()[o.id];
+      // a flat stand-in until the rendered portrait arrives (see show('locker'))
       card.innerHTML = `<div class="swatch" style="background:radial-gradient(circle at 50% 38%, ${RARITY[o.rarity].color}cc, ${RARITY[o.rarity].color}33 70%)">
-        ${pic ? `<img class="portrait" src="${pic}" alt="">` : `<div class="mini-head" style="background:${o.skin}"></div><div class="mini-body" style="background:${o.primary};border-color:${o.secondary}"></div>`}</div>
+        <div class="mini-head" style="background:${o.skin}"></div><div class="mini-body" style="background:${o.primary};border-color:${o.secondary}"></div></div>
         <div class="cname">${o.name}</div><div class="crar">${RARITY[o.rarity].name}</div>`;
       card.onclick = () => {
         g.audio.play('ui');
@@ -233,6 +233,11 @@ export class Menus {
       this.refreshLobby();
     }
     if (name === 'locker') {
+      // rendered portraits replace the stand-ins, one at a time, the first time the locker opens
+      outfitPortraits(g.renderer, (id, url) => {
+        const sw = this.screens.locker.querySelector(`.card[data-id="${id}"] .swatch`);
+        if (sw && !sw.querySelector('.portrait')) sw.innerHTML = `<img class="portrait" src="${url}" alt="">`;
+      });
       g.lobby.setLayout('locker');
       this.selectOutfit(g.settings.outfit);
     }

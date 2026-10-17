@@ -481,41 +481,63 @@ export class CharacterModel {
   }
 }
 
-// Locker card portraits: each outfit rendered once, head and shoulders in a three-quarter view.
-let PORTRAITS = null;
-export function outfitPortraits() {
-  if (PORTRAITS) return PORTRAITS;
-  PORTRAITS = {};
-  let renderer;
-  try {
-    renderer = new THREE.WebGLRenderer({ canvas: document.createElement('canvas'), alpha: true, antialias: true, preserveDrawingBuffer: true });
-  } catch {
-    return PORTRAITS;
+// Locker card portraits: each outfit rendered once, head and shoulders in a three-quarter view. They are
+// drawn through the game's own renderer into an offscreen target, one per tick, so they never hold up
+// startup and need no second WebGL context. each(id, dataUrl) is called as each one is ready.
+const PORTRAITS = {};
+let portraitJob = null;
+export function outfitPortraits(renderer, each) {
+  for (const id in PORTRAITS) each(id, PORTRAITS[id]);
+  if (portraitJob) {
+    portraitJob.listeners.push(each);
+    return;
   }
-  renderer.setSize(192, 184, false);
-  renderer.setClearColor(0x000000, 0);
-  renderer.outputColorSpace = THREE.SRGBColorSpace;
-  renderer.toneMapping = THREE.ACESFilmicToneMapping;
+  const job = (portraitJob = { listeners: [each] });
+  const W = 192, H = 184;
+  const rt = new THREE.WebGLRenderTarget(W, H);
+  rt.texture.colorSpace = THREE.SRGBColorSpace;
   const scene = new THREE.Scene();
-  scene.add(new THREE.HemisphereLight(0xeaf4ff, 0x40486a, 1.7));
-  const key = new THREE.DirectionalLight(0xffffff, 2.4);
+  scene.add(new THREE.HemisphereLight(0xeaf4ff, 0x40486a, 1.3));
+  const key = new THREE.DirectionalLight(0xffffff, 1.7);
   key.position.set(1.5, 2.5, 3);
   scene.add(key);
-  const rim = new THREE.DirectionalLight(0xbfe0ff, 1.6);
+  const rim = new THREE.DirectionalLight(0xbfe0ff, 1.1);
   rim.position.set(-2, 1.5, -2);
   scene.add(rim);
-  const cam = new THREE.PerspectiveCamera(26, 192 / 184, 0.1, 20);
+  const cam = new THREE.PerspectiveCamera(26, W / H, 0.1, 20);
   cam.position.set(0.9, 1.45, 3.1);
   cam.lookAt(0, 1.12, 0);
-  for (const o of OUTFITS) {
+  const px = new Uint8Array(W * H * 4), c = document.createElement('canvas');
+  c.width = W;
+  c.height = H;
+  const ctx = c.getContext('2d'), img = ctx.createImageData(W, H), clear = new THREE.Color();
+  const todo = OUTFITS.filter((o) => !PORTRAITS[o.id]);
+  const next = () => {
+    const o = todo.shift();
+    if (!o) {
+      rt.dispose();
+      return;
+    }
     const m = new CharacterModel(o);
     m.root.rotation.y = Math.PI + 0.35;
     for (let i = 0; i < 20; i++) m.animate({ dt: 1 / 30, mode: 'ground', speed: 0, pitch: 0, onGround: true, holding: null, reload: -1 });
     scene.add(m.root);
+    const prev = renderer.getRenderTarget(), alpha = renderer.getClearAlpha();
+    renderer.getClearColor(clear);
+    renderer.setRenderTarget(rt);
+    renderer.setClearColor(0x000000, 0);
+    renderer.clear();
     renderer.render(scene, cam);
-    PORTRAITS[o.id] = renderer.domElement.toDataURL('image/png');
+    renderer.readRenderTargetPixels(rt, 0, 0, W, H, px);
+    renderer.setRenderTarget(prev);
+    renderer.setClearColor(clear, alpha);
     scene.remove(m.root);
-  }
-  renderer.dispose();
-  return PORTRAITS;
+    // the target's rows run bottom-up
+    for (let y = 0; y < H; y++) img.data.set(px.subarray((H - 1 - y) * W * 4, (H - y) * W * 4), y * W * 4);
+    ctx.putImageData(img, 0, 0);
+    PORTRAITS[o.id] = c.toDataURL('image/png');
+    for (const f of job.listeners) f(o.id, PORTRAITS[o.id]);
+    setTimeout(next, 30);
+  };
+  setTimeout(next, 0);
 }

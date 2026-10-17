@@ -589,10 +589,17 @@ class Game {
   }
 }
 
+// a line of text while the art downloads, so a slow connection never looks like a blank page
+const boot = document.createElement('div');
+boot.textContent = 'Loading Stormdrop...';
+boot.style.cssText = "position:fixed;inset:0;display:flex;align-items:center;justify-content:center;color:#cfe0ff;font:700 22px 'Barlow Condensed',sans-serif;letter-spacing:2px;z-index:50";
+document.body.appendChild(boot);
 try {
-  await loadAssets(OUTFITS);
+  await loadAssets(OUTFITS, (f) => (boot.textContent = `Loading Stormdrop... ${Math.round(f * 100)}%`));
   new Game();
+  boot.remove();
 } catch (e) {
+  boot.remove();
   // never leave a silent blank page: say what failed
   const el = document.getElementById('screen-title');
   el.innerHTML = `<div style="margin:auto;max-width:640px;padding:24px;color:#fff;font:600 18px 'Barlow Condensed',sans-serif;text-align:center">
