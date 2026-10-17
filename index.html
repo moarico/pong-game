@@ -269,7 +269,9 @@ const B={AIR:0,GRASS:1,DIRT:2,STONE:3,SAND:4,WATER:5,LOG:6,LEAF:7,PLANK:8,COBBLE
   TALLGRASS:22,ROSE:23,DANDELION:24,DAISY:25,FIRE:26,LAVA:27,BIRCH_LOG:28,BIRCH_LEAF:29,SPRUCE_LOG:30,SPRUCE_LEAF:31,GRAVEL:32,GLOW:33,
   WF1:34,WF2:35,WF3:36,WF4:37,WF5:38,WF6:39,WF7:40,WFALL:41,LILY:42,REEDS:43,FERN:44,
   CACTUS:45,ICE:46,OBSIDIAN:47,BASALT:48,MAGMA:49,TERRA_O:50,TERRA_R:51,TERRA_W:52,RED_SAND:53,AMETHYST:54,
-  CORAL_R:55,CORAL_Y:56,CORAL_B:57,LF1:58,LF2:59,LF3:60,LFALL:61,MOSSY:62,CHEST:63,SPRING:64};
+  CORAL_R:55,CORAL_Y:56,CORAL_B:57,LF1:58,LF2:59,LF3:60,LFALL:61,MOSSY:62,CHEST:63,SPRING:64,
+  STEEL:65,DECK:66,DECK_LINE:67,ASPHALT:68,RUNWAY_LINE:69,PLASTER:70,ROOF_TILE:71,DARK_WOOD:72,TATAMI:73,SAKURA:74,
+  RED_LACQUER:75,CASTLE_STONE:76,HULL_RED:77,RUNE:78,SLATE:79,BANNER:80,CONCRETE:81};
 // tiles: [top, side, bottom]  kind: opaque | cutout | water | plant | lava | fire   burn: how readily it catches fire
 const DEFS=[];
 DEFS[B.GRASS]  ={name:'Grass',     t:[0,1,2],   solid:1, kind:'opaque'};
@@ -331,12 +333,32 @@ DEFS[B.MOSSY]    ={name:'Mossy Cobblestone',t:[57,57,57],solid:1, kind:'opaque'}
 DEFS[B.CHEST]    ={name:'Treasure Chest',t:[59,58,59],solid:1, kind:'opaque'};
 // a spring (or water you place) feeds a stream but never spreads into a sea of its own
 DEFS[B.SPRING]   ={name:'Water',       t:[5,5,5],   solid:0, kind:'water'};
+// warships and the air base
+DEFS[B.STEEL]    ={name:'Warship Steel',t:[60,60,60],solid:1, kind:'opaque'};
+DEFS[B.DECK]     ={name:'Flight Deck', t:[61,60,60],solid:1, kind:'opaque'};
+DEFS[B.DECK_LINE]={name:'Deck Marking',t:[62,60,60],solid:1, kind:'opaque'};
+DEFS[B.ASPHALT]  ={name:'Asphalt',     t:[63,63,63],solid:1, kind:'opaque'};
+DEFS[B.RUNWAY_LINE]={name:'Runway Paint',t:[64,63,63],solid:1, kind:'opaque'};
+DEFS[B.HULL_RED] ={name:'Hull Paint',  t:[72,72,72],solid:1, kind:'opaque'};
+DEFS[B.CONCRETE] ={name:'Concrete',    t:[76,76,76],solid:1, kind:'opaque'};
+// Japanese castle
+DEFS[B.PLASTER]  ={name:'White Plaster',t:[65,65,65],solid:1, kind:'opaque'};
+DEFS[B.ROOF_TILE]={name:'Roof Tiles',  t:[66,66,66],solid:1, kind:'opaque'};
+DEFS[B.DARK_WOOD]={name:'Black Timber',t:[67,67,67],solid:1, kind:'opaque', burn:1};
+DEFS[B.TATAMI]   ={name:'Tatami',      t:[68,67,67],solid:1, kind:'opaque', burn:1};
+DEFS[B.SAKURA]   ={name:'Cherry Blossom',t:[69,69,69],solid:1, kind:'cutout', burn:2};
+DEFS[B.RED_LACQUER]={name:'Red Lacquer',t:[70,70,70],solid:1, kind:'opaque', burn:1};
+DEFS[B.CASTLE_STONE]={name:'Castle Stone',t:[71,71,71],solid:1, kind:'opaque'};
+// the fire temple and the great fortress
+DEFS[B.RUNE]     ={name:'Fire Rune',   t:[73,73,73],solid:1, kind:'opaque'};
+DEFS[B.SLATE]    ={name:'Slate Roof',  t:[74,74,74],solid:1, kind:'opaque'};
+DEFS[B.BANNER]   ={name:'Banner',      t:[75,75,75],solid:1, kind:'opaque', burn:2};
 
 // fully opaque blocks hide their neighbours' faces and block sky light
 const OPAQUE=new Uint8Array(128);
 for(let i=0;i<DEFS.length;i++) if(DEFS[i]&&DEFS[i].kind==='opaque') OPAQUE[i]=1;
 // blocks that give off light (flood-filled through the air around them when a chunk is meshed)
-const EMIT=new Uint8Array(128); EMIT[B.LAVA]=15; EMIT[B.GLOW]=15; EMIT[B.MAGMA]=7;
+const EMIT=new Uint8Array(128); EMIT[B.LAVA]=15; EMIT[B.GLOW]=15; EMIT[B.MAGMA]=7; EMIT[B.RUNE]=10;
 for(let s=0;s<4;s++) EMIT[B.LF1+s]=15;
 // every kind of water and how strong it runs (8 = a source or falling water, 1 = the last trickle)
 const WATERY=new Uint8Array(128), WLEVEL=new Uint8Array(128);
@@ -353,14 +375,15 @@ function nameOf(e){ return e<0?ITEMINFO[e].name:DEFS[e].name; }
 const PLACEABLE=[B.GRASS,B.DIRT,B.STONE,B.SAND,B.SANDSTONE,B.GRAVEL,B.LOG,B.BIRCH_LOG,B.SPRUCE_LOG,B.LEAF,B.BIRCH_LEAF,B.SPRUCE_LEAF,
   B.PLANK,B.COBBLE,B.GLASS,B.BRICK,B.SNOW,B.GOLD,B.TNT,B.TNT1K,B.NUKE,B.FIRE,B.LAVA,B.WATER,
   B.TALLGRASS,B.ROSE,B.DANDELION,B.DAISY,B.FERN,B.REEDS,B.GLOW,B.COAL,B.IRON,B.DIAMOND,
-  B.CACTUS,B.ICE,B.OBSIDIAN,B.BASALT,B.MAGMA,B.TERRA_O,B.TERRA_R,B.TERRA_W,B.RED_SAND,B.AMETHYST,B.CORAL_R,B.CORAL_Y,B.CORAL_B,B.MOSSY];
+  B.CACTUS,B.ICE,B.OBSIDIAN,B.BASALT,B.MAGMA,B.TERRA_O,B.TERRA_R,B.TERRA_W,B.RED_SAND,B.AMETHYST,B.CORAL_R,B.CORAL_Y,B.CORAL_B,B.MOSSY,
+  B.STEEL,B.DECK,B.ASPHALT,B.CONCRETE,B.CASTLE_STONE,B.PLASTER,B.ROOF_TILE,B.DARK_WOOD,B.TATAMI,B.SAKURA,B.RED_LACQUER,B.SLATE,B.BANNER,B.RUNE];
 function isPlant(b){ return b>0&&DEFS[b].kind==='plant'; }
 function replaceable(b){ return b===B.AIR||WATERY[b]||b===B.FIRE||b===B.LAVA||isPlant(b); }
 
 /* ============================== TEXTURE ATLAS ============================== */
 // every tile is painted into this canvas (hotbar icons and held blocks read it), then copied
 // into WebGL2 texture arrays with mipmaps, normal maps and a material map for the world
-const COLS=8, ROWS=8, TP=16, NTILES=COLS*ROWS;
+const COLS=8, ROWS=12, TP=16, NTILES=COLS*ROWS;
 const atlas=document.createElement('canvas');
 atlas.width=COLS*TP; atlas.height=ROWS*TP;
 const actx=atlas.getContext('2d');
@@ -545,6 +568,54 @@ function paintAtlas(){
   (function(){ const [ox,oy]=tileXY(59);                                                // chest lid
     for(let y=0;y<16;y++)for(let x=0;x<16;x++){ const edge=x===0||x===15||y===0||y===15;
       px(ox,oy,x,y,edge?shade(0x3a2410,.9+rnd()*.2):shade(x%4===3?0x6a4520:0x9a6a34,.88+rnd()*.2)); } })();
+
+  // ---------- warships, the air base ----------
+  (function(){ fillNoise(60,0x7c868f,.93,1.04); const [ox,oy]=tileXY(60);              // haze-grey warship steel: welded panels and rivets
+    for(let i=0;i<16;i++){ px(ox,oy,i,0,shade(0x59626b,1)); px(ox,oy,0,i,shade(0x5f6871,1)); px(ox,oy,i,8,shade(0x6a737c,1)); }
+    for(const c of [[2,2],[13,2],[2,13],[13,13],[2,6],[13,10]]){ px(ox,oy,c[0],c[1],'#a9b2ba'); px(ox,oy,c[0]+1,c[1]+1,'#4f575f'); }
+    for(let i=0;i<5;i++){ const x=Math.floor(rnd()*14), y=1+Math.floor(rnd()*13); px(ox,oy,x,y,shade(0x6b5a4a,.9)); px(ox,oy,x,y+1,shade(0x7a6553,.8)); } })();
+  (function(){ fillNoise(61,0x3f4348,.78,1.16); const [ox,oy]=tileXY(61);              // non-skid flight deck, scuffed by tyres
+    for(let i=0;i<26;i++) px(ox,oy,Math.floor(rnd()*16),Math.floor(rnd()*16),shade(0x5d6268,.9+rnd()*.2));
+    for(let y=0;y<16;y++) if(rnd()<.5) px(ox,oy,5,y,shade(0x2a2c2f,1)); })();
+  (function(){ const [ox,oy]=tileXY(62), [dx,dy]=tileXY(61); actx.drawImage(atlas,dx,dy,16,16,ox,oy,16,16);   // yellow deck marking
+    for(let y=5;y<11;y++)for(let x=0;x<16;x++) if(rnd()<.93) px(ox,oy,x,y,shade(0xe2b828,.88+rnd()*.18)); })();
+  (function(){ fillNoise(63,0x3a3b3e,.74,1.2); const [ox,oy]=tileXY(63);               // asphalt with light aggregate
+    for(let i=0;i<22;i++) px(ox,oy,Math.floor(rnd()*16),Math.floor(rnd()*16),shade(0x8a8a86,.85+rnd()*.3));
+    for(let i=0;i<3;i++){ let x=rnd()*16, y=rnd()*16; for(let k=0;k<5;k++){ px(ox,oy,Math.floor(x)&15,Math.floor(y)&15,shade(0x1f2022,1)); x+=rnd()*2-1; y+=1; } } })();
+  (function(){ const [ox,oy]=tileXY(64), [ax,ay]=tileXY(63); actx.drawImage(atlas,ax,ay,16,16,ox,oy,16,16);   // white runway paint, worn
+    for(let y=0;y<16;y++)for(let x=0;x<16;x++) if(rnd()<.9) px(ox,oy,x,y,shade(0xecebe4,.88+rnd()*.14)); })();
+  (function(){ fillNoise(65,0xefebe1,.95,1.03); const [ox,oy]=tileXY(65);              // white castle plaster
+    for(let i=0;i<2;i++){ let x=rnd()*16, y=rnd()*16; for(let k=0;k<6;k++){ px(ox,oy,Math.floor(x)&15,Math.floor(y)&15,shade(0xc9c4b8,1)); x+=rnd()*2-1; y+=rnd(); } } })();
+  (function(){ const [ox,oy]=tileXY(66);                                               // kawara roof tiles: round-backed rows
+    for(let y=0;y<16;y++)for(let x=0;x<16;x++){ const c=x%4, hi=c===1?1.22:(c===2?1.05:(c===3?.78:.62)), row=(y%8===7)?.6:1;
+      px(ox,oy,x,y,shade(0x4c5866,hi*row*(.92+rnd()*.12))); } })();
+  (function(){ const [ox,oy]=tileXY(67);                                               // black lacquered timber
+    for(let x=0;x<16;x++){ const g=(x%5===2)?1.35:1; for(let y=0;y<16;y++) px(ox,oy,x,y,shade(0x2b1f18,g*(.85+rnd()*.25))); } })();
+  (function(){ const [ox,oy]=tileXY(68);                                               // tatami: woven rush with a dark cloth border
+    for(let y=0;y<16;y++)for(let x=0;x<16;x++){ const edge=x<2||x>13, weave=y%2===0?1.06:.92;
+      px(ox,oy,x,y,edge?shade(0x26331f,.85+rnd()*.25):shade(0xc5b779,weave*(.9+rnd()*.12))); } })();
+  leaves(69,[0xf4b8cb,0xe795b0,0xfad3df,0xd97c9b,0xfbe3ea],.16);                       // cherry blossom
+  (function(){ fillNoise(70,0xc4301c,.88,1.06); const [ox,oy]=tileXY(70);              // vermilion lacquer
+    for(let y=0;y<16;y++){ px(ox,oy,3,y,shade(0xe0553a,1)); px(ox,oy,4,y,shade(0xd84a30,1)); } })();
+  (function(){ const [ox,oy]=tileXY(71);                                               // big dressed castle stones
+    for(let y=0;y<16;y++)for(let x=0;x<16;x++){ const st=(y<7?(x<9?0:1):(x<5?2:(x<12?3:0))); const base=[.95,1.06,.9,1.0][st];
+      const mortar=y===0||y===7||(y<7&&(x===0||x===9))||(y>7&&(x===5||x===12));
+      px(ox,oy,x,y,mortar?shade(0x55534e,.9+rnd()*.15):shade(0x8d8b84,base*(.86+rnd()*.2))); } })();
+  fillNoise(72,0x8b2c24,.85,1.08);                                                     // anti-fouling hull red
+  (function(){ fillNoise(73,0x2a2321,.8,1.15); const [ox,oy]=tileXY(73);               // fire rune: glowing glyphs cut in black stone
+    const glyph=[[3,3],[4,3],[5,3],[6,3],[3,4],[3,5],[4,6],[5,6],[6,6],[6,7],[6,8],[5,9],[4,9],[3,9],[10,3],[10,4],[10,5],[11,6],[12,6],[12,5],[12,4],[12,7],[12,8],[12,9],[11,9],[10,9],[8,12],[9,12],[7,13],[10,13]];
+    for(const g of glyph){ px(ox,oy,g[0],g[1],'#ffb43a'); px(ox,oy,g[0]+1,g[1],'#ff7a14'); }
+    for(const g of [[4,4],[11,7],[8,13]]) px(ox,oy,g[0],g[1],'#fff0a0'); })();
+  (function(){ const [ox,oy]=tileXY(74);                                               // slate: overlapping dark scales
+    for(let y=0;y<16;y++)for(let x=0;x<16;x++){ const row=Math.floor(y/4), sx=(x+(row%2)*2)%4, d=(y%4)/4;
+      px(ox,oy,x,y,shade(0x3c4552,(sx===0?.7:1)*(1.12-d*.35)*(.9+rnd()*.14))); } })();
+  (function(){ const [ox,oy]=tileXY(75);                                               // crimson banner with a gold crest
+    for(let y=0;y<16;y++)for(let x=0;x<16;x++){ const fold=1+.12*Math.sin(x*.9);
+      px(ox,oy,x,y,shade(0x9c1b1b,fold*(.88+rnd()*.14))); }
+    for(let y=4;y<12;y++){ const w=4-Math.abs(y-8); for(let x=8-w;x<8+w;x++) px(ox,oy,x,y,(x===8-w||x===8+w-1)?'#8a6410':'#f0c43c'); } })();
+  (function(){ fillNoise(76,0xb9b7b1,.93,1.05); const [ox,oy]=tileXY(76);              // poured concrete with form lines
+    for(let x=0;x<16;x++){ px(ox,oy,x,7,shade(0x9c9a94,1)); px(ox,oy,x,15,shade(0x9c9a94,1)); }
+    for(let i=0;i<6;i++) px(ox,oy,Math.floor(rnd()*16),Math.floor(rnd()*16),shade(0x8a8882,1)); })();
 }
 paintAtlas();
 
@@ -564,7 +635,10 @@ const TILEP={0:{n:.9,r:.92,tint:'all'},1:{n:1.1,r:.92,tint:'green'},2:{n:1.3,r:.
   40:{n:.8,r:.35,tint:'all',tr:.5},41:{n:0,r:.7,tint:'green',tr:.8},42:{n:0,r:.7,tint:'all',tr:.85},
   43:{n:1.2,r:.7},44:{n:1.5,r:.7},45:{n:.3,r:.05},46:{n:1.0,r:.1},47:{n:2.2,r:.85},48:{n:1.6,r:.75,e:.5},
   49:{n:.9,r:.85},50:{n:.9,r:.85},51:{n:.9,r:.85},52:{n:.7,r:.92},53:{n:1.5,r:.15,e:.55},
-  54:{n:1.8,r:.6},55:{n:1.8,r:.6},56:{n:1.8,r:.6},57:{n:2.8,r:.86},58:{n:1.5,r:.6},59:{n:1.5,r:.6}};
+  54:{n:1.8,r:.6},55:{n:1.8,r:.6},56:{n:1.8,r:.6},57:{n:2.8,r:.86},58:{n:1.5,r:.6},59:{n:1.5,r:.6},
+  60:{n:1.1,r:.42},61:{n:1.5,r:.86},62:{n:1.2,r:.7},63:{n:1.7,r:.93},64:{n:.7,r:.82},65:{n:.5,r:.9},66:{n:2.6,r:.48},
+  67:{n:1.6,r:.4},68:{n:1.1,r:.86},69:{n:1.0,r:.62,tr:.8},70:{n:.6,r:.28},71:{n:2.6,r:.84,h:'bricks'},72:{n:.9,r:.6},
+  73:{n:1.4,r:.5,e:.9},74:{n:2.0,r:.5},75:{n:.8,r:.92},76:{n:.9,r:.9}};
 function buildTileArrays(){
   const S=16, N=NTILES, img=actx.getImageData(0,0,atlas.width,atlas.height).data;
   const alb=new Uint8Array(S*S*4*N), nrm=new Uint8Array(S*S*4*N), mat=new Uint8Array(S*S*4*N);
@@ -696,7 +770,7 @@ function volcanoH(x,z){                                   // the cone with gulli
   return 14+Math.pow(f,1.6)*104+(vnoise(Math.atan2(dz,dx)*6+20,d*.04)-.5)*40*f*(1-f);
 }
 const _bwH={}, _bwG={}, _bwT={}, _bwV={};
-function heightRaw(x,z){
+function heightRaw0(x,z){
   const bw=biomeW(x,z,_bwH);
   let h=17+fbm(x*.012+100,z*.012+100)*18;                 // rolling hills
   // mountain ranges: tall and jagged in the cold north, foothills elsewhere
@@ -744,6 +818,7 @@ function heightAt(x,z){
 function snowLine(x,z){ return DEPTH+60+Math.floor(vnoise(x*.03+40,z*.03-70)*10); }
 function slopeAt(x,z){ return Math.max(Math.abs(heightAt(x+1,z)-heightAt(x-1,z)), Math.abs(heightAt(x,z+1)-heightAt(x,z-1))); }
 function treeAt(x,z){
+  if(inPlateau(x,z,6)) return null;
   const h=heightAt(x,z);
   if(h<=SEA+1||h>=snowLine(x,z)-3) return null;
   if(Math.hypot(x-VOLC.x,z-VOLC.z)<VOLC.R*.9) return null;
@@ -812,6 +887,125 @@ function stampTree(tr,wx,wz,h,set){
     for(let dy=1;dy<=th;dy++) set(wx,h+dy,wz,log,false);
   }
 }
+/* ====== GREAT SITES: the air base, the navy, two huge castles and the boss lairs ======
+   They are chosen before anything reads the terrain, so the ground under the big builds can be levelled. */
+const PLATEAUS=[];                                         // {x0,x1,z0,z1,h,fall}: ground levelled (or raised) under a big build
+function plateauW(x,z,p){
+  const dx=Math.max(p.x0-x,0,x-p.x1), dz=Math.max(p.z0-z,0,z-p.z1);
+  if(dx>=p.fall||dz>=p.fall) return 0;
+  const d=Math.hypot(dx,dz); return d>=p.fall?0:1-smooth(d/p.fall);
+}
+function inPlateau(x,z,m){ m=m||0; for(let i=0;i<PLATEAUS.length;i++){ const p=PLATEAUS[i]; if(x>=p.x0-m&&x<=p.x1+m&&z>=p.z0-m&&z<=p.z1+m) return p; } return null; }
+function heightRaw(x,z){
+  let h=heightRaw0(x,z);
+  for(let i=0;i<PLATEAUS.length;i++){ const w=plateauW(x,z,PLATEAUS[i]); if(w>0) h=Math.round(h+(PLATEAUS[i].h-h)*w); }
+  return h;
+}
+const _bwS={};
+function siteStats(x0,x1,z0,z1,step){                      // what the untouched ground looks like over a rectangle
+  let n=0,s=0,s2=0,mn=1e9,mx=-1e9,bad=0;
+  for(let x=x0;x<=x1+.1;x+=step)for(let z=z0;z<=z1+.1;z+=step){
+    const h=heightRaw0(x,z), bw=biomeW(x,z,_bwS); n++; s+=h; s2+=h*h; if(h<mn) mn=h; if(h>mx) mx=h;
+    if(h<=SEA+2||bw.desert>.45||bw.mesa>.45||bw.snow>.45||islandEdge(x,z)<.12) bad++;
+  }
+  const m=s/n; return {mean:m, std:Math.sqrt(Math.max(0,s2/n-m*m)), min:mn, max:mx, bad:bad/n};
+}
+function volcClear(x0,x1,z0,z1,m){ const cx=Math.max(x0,Math.min(VOLC.x,x1)), cz=Math.max(z0,Math.min(VOLC.z,z1)); return Math.hypot(cx-VOLC.x,cz-VOLC.z)>VOLC.R+m; }
+// --- the air base: a 300 m runway running east-west, an apron, hangars and a tower, on the east side of the island
+const AIRBASE=(function(){
+  let best=null, bc=1e9;
+  for(let a=-1.0;a<=1.01;a+=.1)for(let r=200;r<=600;r+=25){
+    const cx=Math.round(Math.cos(a)*r), cz=Math.round(Math.sin(a)*r);
+    const x0=cx-170, x1=cx+170, z0=cz-100, z1=cz+16;
+    if(!volcClear(x0,x1,z0,z1,40)) continue;
+    const st=siteStats(x0,x1,z0,z1,38);
+    if(st.bad>.06||st.mean>DEPTH+46) continue;
+    const e=islandEdge(cx,cz), cost=st.std+.12*(st.max-st.min)+Math.abs(e-1.5)*4;
+    if(cost<bc){ bc=cost; best={x:cx,z:cz,h:Math.max(SEA+5,Math.round(st.mean))}; }
+  }
+  return best||{x:420,z:110,h:SEA+12};
+})();
+PLATEAUS.push({x0:AIRBASE.x-170,x1:AIRBASE.x+170,z0:AIRBASE.z-100,z1:AIRBASE.z+16,h:AIRBASE.h,fall:42,kind:'airbase'});
+// --- two great castles somewhere on the green land, far from each other and from the air base
+function findCastleSite(avoid,maxBad){
+  let best=null, bc=1e9;
+  for(let x=-660;x<=660;x+=44)for(let z=-660;z<=660;z+=44){
+    if(islandEdge(x,z)<1.15) continue;
+    let ok=true; for(const a of avoid) if(Math.hypot(x-a.x,z-a.z)<a.r){ ok=false; break; }
+    if(!ok||!volcClear(x-66,x+66,z-66,z+66,70)) continue;
+    const st=siteStats(x-64,x+64,z-64,z+64,32);
+    if(st.bad>(maxBad||.04)||st.mean>DEPTH+42) continue;
+    const cost=st.std+.1*(st.max-st.min)+Math.max(0,st.mean-DEPTH-30)*.3+st.bad*30;
+    if(cost<bc){ bc=cost; best={x:x,z:z,h:Math.round(st.mean)}; }
+  }
+  return best;
+}
+const KUROGANE=findCastleSite([{x:AIRBASE.x,z:AIRBASE.z,r:420}]);
+if(KUROGANE){ KUROGANE.h=Math.min(DEPTH+44,KUROGANE.h+3); PLATEAUS.push({x0:KUROGANE.x-64,x1:KUROGANE.x+64,z0:KUROGANE.z-64,z1:KUROGANE.z+64,h:KUROGANE.h,fall:36,kind:'kurogane'}); }
+const CASTLE=findCastleSite([{x:AIRBASE.x,z:AIRBASE.z,r:340}].concat(KUROGANE?[{x:KUROGANE.x,z:KUROGANE.z,r:330}]:[]),.5);
+if(CASTLE){ CASTLE.h=Math.min(DEPTH+40,CASTLE.h+5); PLATEAUS.push({x0:CASTLE.x-66,x1:CASTLE.x+66,z0:CASTLE.z-66,z1:CASTLE.z+66,h:CASTLE.h,fall:36,kind:'castle'}); }
+// --- the navy: a pier below the air base, the carrier anchored out in deep water
+const NAVY=(function(){
+  const ax=AIRBASE.x, az=AIRBASE.z, L=Math.hypot(ax,az)||1, dx=ax/L, dz=az/L;
+  let coast=null;
+  for(let t=0;t<900;t+=4){ const x=Math.round(ax+dx*t), z=Math.round(az+dz*t);
+    if(heightRaw0(x,z)<SEA-1&&islandEdge(x,z)<.2){ coast={x:x,z:z,t:t}; break; } }
+  if(!coast) coast={x:Math.round(ax+dx*300),z:Math.round(az+dz*300),t:300};
+  const axis=Math.abs(dx)>Math.abs(dz)?'z':'x';           // the carrier lies along the coast
+  const sx=axis==='z'?Math.sign(dx)||1:0, sz=axis==='x'?Math.sign(dz)||1:0;   // straight out to sea
+  let carrier=null, cb=1e9;                               // the nearest stretch of sea deep and clear enough for her
+  for(let t=70;t<460;t+=15)for(let q=-240;q<=240;q+=20){
+    const cx=Math.round(coast.x+sx*t+(axis==='z'?0:q)), cz=Math.round(coast.z+sz*t+(axis==='z'?q:0));
+    const cost=t+Math.abs(q)*.6; if(cost>=cb) continue;
+    let ok=true;
+    for(let u=-112;u<=112&&ok;u+=14)for(let v=-26;v<=26&&ok;v+=13){
+      const x=axis==='x'?cx+u:cx+v, z=axis==='x'?cz+v:cz+u;
+      if(heightRaw0(x,z)>SEA-10) ok=false;
+    }
+    if(ok){ cb=cost; carrier={x:cx,z:cz,axis:axis}; }
+  }
+  if(!carrier) carrier={x:Math.round(coast.x+sx*260),z:Math.round(coast.z+sz*260),axis:axis};
+  // the pier starts on the beach and runs straight out to sea
+  let px=coast.x, pz=coast.z;
+  for(let k=0;k<40&&heightRaw0(px-sx,pz-sz)<=SEA;k++){ px-=sx; pz-=sz; }
+  return {coast:coast, carrier:carrier, sx:sx, sz:sz, pier:{x:px,z:pz,len:70}};
+})();
+const CARRIER=NAVY.carrier;
+// --- the deep: a stretch of open ocean where something huge sleeps among old wrecks
+const KRAKEN_SITE=(function(){
+  let best=null, bc=1e9;
+  for(let a=0;a<6.283;a+=.05){
+    for(let r=520;r<1150;r+=20){
+      const x=Math.round(Math.cos(a)*r), z=Math.round(Math.sin(a)*r);
+      const ie=islandEdge(x,z); if(ie>-.75) continue; if(ie<-1.9) break;
+      let ok=true;
+      for(let u=-40;u<=40&&ok;u+=20)for(let v=-40;v<=40&&ok;v+=20) if(heightRaw0(x+u,z+v)>SEA-12) ok=false;
+      if(!ok) continue;
+      const d=Math.hypot(x-CARRIER.x,z-CARRIER.z), cost=Math.abs(d-460);
+      if(cost<bc){ bc=cost; best={x:x,z:z,floor:heightRaw0(x,z)}; }
+      break;
+    }
+  }
+  return best||{x:CARRIER.x+400,z:CARRIER.z,floor:SEA-20};
+})();
+// --- the storm dragon's eyrie: the highest summit in the snowy peaks
+const EYRIE=(function(){
+  let best=null, bh=-1;
+  for(let x=-700;x<=700;x+=12)for(let z=-700;z<=700;z+=12){
+    if(Math.hypot(x-VOLC.x,z-VOLC.z)<VOLC.R+120) continue;
+    const bw=biomeW(x,z,_bwS); if(bw.snow<.6) continue;
+    const h=heightRaw0(x,z); if(h>bh){ bh=h; best={x:x,z:z,h:h}; }
+  }
+  return best||{x:-300,z:0,h:DEPTH+90};
+})();
+function nearSite(x,z,m){                                  // keep villages, temples and ships off the big builds
+  if(inPlateau(x,z,m)) return true;
+  const c=CARRIER, cl=c.axis==='x'?[118,30]:[30,118];
+  if(Math.abs(x-c.x)<cl[0]+m&&Math.abs(z-c.z)<cl[1]+m) return true;
+  if(Math.hypot(x-NAVY.pier.x,z-NAVY.pier.z)<80+m) return true;
+  if(Math.hypot(x-KRAKEN_SITE.x,z-KRAKEN_SITE.z)<60+m) return true;
+  return false;
+}
 function treeNear(x,z,r){
   for(let dx=-r;dx<=r;dx++)for(let dz=-r;dz<=r;dz++) if(treeAt(x+dx,z+dz)) return true;
   return false;
@@ -828,9 +1022,9 @@ function findSpawn(){
   }
   return {x:8.5, z:8.5};
 }
-const SPAWN=findSpawn();
+const SPAWN={x:AIRBASE.x-100+.5, z:AIRBASE.z-36+.5};   // on the air base apron, beside the jets
 const COASTER=(function(){
-  const ccx=SPAWN.x+44, ccz=SPAWN.z+4;
+  const ccx=AIRBASE.x-20, ccz=AIRBASE.z-190;              // the coaster cavern runs under the hills north of the air base
   let minG=1e9;
   for(let gx=Math.round(ccx-58);gx<=ccx+58;gx+=4)
   for(let gz=Math.round(ccz-58);gz<=ccz+58;gz+=4) minG=Math.min(minG,heightAt(gx,gz));
@@ -939,6 +1133,7 @@ function villageAt(vx,vz){
   const h=heightAt(cx,cz);
   if(h<=SEA+1||h>DEPTH+26) return null;
   if(Math.hypot(cx-VOLC.x,cz-VOLC.z)<VOLC.R+30) return null;
+  if(nearSite(cx,cz,30)) return null;
   { const bw=biomeW(cx,cz,_bwV); if(bw.desert>.4||bw.snow>.4||bw.mesa>.4) return null; }
   for(const o of [[14,2],[-13,4],[3,14],[-2,-13]]){
     const hh=heightAt(cx+o[0],cz+o[1]);
@@ -987,6 +1182,7 @@ function shipAt(sxc,szc){
   const x=sxc*80+40+Math.floor((hash2(sxc,szc*9+4)-.5)*20);
   const z=szc*80+40+Math.floor((hash2(sxc*9+2,szc)-.5)*20);
   if(heightAt(x,z)>SEA-3||heightAt(x-7,z)>SEA-3||heightAt(x+7,z)>SEA-3) return null;
+  if(nearSite(x,z,20)||Math.hypot(x-KRAKEN_SITE.x,z-KRAKEN_SITE.z)<120) return null;
   if(heightAt(x,z-3)>SEA-3||heightAt(x,z+3)>SEA-3) return null;
   return {x:x,z:z};
 }
@@ -1028,6 +1224,7 @@ function templeAt(tx,tz){
   const h=heightAt(x,z);
   if(h<=SEA||h>DEPTH+24) return null;
   if(Math.hypot(x-VOLC.x,z-VOLC.z)<VOLC.R+30) return null;
+  if(nearSite(x,z,20)) return null;
   for(const o of [[8,0],[-8,0],[0,8],[0,-8]]){
     const hh=heightAt(x+o[0],z+o[1]);
     if(hh<=SEA-1||Math.abs(hh-h)>6) return null;
@@ -1063,6 +1260,7 @@ function towerAt(tx,tz){
   const h=heightAt(x,z);
   if(h<=SEA+1||h>DEPTH+26) return null;
   if(Math.hypot(x-VOLC.x,z-VOLC.z)<VOLC.R+20) return null;
+  if(nearSite(x,z,12)) return null;
   if(Math.abs(heightAt(x+3,z)-h)>4||Math.abs(heightAt(x,z+3)-h)>4) return null;
   return {x:x,z:z,h:h};
 }
@@ -1092,7 +1290,7 @@ const LAIR=(function(){
   let x=Math.round(SPAWN.x)-96, z=Math.round(SPAWN.z)+72;
   for(let k=0;k<160;k++){                       // find somewhere on solid land
     const h=heightAt(x,z);
-    let ok=h>SEA+3;
+    let ok=h>SEA+3&&!nearSite(x,z,50);
     for(let a=-10;a<=10&&ok;a+=5)for(let b=-10;b<=10&&ok;b+=5)
       if(heightAt(x+a,z+b)<=SEA+1) ok=false;
     if(ok) break;
@@ -1173,6 +1371,7 @@ function findFlat(x0,z0,rmax,half,ok){              // nearest spot with fairly 
     const ang=a/Math.max(1,Math.round(r/6))*6.283, x=Math.round(x0+Math.cos(ang)*r), z=Math.round(z0+Math.sin(ang)*r), h=heightAt(x,z);
     if(h<=SEA+2||h>DEPTH+48) continue;
     if(Math.hypot(x-VOLC.x,z-VOLC.z)<VOLC.R+40) continue;
+    if(nearSite(x,z,half+30)) continue;
     let flat=true;
     for(const o of [[-half,-half],[half,-half],[-half,half],[half,half],[0,half],[half,0],[0,-half],[-half,0]]){ const hh=heightAt(x+o[0],z+o[1]); if(hh<=SEA+1||Math.abs(hh-h)>4){ flat=false; break; } }
     if(flat&&(!ok||ok(x,z))) return {x:x,z:z,h:h};
@@ -1192,7 +1391,6 @@ function findCoast(ang){                            // the last bit of dry land 
 }
 const LIGHTHOUSES=[];
 for(const a of [.55,2.15,3.75,5.35]){ for(let t=0;t<12;t++){ const L=findCoast(a+t*.07); if(L){ LIGHTHOUSES.push(L); break; } } }
-const CASTLE=findFlat(SPAWN.x-190,SPAWN.z-150,260,17,function(x,z){ return biomeOf(x,z,_bwL)===0; });
 const GIANT_TREE=findFlat(SPAWN.x+170,SPAWN.z+210,260,8,function(x,z){ const b=biomeOf(x,z,_bwL); return b===0||b===3; });
 const SKY_ISLANDS=[];
 for(const a of [.9,2.5,4.0,5.6]){
@@ -1311,8 +1509,464 @@ function stampRuins(R,setW){                        // a drowned temple: broken 
   for(let dx=-4;dx<=4;dx++) if(hash2(x0+dx,z0)<.7) setW(x0+dx,Math.min(g+5,SEA-1),z0-4,B.COBBLE,false);
   setW(x0,g+1,z0,B.CHEST,false); setW(x0+2,g+1,z0+1,B.GLOW,false);
 }
+/* ====== BIG BUILDS: the air base, an aircraft carrier, the harbour, two great castles and the volcano's secret halls ======
+   every shape is clipped to the 16x16 chunk being generated, so even a 130 m fortress costs little per chunk */
+function mkStamp(x0,z0,setW){
+  const X1=x0+CH-1, Z1=z0+CH-1, S={x0:x0,z0:z0,X1:X1,Z1:Z1,setW:setW,lavaSp:null};
+  S.hit=function(xa,za,xb,zb){ return !(Math.max(xa,xb)<x0||Math.min(xa,xb)>X1||Math.max(za,zb)<z0||Math.min(za,zb)>Z1); };
+  S.set=function(x,y,z,b){ if(x>=x0&&x<=X1&&z>=z0&&z<=Z1) setW(x,y,z,b,false); };
+  S.box=function(xa,ya,za,xb,yb,zb,b,soft){
+    if(xa>xb){ const t=xa; xa=xb; xb=t; } if(za>zb){ const t=za; za=zb; zb=t; } if(ya>yb){ const t=ya; ya=yb; yb=t; }
+    const lx0=Math.max(xa,x0), lx1=Math.min(xb,X1), lz0=Math.max(za,z0), lz1=Math.min(zb,Z1);
+    if(lx0>lx1||lz0>lz1) return;
+    const fn=typeof b==='function';
+    for(let x=lx0;x<=lx1;x++)for(let z=lz0;z<=lz1;z++)for(let y=ya;y<=yb;y++){ const v=fn?b(x,y,z):b; if(v>=0) setW(x,y,z,v,soft); }
+  };
+  S.ring=function(cx,cz,h0,h1,ya,yb,b){                    // square ring: half-sizes h0..h1 inclusive
+    S.box(cx-h1,ya,cz-h1,cx+h1,yb,cz-h0,b); S.box(cx-h1,ya,cz+h0,cx+h1,yb,cz+h1,b);
+    S.box(cx-h1,ya,cz-h0+1,cx-h0,yb,cz+h0-1,b); S.box(cx+h0,ya,cz-h0+1,cx+h1,yb,cz+h0-1,b);
+  };
+  S.rectRing=function(cx,cz,hx,hz,t,ya,yb,b){               // rectangular ring t thick with outer half-sizes hx,hz
+    S.box(cx-hx,ya,cz-hz,cx+hx,yb,cz-hz+t-1,b); S.box(cx-hx,ya,cz+hz-t+1,cx+hx,yb,cz+hz,b);
+    S.box(cx-hx,ya,cz-hz+t,cx-hx+t-1,yb,cz+hz-t,b); S.box(cx+hx-t+1,ya,cz-hz+t,cx+hx,yb,cz+hz-t,b);
+  };
+  S.col=function(cx,cz,r,fn){                               // every column within r of (cx,cz)
+    const lx0=Math.max(Math.floor(cx-r),x0), lx1=Math.min(Math.ceil(cx+r),X1), lz0=Math.max(Math.floor(cz-r),z0), lz1=Math.min(Math.ceil(cz+r),Z1);
+    for(let x=lx0;x<=lx1;x++)for(let z=lz0;z<=lz1;z++){ const d=Math.hypot(x-cx,z-cz); if(d<=r) fn(x,z,d); }
+  };
+  S.cyl=function(cx,cz,r,ya,yb,b,wall){
+    const fn=typeof b==='function';
+    S.col(cx,cz,r+.45,function(x,z,d){ if(wall&&d<r+.45-wall) return; for(let y=ya;y<=yb;y++){ const v=fn?b(x,y,z):b; if(v>=0) setW(x,y,z,v,false); } });
+  };
+  S.cone=function(cx,cz,r,y0,h,b){                          // a pointed roof: a shell two blocks thick
+    S.col(cx,cz,r+.45,function(x,z,d){ const top=y0+Math.round(h*(1-d/(r+.45))); for(let y=Math.max(y0,top-2);y<=top;y++) setW(x,y,z,b,false); });
+  };
+  S.ell=function(cx,cy,cz,rx,ry,rz,fn){                     // fn(x,y,z,q) inside the ellipsoid, q = squared normalised radius
+    const lx0=Math.max(Math.floor(cx-rx),x0), lx1=Math.min(Math.ceil(cx+rx),X1), lz0=Math.max(Math.floor(cz-rz),z0), lz1=Math.min(Math.ceil(cz+rz),Z1);
+    for(let x=lx0;x<=lx1;x++)for(let z=lz0;z<=lz1;z++){ const qx=(x-cx)/rx, qz=(z-cz)/rz, q=qx*qx+qz*qz; if(q>1) continue;
+      const yh=ry*Math.sqrt(1-q); for(let y=Math.ceil(cy-yh);y<=Math.floor(cy+yh);y++){ const qy=(y-cy)/ry; fn(x,y,z,q+qy*qy); } }
+  };
+  S.lava=function(x,y,z){ if(x<x0||x>X1||z<z0||z>Z1) return; setW(x,y,z,B.LAVA,false); (S.lavaSp||(S.lavaSp=[])).push([x,y,z]); };
+  return S;
+}
+const stoneMix=function(x,y,z){ const r=hash3(x,y,z); return r<.6?B.CASTLE_STONE:(r<.84?B.COBBLE:B.MOSSY); };
+
+// ---------------- the air base ----------------
+function stampAirbase(S){
+  const A=AIRBASE, cx=A.x, cz=A.z, g=A.h;
+  if(!S.hit(cx-172,cz-102,cx+172,cz+18)) return;
+  S.box(cx-162,g+1,cz-99,cx+162,g+24,cz+15,B.AIR);          // nothing grows on an air base
+  S.box(cx-150,g,cz-10,cx+150,g,cz+10,function(x,y,z){ const u=x-cx, v=z-cz, au=Math.abs(u), av=Math.abs(v);
+    if(av===9&&au<=148) return B.RUNWAY_LINE;                                   // edge stripes
+    if(av<=7&&au>=136&&au<=146&&(v+12)%3!==0) return B.RUNWAY_LINE;            // threshold bars
+    if(av===0&&au<=126&&((u+210)%14)<8) return B.RUNWAY_LINE;                   // dashed centre line
+    if(av>=3&&av<=6&&au>=108&&au<=118) return B.RUNWAY_LINE;                   // touchdown zone
+    return B.ASPHALT; });
+  for(let u=-150;u<=150;u+=15){ S.set(cx+u,g,cz-11,B.GLOW); S.set(cx+u,g,cz+11,B.GLOW); }   // edge lights
+  for(const s of [-1,1]) for(let k=0;k<4;k++) S.set(cx+s*(155+k*4),g,cz,B.GLOW);            // approach lights
+  for(const tu of [-70,70]){ S.box(cx+tu-6,g,cz-25,cx+tu+6,g,cz-11,B.ASPHALT); S.box(cx+tu,g,cz-25,cx+tu,g,cz-11,B.DECK_LINE); }
+  S.box(cx-124,g,cz-62,cx+124,g,cz-26,B.CONCRETE);                                            // the apron
+  for(let i=0;i<8;i++){ const u=-105+i*30; S.box(cx+u,g,cz-44,cx+u,g,cz-30,B.DECK_LINE); S.box(cx+u-4,g,cz-45,cx+u+4,g,cz-45,B.DECK_LINE); }
+  for(const hu of [-80,0,80]) stampHangar(S,cx+hu,cz-63,g);
+  stampControlTower(S,cx+140,cz-46,g);
+  for(const t of [[-146,-52],[-146,-34]]){ S.cyl(cx+t[0],cz+t[1],5,g+1,g+9,B.CONCRETE); S.cyl(cx+t[0],cz+t[1],5,g+10,g+10,B.STEEL); }
+  S.box(cx-134,g+1,cz-88,cx-130,g+8,cz-84,B.CONCRETE);                                        // radar plinth
+  // the road down to the harbour
+  const p=NAVY.pier, ex=Math.max(cx-150,Math.min(cx+150,p.x)), ez=Math.max(cz-90,Math.min(cz+12,p.z));
+  const L=Math.hypot(p.x-ex,p.z-ez);
+  if(L>2&&S.hit(Math.min(ex,p.x)-4,Math.min(ez,p.z)-4,Math.max(ex,p.x)+4,Math.max(ez,p.z)+4)){
+    const ux=(p.x-ex)/L, uz=(p.z-ez)/L;
+    for(let x=S.x0;x<=S.X1;x++)for(let z=S.z0;z<=S.Z1;z++){
+      const t=(x-ex)*ux+(z-ez)*uz; if(t<0||t>L) continue;
+      const off=Math.abs((x-ex)*uz-(z-ez)*ux); if(off>3) continue;
+      const h=heightAt(x,z); if(h<SEA) continue;
+      S.setW(x,h,z,off>2.4?B.CONCRETE:B.ASPHALT,false);
+      for(let y=h+1;y<=h+5;y++) S.setW(x,y,z,B.AIR,false);
+    }
+  }
+}
+function stampHangar(S,hx,hz,g){                            // an arched hangar, open to the south, 36 wide and 32 deep
+  const R=18, D=32;
+  if(!S.hit(hx-R-1,hz-D-1,hx+R+1,hz+1)) return;
+  S.box(hx-R,g,hz-D,hx+R,g,hz,B.CONCRETE);
+  for(let u=-R;u<=R;u++){
+    const yo=Math.round(Math.sqrt(Math.max(0,R*R-u*u))*.9), ri=R-1.3, yi=Math.abs(u)<ri?Math.round(Math.sqrt(ri*ri-u*u)*.9):0;
+    S.box(hx+u,g+1+yi,hz-D,hx+u,g+1+yo,hz,B.STEEL);
+    S.box(hx+u,g+1,hz-D,hx+u,g+yo,hz-D,B.STEEL);
+    if(Math.abs(u)<R-3&&(u+40)%8===0) for(let w=hz-D+5;w<=hz-3;w+=9) S.set(hx+u,g+yi,w,B.GLOW);
+  }
+  for(const s of [-1,1]) S.box(hx+s*R,g+1,hz-1,hx+s*R,g+3,hz,B.CONCRETE);
+}
+function stampControlTower(S,x,z,g){
+  if(!S.hit(x-8,z-8,x+8,z+8)) return;
+  S.box(x-4,g+1,z-4,x+4,g+22,z+4,B.CONCRETE); S.box(x-3,g+1,z-3,x+3,g+21,z+3,B.AIR);
+  const ring=[[-3,-3],[-1,-3],[1,-3],[3,-3],[3,-1],[3,1],[3,3],[1,3],[-1,3],[-3,3],[-3,1],[-3,-1]];
+  for(let k=0;k<21;k++){ const r=ring[k%12]; S.box(x+r[0],g+1,z+r[1],x+r[0],g+1+k,z+r[1],B.CONCRETE); }
+  S.box(x-1,g+1,z+4,x,g+2,z+4,B.AIR);
+  S.box(x-6,g+22,z-6,x+6,g+22,z+6,B.CONCRETE); S.box(x-2,g+22,z+1,x,g+22,z+3,B.AIR);
+  S.box(x-6,g+23,z-6,x+6,g+27,z+6,B.GLASS); S.box(x-5,g+23,z-5,x+5,g+27,z+5,B.AIR);
+  S.box(x-7,g+28,z-7,x+7,g+28,z+7,B.STEEL); S.box(x,g+29,z,x,g+36,z,B.STEEL); S.set(x,g+37,z,B.GLOW);
+  S.set(x+4,g+23,z-4,B.CHEST);
+}
+
+// ---------------- the aircraft carrier ----------------
+// local frame: u runs stern (-) to bow (+), v runs port (-) to starboard (+)
+function carrierLocal(x,z){ const c=CARRIER; return c.axis==='x'?[x-c.x,z-c.z]:[z-c.z,x-c.x]; }
+function carrierWorld(u,v){ const c=CARRIER; return c.axis==='x'?[c.x+u,c.z+v]:[c.x+v,c.z+u]; }
+function carrierHullW(u){ if(u<-100||u>104) return -1; if(u>56) return 14*Math.sqrt(Math.max(0,(104-u)/48)); return 14; }
+function carrierDeck(u,v){
+  if(u<-103||u>108) return false;
+  let w=20; if(u>78) w=Math.max(3,20*(108-u)/30);
+  const port=(u>-94&&u<24)?w+7*smooth(clamp01((u+94)/28))*smooth(clamp01((24-u)/22)):w;
+  return v>=-port&&v<=w;
+}
+const CV={keel:SEA-9, hangar0:SEA+3, hangar1:SEA+12, deck:SEA+14};
+function stampCarrier(S){
+  const c=CARRIER, e=c.axis==='x'?[112,30]:[30,112];
+  if(!S.hit(c.x-e[0],c.z-e[1],c.x+e[0],c.z+e[1])) return;
+  for(let x=S.x0;x<=S.X1;x++)for(let z=S.z0;z<=S.Z1;z++){
+    const uv=carrierLocal(x,z), u=uv[0], v=uv[1], av=Math.abs(v), hw=carrierHullW(u);
+    if(hw>=0&&av<=hw){
+      for(let y=CV.keel;y<=CV.deck-1;y++){
+        if(y<SEA-3&&av>hw-(SEA-3-y)*1.4) continue;                    // a rounded bilge
+        let b=y<SEA?B.HULL_RED:B.STEEL;
+        if(y>=CV.hangar0&&y<=CV.hangar1&&av<hw-1.5&&u>-86&&u<50) b=B.AIR;  // the hangar deck
+        if(y>=CV.hangar0&&y<=CV.hangar1-1&&v>hw-2.5&&u>-34&&u<-14) b=B.AIR;  // the side elevator bay
+        if(b!==B.AIR&&y===CV.hangar1&&av<hw-1.5&&u>-86&&u<50&&(Math.round(u)+400)%12===0&&(Math.round(v)+40)%8===0) b=B.GLOW;
+        S.setW(x,y,z,b,false);
+      }
+      if(u>-86&&u<50&&av<hw-1.5) S.setW(x,CV.hangar0-1,z,B.STEEL,false);
+    }
+    if(carrierDeck(u,v)){
+      S.setW(x,CV.deck-1,z,B.STEEL,false);
+      let b=B.DECK;
+      const ln=-7-(u+60)*.2;                                             // the angled landing deck
+      if(u>-100&&u<34&&Math.abs(v-ln)<.55&&((Math.round(u)+300)%10)<6) b=B.RUNWAY_LINE;
+      if(u>-100&&u<34&&(Math.abs(v-ln-11)<.55||Math.abs(v-ln+11)<.55)) b=B.RUNWAY_LINE;
+      if(u>36&&u<104&&(Math.abs(v+5)<.55||Math.abs(v-5)<.55)) b=B.DECK_LINE;   // two bow catapults
+      if((Math.round(u)+400)%14===0&&!carrierDeck(u,v+1.2)) b=B.GLOW;    // deck-edge lights
+      S.setW(x,CV.deck,z,b,false);
+    }
+    // the island: bridge, funnel and mast on the starboard side
+    if(v>=11&&v<=18&&u>=-36&&u<=2){
+      const edge=v===11||v===18||u===-36||u===2;
+      for(let y=CV.deck+1;y<=CV.deck+16;y++){
+        let b=B.STEEL;
+        if(!edge&&y>=CV.deck+12&&y<=CV.deck+14) b=B.AIR;
+        else if(edge&&(y===CV.deck+12||y===CV.deck+13||y===CV.deck+7)) b=B.GLASS;
+        S.setW(x,y,z,b,false);
+      }
+      if(u>=-28&&u<=-20&&v>=12&&v<=17) for(let y=CV.deck+17;y<=CV.deck+21;y++) S.setW(x,y,z,B.SLATE,false);
+      if(Math.round(u)===-12&&Math.round(v)===14){ for(let y=CV.deck+17;y<=CV.deck+32;y++) S.setW(x,y,z,B.STEEL,false); S.setW(x,CV.deck+33,z,B.GLOW,false); }
+      if(Math.abs(u+12)<=4&&Math.round(v)===14) S.setW(x,CV.deck+28,z,B.STEEL,false);
+    }
+    // the stern boarding platform and a stair shaft up to the flight deck
+    if(u>=-108&&u<=-101&&av<=6) S.setW(x,SEA,z,B.STEEL,false);
+    if(u>=-101&&u<=-96&&av<=2) for(let y=SEA+1;y<=SEA+3;y++) S.setW(x,y,z,B.AIR,false);
+    if(u>=-96&&u<=-90&&av<=3) for(let y=SEA+1;y<=CV.deck;y++) S.setW(x,y,z,B.AIR,false);
+  }
+  const ring=[[-95,-2],[-94,-2],[-93,-2],[-92,-2],[-91,-2],[-91,-1],[-91,0],[-91,1],[-91,2],[-92,2],[-93,2],[-94,2],[-95,2],[-95,1],[-95,0],[-95,-1]];
+  for(let k=0;k<CV.deck-SEA;k++){ const r=ring[k%16], w=carrierWorld(r[0],r[1]); S.box(w[0],SEA+1,w[1],w[0],SEA+1+k,w[1],B.STEEL); }
+}
+
+// ---------------- the harbour pier ----------------
+function stampPier(S){
+  const p=NAVY.pier, sx=NAVY.sx, sz=NAVY.sz, L=p.len;
+  const ax=sx!==0, x1=p.x+sx*L, z1=p.z+sz*L;
+  if(!S.hit(Math.min(p.x,x1)-10,Math.min(p.z,z1)-10,Math.max(p.x,x1)+10,Math.max(p.z,z1)+10)) return;
+  for(let k=-4;k<=L;k++){
+    const half=k>L-8?8:3;
+    for(let w=-half;w<=half;w++){
+      const x=ax?p.x+sx*k:p.x+w, z=ax?p.z+w:p.z+sz*k;
+      if(x<S.x0||x>S.X1||z<S.z0||z>S.Z1) continue;
+      const h=heightAt(x,z);
+      if(h>SEA+1) continue;
+      S.setW(x,SEA+1,z,B.PLANK,false);
+      for(let y=SEA+2;y<=SEA+5;y++) S.setW(x,y,z,B.AIR,false);
+      if(Math.abs(w)===half&&(k%6===0)){ for(let y=Math.max(h,SEA-12);y<=SEA+2;y++) S.setW(x,y,z,B.DARK_WOOD,false); if(k%12===0) S.setW(x,SEA+3,z,B.GLOW,false); }
+    }
+  }
+  // the harbour office on the beach
+  const bx=p.x-sx*10, bz=p.z-sz*10, g=heightAt(bx,bz);
+  if(g>SEA&&S.hit(bx-8,bz-8,bx+8,bz+8)){
+    S.box(bx-6,g-2,bz-6,bx+6,g,bz+6,B.CONCRETE);
+    S.box(bx-6,g+1,bz-6,bx+6,g+6,bz+6,function(x,y,z){ const e=Math.abs(x-bx)===6||Math.abs(z-bz)===6; return e?((y===g+3||y===g+4)&&(x+z)%3===0?B.GLASS:B.CONCRETE):B.AIR; });
+    S.box(bx-7,g+7,bz-7,bx+7,g+7,bz+7,B.STEEL); S.box(bx-1,g+1,bz+6,bx,g+2,bz+6,B.AIR); S.box(bx-1,g+1,bz-6,bx,g+2,bz-6,B.AIR);
+    S.set(bx,g+6,bz,B.GLOW); S.set(bx+4,g+1,bz-4,B.CHEST);
+  }
+}
+
+// ---------------- Kurogane: a Japanese castle five storeys tall ----------------
+function jroof(S,cx,cz,hx,hz,y0,n,ridge){                  // hipped, tiled roof with wide eaves and upturned corners
+  for(let i=0;i<n;i++){
+    const ex=hx+2-i, ez=hz+2-i; if(ex<0||ez<0) break;
+    S.rectRing(cx,cz,ex,ez,Math.min(2,Math.min(ex,ez)+1),y0+i,y0+i,B.ROOF_TILE);
+    if(i===0) for(const sx of [-1,1]) for(const sz of [-1,1]) S.set(cx+sx*ex,y0+1,cz+sz*ez,B.ROOF_TILE);
+    if(i===n-1||ex<=1||ez<=1){ S.box(cx-ex+1,y0+i,cz-ez+1,cx+ex-1,y0+i,cz+ez-1,B.DARK_WOOD);
+      if(ridge){ const rl=Math.max(ex,ez); if(ex>=ez){ S.box(cx-ex,y0+i+1,cz,cx+ex,y0+i+1,cz,B.ROOF_TILE); S.set(cx-ex,y0+i+2,cz,B.GOLD); S.set(cx+ex,y0+i+2,cz,B.GOLD); }
+        else{ S.box(cx,y0+i+1,cz-ez,cx,y0+i+1,cz+ez,B.ROOF_TILE); S.set(cx,y0+i+2,cz-ez,B.GOLD); S.set(cx,y0+i+2,cz+ez,B.GOLD); } }
+      break; }
+  }
+}
+function jwalls(S,cx,cz,hx,hz,y0,h){                        // white plaster between black timber posts and beams, lattice windows
+  S.box(cx-hx,y0,cz-hz,cx+hx,y0+h-1,cz+hz,function(x,y,z){
+    const ex=Math.abs(x-cx)===hx, ez=Math.abs(z-cz)===hz;
+    if(!ex&&!ez) return B.AIR;
+    const along=ex?z-cz:x-cx, ry=y-y0;
+    if((ex&&ez)||Math.abs(along)%5===0||ry===0||ry===h-1) return B.DARK_WOOD;
+    if(ry>=2&&ry<=3&&Math.abs(along)%5===2) return B.GLASS;
+    return B.PLASTER; });
+}
+function sakura(S,x,z,g,s){                                // a cherry tree in full bloom
+  if(!S.hit(x-6,z-6,x+6,z+6)) return;
+  const th=4+s;
+  S.box(x,g+1,z,x,g+th,z,B.DARK_WOOD);
+  S.box(x-1,g+th-1,z,x+1,g+th-1,z,B.DARK_WOOD); S.box(x,g+th-1,z-1,x,g+th-1,z+1,B.DARK_WOOD);
+  S.ell(x,g+th+1,z,4.6+s*.4,2.8,4.6+s*.4,function(px,py,pz,q){ if(q>.72&&hash3(px,py,pz)<.4) return; S.setW(px,py,pz,B.SAKURA,true); });
+}
+function stoneLantern(S,x,z,g){ S.box(x,g+1,z,x,g+2,z,B.CASTLE_STONE); S.set(x,g+3,z,B.GLOW); S.set(x,g+4,z,B.ROOF_TILE); }
+function torii(S,x,z,g,axis){                               // a vermilion gate across the path
+  for(const s of [-5,5]){ const px2=axis==='x'?x:x+s, pz2=axis==='x'?z+s:z; S.box(px2,g+1,pz2,px2,g+8,pz2,B.RED_LACQUER); }
+  if(axis==='x'){ S.box(x,g+9,z-7,x,g+9,z+7,B.DARK_WOOD); S.box(x,g+7,z-5,x,g+7,z+5,B.RED_LACQUER); }
+  else { S.box(x-7,g+9,z,x+7,g+9,z,B.DARK_WOOD); S.box(x-5,g+7,z,x+5,g+7,z,B.RED_LACQUER); }
+}
+const KG={};                                                // the keep's layout, shared with the Shogun's fight
+if(KUROGANE){ KG.x=KUROGANE.x; KG.z=KUROGANE.z-4; KG.top=KUROGANE.h+14; KG.floor=KUROGANE.h+15; KG.half=18; }
+function stampKurogane(S){
+  const K=KUROGANE; if(!K) return;
+  const cx=K.x, cz=K.z, g=K.h;
+  if(!S.hit(cx-64,cz-64,cx+64,cz+64)) return;
+  // a moat of still water behind stone banks
+  S.ring(cx,cz,55,62,g-4,g,B.CASTLE_STONE);
+  S.ring(cx,cz,56,61,g-3,g-1,B.WATER); S.ring(cx,cz,56,61,g,g+4,B.AIR);
+  S.box(cx-3,g,cz+54,cx+3,g,cz+63,B.DARK_WOOD);                                   // the bridge
+  for(let z=cz+54;z<=cz+63;z+=3){ S.box(cx-3,g+1,z,cx-3,g+2,z,B.RED_LACQUER); S.box(cx+3,g+1,z,cx+3,g+2,z,B.RED_LACQUER); }
+  S.box(cx-3,g+2,cz+54,cx-3,g+2,cz+63,B.RED_LACQUER); S.box(cx+3,g+2,cz+54,cx+3,g+2,cz+63,B.RED_LACQUER);
+  // battered stone walls with a plastered parapet
+  for(let y=g-3;y<=g+8;y++){ const out=53-Math.floor((y-g+3)/4); S.ring(cx,cz,47,out,y,y,B.CASTLE_STONE); }
+  S.ring(cx,cz,47,50,g+9,g+9,B.CASTLE_STONE);
+  S.ring(cx,cz,50,50,g+10,g+12,function(x,y,z){ const a=Math.abs(x-cx)===50?z-cz:x-cx; if(a%6===0||y===g+10) return B.DARK_WOOD; if(y===g+11&&(a+60)%6===3) return B.DARK_WOOD; return B.PLASTER; });
+  S.ring(cx,cz,49,51,g+13,g+13,B.ROOF_TILE);
+  // the gate and its gatehouse
+  S.box(cx-4,g+1,cz+45,cx+4,g+8,cz+54,B.AIR); S.box(cx-4,g,cz+45,cx+4,g,cz+54,B.GRAVEL);
+  jwalls(S,cx,cz+50,10,4,g+9,7); S.box(cx-9,g+9,cz+47,cx+9,g+9,cz+53,B.DARK_WOOD);
+  jroof(S,cx,cz+50,10,4,g+16,6,true);
+  for(const s of [-1,1]) S.box(cx+s*5,g+1,cz+53,cx+s*5,g+8,cz+54,B.DARK_WOOD);      // the great doors, thrown open
+  // two-storey corner turrets
+  for(const sx of [-1,1]) for(const sz of [-1,1]){
+    const tx=cx+sx*48, tz=cz+sz*48;
+    if(!S.hit(tx-10,tz-10,tx+10,tz+10)) continue;
+    S.box(tx-6,g+9,tz-6,tx+6,g+9,tz+6,B.CASTLE_STONE);
+    jwalls(S,tx,tz,6,6,g+10,7); jroof(S,tx,tz,6,6,g+17,4,false);
+    jwalls(S,tx,tz,4,4,g+21,6); jroof(S,tx,tz,4,4,g+27,6,true);
+  }
+  // the grounds: a gravel walk lined with lanterns, torii, cherry trees and a koi pond
+  S.box(cx-3,g,cz+36,cx+3,g,cz+45,B.GRAVEL);
+  for(let z=cz+38;z<=cz+44;z+=3){ stoneLantern(S,cx-6,z,g); stoneLantern(S,cx+6,z,g); }
+  torii(S,cx,cz+43,g,'z');
+  for(const sx of [-1,1]) for(let z=cz-30;z<=cz+30;z+=12){ stoneLantern(S,cx+sx*36,z,g); }
+  for(const t of [[-36,32,1],[36,32,2],[-40,0,2],[40,-4,1],[-34,-34,2],[34,-36,1],[-18,40,0],[20,40,1],[-42,-18,0],[42,18,0]]) sakura(S,cx+t[0],cz+t[1],g,t[2]);
+  S.ell(cx-30,g,cz+14,9,2,6,function(x,y,z,q){ S.setW(x,y,z,y>=g?(y===g?B.WATER:B.AIR):B.WATER,false); });
+  S.ell(cx-30,g,cz+14,10,1,7,function(x,y,z,q){ if(q>.78&&y===g) S.setW(x,y,z,B.CASTLE_STONE,false); });
+  for(const l of [[-33,13],[-27,16],[-30,11]]) S.set(cx+l[0],g+1,cz+l[1],B.LILY);
+  // the keep: a battered stone base fourteen blocks high, then five storeys
+  const kx=KG.x, kz=KG.z;
+  for(let y=g-2;y<=g+14;y++){ const hh=26-Math.floor((y-g+2)/4); S.box(kx-hh,y,kz-hh,kx+hh,y,kz+hh,B.CASTLE_STONE); }
+  for(let k=0;k<14;k++){ const z=kz+40-k; S.box(kx-3,g,z,kx+3,g+1+k,z,B.CASTLE_STONE); S.box(kx-3,g+2+k,z,kx+3,g+8+k,z,B.AIR);
+    S.box(kx-4,g,z,kx-4,g+2+k,z,B.CASTLE_STONE); S.box(kx+4,g,z,kx+4,g+2+k,z,B.CASTLE_STONE); }
+  S.box(kx-3,g+14,kz+18,kx+3,g+14,kz+26,B.CASTLE_STONE); S.box(kx-3,g+15,kz+18,kx+3,g+22,kz+26,B.AIR);
+  const tiers=[[18,11],[14,8],[11,7],[8,6],[6,6]];
+  let y=g+15;
+  tiers.forEach(function(t,i){
+    const hh=t[0], wh=t[1];
+    S.box(kx-hh+1,y-1,kz-hh+1,kx+hh-1,y-1,kz+hh-1,i===0?B.TATAMI:B.DARK_WOOD);
+    jwalls(S,kx,kz,hh,hh,y,wh);
+    if(i<4) jroof(S,kx,kz,hh,hh,y+wh,4,false); else jroof(S,kx,kz,hh,hh,y+wh,12,true);
+    if(i<4){ const nh=tiers[i+1][0]; S.box(kx-hh+1,y+wh+3,kz-hh+1,kx+hh-1,y+wh+3,kz+hh-1,B.DARK_WOOD);
+      // a stair along the east wall up to the next floor, with a hole cut through the ceiling
+      const rise=wh+4, sx2=kx+hh-3;
+      for(let k=0;k<rise;k++){ const z=kz+hh-3-k; if(z<kz-hh+2) break; S.box(sx2,y,z,sx2+1,y+k,z,B.DARK_WOOD); }
+      S.box(sx2,y+wh-1,kz+hh-3-rise+1,sx2+1,y+wh+3,kz+hh-3-rise+8,B.AIR);
+      void nh; }
+    y+=wh+4;
+  });
+  // the great hall: tatami, black pillars, lanterns and the Shogun's dais
+  const f=KG.floor;
+  for(const p of [[-9,-9],[9,-9],[-9,9],[9,9]]) S.box(kx+p[0],f,kz+p[1],kx+p[0]+1,f+10,kz+p[1]+1,B.DARK_WOOD);
+  for(const p of [[-9,-7],[9,-7],[-9,11],[9,11]]) S.set(kx+p[0],f+5,kz+p[1],B.GLOW);
+  S.box(kx-6,f,kz-16,kx+6,f,kz-12,B.DARK_WOOD);
+  S.box(kx-7,f+1,kz-17,kx+7,f+4,kz-17,function(x,y,z){ return (x+y)%2?B.GOLD:B.BANNER; });
+  for(const s of [-8,8]){ S.box(kx+s,f+1,kz-15,kx+s,f+2,kz-15,B.DARK_WOOD); S.set(kx+s,f+3,kz-15,B.GLOW); }
+  for(const s of [-14,-6,6,14]) S.box(kx+s,f+3,kz-17,kx+s,f+8,kz-17,B.BANNER);
+  S.box(kx-2,f,kz+18,kx+2,f+5,kz+18,B.AIR);                                       // the hall door
+  S.set(kx+5,f,kz-15,B.CHEST); S.set(kx,y-6,kz,B.CHEST); S.set(kx,y-8,kz+2,B.GLOW);
+}
+
+// ---------------- Stormwatch: a great fortress of towers and walls ----------------
+function towerR(S,x,z,r,y0,y1,roofH,mat){                    // a round tower: hollow, floored, windowed, crenellated, with a slate cone
+  if(!S.hit(x-r-2,z-r-2,x+r+2,z+r+2)) return;
+  S.cyl(x,z,r,y0,y1,function(px2,py,pz){ const a=Math.atan2(pz-z,px2-x), ry=py-y0;
+    if(ry%9>=4&&ry%9<=6&&Math.abs(Math.sin(a*2))<.12) return B.GLASS; return mat?mat(px2,py,pz):stoneMix(px2,py,pz); },2);
+  const sr=Math.max(1.2,r-2.4), da=1.15/sr;
+  for(let fy=y0+9;fy<y1;fy+=9) S.col(x,z,r-1.5,function(px2,pz,d){ const a=Math.atan2(pz-z,px2-x), dA=((a-(fy-y0)*da)%6.283+6.283)%6.283;
+    if((dA<2.6/sr||dA>6.283-.6/sr)&&d>sr-1.6) return; S.setW(px2,fy,pz,B.PLANK,false); });
+  for(let y=y0+1;y<=y1;y++){ const a=(y-y0)*da, sx2=Math.round(x+Math.cos(a)*sr), sz2=Math.round(z+Math.sin(a)*sr); S.set(sx2,y,sz2,B.CASTLE_STONE); }
+  S.cyl(x,z,r,y1+1,y1+2,function(px2,py,pz){ return ((px2+pz)&1)?B.CASTLE_STONE:B.AIR; },1);
+  S.cyl(x,z,r-1,y1+1,y1+1,B.CASTLE_STONE);
+  S.cone(x,z,r+1,y1+3,roofH,B.SLATE);
+  S.set(x,y1+3+roofH+1,z,B.GOLD);
+}
+function stampFortress(S){
+  const C=CASTLE; if(!C) return;
+  const cx=C.x, cz=C.z, g=C.h;
+  if(!S.hit(cx-66,cz-66,cx+66,cz+66)) return;
+  // a dry moat with a drawbridge
+  S.ring(cx,cz,57,62,g-5,g,B.AIR); S.box(cx-4,g,cz+56,cx+4,g,cz+63,B.PLANK);
+  for(const s of [-4,4]) S.box(cx+s,g+1,cz+56,cx+s,g+1,cz+63,B.STEEL);
+  // the curtain wall: 22 high, a wall walk, merlons
+  S.ring(cx,cz,50,54,g-3,g+20,stoneMix);
+  S.ring(cx,cz,54,54,g+21,g+22,function(x,y,z){ const a=Math.abs(x-cx)===54?z-cz:x-cx; return ((a+60)%3===0)?B.AIR:B.CASTLE_STONE; });
+  S.ring(cx,cz,50,50,g+21,g+21,B.CASTLE_STONE);
+  S.ring(cx,cz,50,50,g+22,g+22,function(x,y,z){ const a=Math.abs(x-cx)===50?z-cz:x-cx; return ((a+60)%12===0)?B.GLOW:B.AIR; });
+  for(const s of [-1,1]){                                                        // stairs up to the wall walk
+    for(let k=0;k<20;k++){ S.box(cx+s*(30+k),g+1,cz-49,cx+s*(30+k),g+1+k,cz-47,B.CASTLE_STONE); }
+  }
+  // corner, side and gate towers
+  for(const sx of [-1,1]) for(const sz of [-1,1]) towerR(S,cx+sx*52,cz+sz*52,10,g-3,g+32,18);
+  towerR(S,cx-52,cz,7,g-3,g+28,13); towerR(S,cx+52,cz,7,g-3,g+28,13); towerR(S,cx,cz-52,7,g-3,g+28,13);
+  towerR(S,cx-12,cz+52,8,g-3,g+30,14); towerR(S,cx+12,cz+52,8,g-3,g+30,14);
+  // the gatehouse: arched passage, portcullis, windows and banners
+  S.box(cx-12,g-3,cz+48,cx+12,g+26,cz+56,stoneMix);
+  S.box(cx-12,g+27,cz+48,cx+12,g+28,cz+56,function(x,y,z){ return (Math.abs(z-cz-52)===4&&(x+z)%2===0)||(Math.abs(z-cz-52)<4)?B.AIR:B.CASTLE_STONE; });
+  S.box(cx-4,g+1,cz+47,cx+4,g+11,cz+57,function(x,y,z){ const u=x-cx; return y<=g+11-Math.floor(u*u/6)?B.AIR:-1; });
+  S.box(cx-4,g+9,cz+55,cx+4,g+11,cz+55,function(x,y,z){ return ((x-cx)%2===0&&y<=g+11-Math.floor((x-cx)*(x-cx)/6))?B.STEEL:-1; });
+  for(const u of [-6,-2,2,6]) S.box(cx+u,g+15,cz+56,cx+u,g+18,cz+56,B.GLASS);
+  for(const u of [-9,9]) S.box(cx+u,g+12,cz+57,cx+u,g+22,cz+57,B.BANNER);
+  S.box(cx-4,g,cz+47,cx+4,g,cz+57,B.GRAVEL);
+  // the inner ward: a second, taller wall with its own towers
+  S.ring(cx,cz,28,31,g+1,g+27,stoneMix);
+  S.ring(cx,cz,31,31,g+28,g+29,function(x,y,z){ const a=Math.abs(x-cx)===31?z-cz:x-cx; return ((a+60)%3===0)?B.AIR:B.CASTLE_STONE; });
+  S.box(cx-3,g+1,cz+27,cx+3,g+9,cz+32,B.AIR);
+  for(const sx of [-1,1]) for(const sz of [-1,1]) towerR(S,cx+sx*30,cz+sz*30,6,g+1,g+38,12);
+  // the keep: 46 high, four corner turrets and a central spire nearly a hundred blocks up
+  const kz=cz-6;
+  S.box(cx-16,g+1,kz-16,cx+16,g+46,kz+16,function(x,y,z){
+    const ex=Math.abs(x-cx)>=15, ez=Math.abs(z-kz)>=15;
+    if(!ex&&!ez){ if(y===g+13||y===g+25||y===g+36) return B.PLANK; if(y===g+46) return B.CASTLE_STONE; return B.AIR; }
+    const along=ex?z-kz:x-cx, fl=(y-g-1)%12;
+    if((ex&&Math.abs(x-cx)===16)||(ez&&Math.abs(z-kz)===16)){ if(fl>=3&&fl<=8&&(along+60)%6<2&&!(ex&&ez)) return B.GLASS; }
+    return stoneMix(x,y,z); });
+  S.rectRing(cx,kz,16,16,1,g+47,g+48,function(x,y,z){ return ((x+z)&1)?B.AIR:B.CASTLE_STONE; });
+  for(const sx of [-1,1]) for(const sz of [-1,1]) towerR(S,cx+sx*16,kz+sz*16,4,g+1,g+54,9);
+  towerR(S,cx,kz,6,g+46,g+70,26);
+  S.box(cx-2,g+1,kz+15,cx+2,g+7,kz+16,B.AIR);                                    // the great door
+  // the great hall: pillars, a red carpet to the throne, long tables and chandeliers
+  for(const z of [-10,-4,2,8]) for(const sx of [-1,1]) S.box(cx+sx*9,g+1,kz+z,cx+sx*9+sx,g+12,kz+z+1,B.CASTLE_STONE);
+  S.box(cx-1,g,kz-12,cx+1,g,kz+15,B.BANNER);
+  S.box(cx-4,g+1,kz-15,cx+4,g+1,kz-12,B.CASTLE_STONE);
+  S.box(cx-1,g+2,kz-14,cx+1,g+2,kz-14,B.GOLD); S.box(cx-1,g+3,kz-15,cx+1,g+5,kz-15,B.GOLD); S.set(cx,g+6,kz-15,B.DIAMOND);
+  S.box(cx-5,g+3,kz-15,cx-5,g+10,kz-15,B.BANNER); S.box(cx+5,g+3,kz-15,cx+5,g+10,kz-15,B.BANNER);
+  for(const sx of [-5,5]) S.box(cx+sx,g+1,kz-8,cx+sx,g+1,kz+8,B.PLANK);
+  for(const z of [-6,2,10]){ S.set(cx,g+12,kz+z,B.STEEL); S.box(cx-1,g+11,kz+z,cx+1,g+11,kz+z,B.GLOW); }
+  S.set(cx+3,g+2,kz-14,B.CHEST); S.set(cx,g+72,kz,B.CHEST);
+  for(let fl=0;fl<3;fl++){                                                       // stairs up through the floors
+    const y0=g+1+fl*12, z0=kz+12-(fl%2)*20, dir=fl%2?1:-1;
+    for(let k=0;k<12;k++) S.box(cx+12,y0,z0+dir*k,cx+13,y0+k,z0+dir*k,B.CASTLE_STONE);
+    S.box(cx+12,y0+12,z0+dir*7,cx+13,y0+12,z0+dir*11,B.AIR);
+  }
+  // the outer ward: barracks, stables, a smithy and a well
+  S.box(cx-46,g+1,cz-20,cx-36,g+8,cz+20,function(x,y,z){ const e=x===cx-46||x===cx-36||Math.abs(z-cz)===20; return e?(y===g+4&&(z%4===0)?B.GLASS:B.BRICK):B.AIR; });
+  for(let k=0;k<6;k++) S.box(cx-47+k,g+9+k,cz-21,cx-35-k,g+9+k,cz+21,B.SLATE);
+  S.box(cx-36,g+1,cz-2,cx-36,g+3,cz+1,B.AIR);
+  S.box(cx+36,g+1,cz-20,cx+46,g+7,cz+20,function(x,y,z){ const e=x===cx+46||Math.abs(z-cz)===20; return e?B.PLANK:(x===cx+36&&(z-cz)%5===0?B.LOG:B.AIR); });
+  for(let k=0;k<6;k++) S.box(cx+35+k,g+8+k,cz-21,cx+47-k,g+8+k,cz+21,B.SLATE);
+  S.cyl(cx-38,cz+38,2,g+1,g+2,B.COBBLE,1); S.cyl(cx-38,cz+38,1,g-3,g,B.WATER);
+  S.box(cx+34,g+1,cz+34,cx+42,g+6,cz+42,function(x,y,z){ const e=x===cx+34||x===cx+42||z===cz+34||z===cz+42; return e?B.BRICK:(y===g+1&&x===cx+38&&z===cz+38?B.GLOW:B.AIR); });
+  S.box(cx+34,g+1,cz+37,cx+34,g+3,cz+39,B.AIR);
+  for(let k=0;k<5;k++) S.box(cx+33+k,g+7+k,cz+33,cx+43-k,g+7+k,cz+43,B.SLATE);
+}
+
+// ---------------- the Fire Mountain's secret: a lava tube, the magma chamber, the sealed vault ----------------
+const MAGMA_HALL={x:VOLC.x, z:VOLC.z, cy:DEPTH+38, rx:40, ry:18, lava:DEPTH+24, plat:DEPTH+27};
+MAGMA_HALL.vault={x0:VOLC.x-2,x1:VOLC.x+2,y0:MAGMA_HALL.plat+1,y1:MAGMA_HALL.plat+5,z0:VOLC.z-45,z1:VOLC.z-44};
+MAGMA_HALL.tube={x:VOLC.x-98, z:VOLC.z};
+function stampVolcanoSecrets(S){
+  const V=VOLC, H=MAGMA_HALL;
+  if(S.hit(V.x-104,V.z-62,V.x+44,V.z+44)){
+    S.ell(V.x,H.cy,V.z,H.rx+2.5,H.ry+2.5,H.rx+2.5,function(x,y,z){
+      const qx=(x-V.x)/H.rx, qy=(y-H.cy)/H.ry, qz=(z-V.z)/H.rx, q=qx*qx+qy*qy+qz*qz;
+      if(q>1){ const r=hash3(x,y,z); S.setW(x,y,z,r<.16?B.MAGMA:(r<.24?B.OBSIDIAN:B.BASALT),false); return; }
+      S.setW(x,y,z,y<=H.lava?B.LAVA:B.AIR,false);
+    });
+    S.cyl(V.x,V.z,17,H.lava-6,H.plat,function(x,y,z){ const d=Math.hypot(x-V.x,z-V.z);
+      if(y===H.plat){ if(d>15.6) return B.OBSIDIAN; if(Math.abs(d-11)<.6) return B.RUNE; }
+      return B.BASALT; });
+    for(let i=0;i<4;i++){ const a=.785+i*1.571, px2=V.x+Math.round(Math.cos(a)*29), pz2=V.z+Math.round(Math.sin(a)*29);
+      S.cyl(px2,pz2,2.5,H.lava-5,H.cy+14,function(x,y,z){ return (y-H.lava)%7===0?B.MAGMA:B.OBSIDIAN; }); }
+    S.box(V.x-33,H.plat,V.z-1,V.x-17,H.plat,V.z+1,B.OBSIDIAN);                   // bridge from the lava tube
+    S.box(V.x-1,H.plat,V.z-44,V.x+1,H.plat,V.z-17,B.OBSIDIAN);                   // bridge to the vault
+    S.box(V.x-2,H.plat+1,V.z-46,V.x+2,H.plat+5,V.z-30,B.AIR);
+    for(const a of [.5,2.6,4.4]){ const r=24, x=V.x+Math.round(Math.cos(a)*r), z=V.z+Math.round(Math.sin(a)*r);
+      const top=Math.floor(H.cy+H.ry*Math.sqrt(1-(r/H.rx)*(r/H.rx))); S.lava(x,top+1,z); S.set(x,top+2,z,B.BASALT); }
+    // the vault: gold floor, rune walls, diamonds and chests, behind a door of obsidian that the Titan guards
+    S.box(V.x-9,H.plat,V.z-62,V.x+9,H.plat+10,V.z-45,function(x,y,z){
+      const e=Math.abs(x-V.x)===9||z===V.z-62||z===V.z-45||y===H.plat+10;
+      if(y===H.plat) return B.GOLD; if(e) return (y-H.plat)%3===1?B.RUNE:B.OBSIDIAN; return B.AIR; });
+    for(const c of [[-6,-58],[6,-58],[-6,-50],[6,-50]]) S.set(V.x+c[0],H.plat+1,V.z+c[1],B.CHEST);
+    S.box(V.x-2,H.plat+1,V.z-61,V.x+2,H.plat+2,V.z-59,B.DIAMOND); S.box(V.x-1,H.plat+3,V.z-60,V.x+1,H.plat+3,V.z-60,B.GOLD);
+    for(const c of [[-8,-61],[8,-61],[-8,-46],[8,-46]]) S.set(V.x+c[0],H.plat+9,V.z+c[1],B.GLOW);
+    if(!MAGMA_HALL.open){ const d=H.vault; S.box(d.x0,d.y0,d.z0,d.x1,d.y1,d.z1,B.OBSIDIAN); }
+    // the lava tube from the western slope: runes on the walls, an obsidian bridge over a river of lava
+    const T=H.tube, ey=heightAt(T.x,T.z), x0=T.x, x1=V.x-30;
+    for(let x=x0-6;x<=x1;x++){
+      const t=clamp01((x-x0)/(x1-x0)), fl=Math.round(ey-2+(H.plat-(ey-2))*t);
+      S.box(x,fl-1,V.z-3,x,fl+6,V.z+3,function(px2,py,pz){ const dz2=Math.abs(pz-V.z), dy=py-fl;
+        if(dy===-1) return B.OBSIDIAN;
+        if(dz2===3||dy===6||(dz2===2&&dy===5)){ return ((px2-x0)%10===0&&dy===3)?B.RUNE:(hash3(px2,py,pz)<.2?B.MAGMA:B.BASALT); }
+        return B.AIR; });
+      if(x<x0+6) S.box(x,fl+6,V.z-3,x,ey+6,V.z+3,B.AIR);
+      if(Math.abs(x-(x0+32))<=3){ S.box(x,fl-4,V.z-9,x,fl-2,V.z+9,B.LAVA); S.box(x,fl-1,V.z-9,x,fl+4,V.z+9,B.AIR);
+        S.box(x,fl-1,V.z-2,x,fl-1,V.z+2,B.OBSIDIAN); }
+    }
+    for(const s of [-5,5]) S.box(x0-6,ey-1,V.z+s,x0-5,ey+8,V.z+s+(s>0?1:-1),B.BASALT);  // the hidden gate: two basalt pillars and a rune
+    S.box(x0-6,ey+8,V.z-5,x0-5,ey+8,V.z+5,B.BASALT); S.set(x0-6,ey+9,V.z,B.RUNE);
+  }
+  // the fire dragon's nest on the crater rim: obsidian spikes and a clutch of eggs
+  const na=3.6, nx=Math.round(V.x+Math.cos(na)*(V.CR+6)), nz=Math.round(V.z+Math.sin(na)*(V.CR+6));
+  if(S.hit(nx-8,nz-8,nx+8,nz+8)){ const ny=heightAt(nx,nz);
+    for(let i=0;i<7;i++){ const a=i*.9, x=nx+Math.round(Math.cos(a)*6), z=nz+Math.round(Math.sin(a)*6); S.box(x,ny,z,x,ny+3+(i%3)*2,z,B.OBSIDIAN); }
+    for(const e of [[0,0],[2,1],[-1,2]]){ S.box(nx+e[0],ny+1,nz+e[1],nx+e[0],ny+2,nz+e[1],B.MAGMA); S.set(nx+e[0],ny+3,nz+e[1],B.OBSIDIAN); }
+    S.set(nx-2,ny+1,nz-1,B.CHEST); }
+}
+// ---------------- the storm dragon's eyrie on the highest peak ----------------
+function stampEyrie(S){
+  const E=EYRIE; if(!S.hit(E.x-12,E.z-12,E.x+12,E.z+12)) return;
+  for(let i=0;i<10;i++){ const a=i*.628; for(let k=0;k<6;k++){ const r=10-k*.7, x=E.x+Math.round(Math.cos(a)*r), z=E.z+Math.round(Math.sin(a)*r); S.set(x,heightAt(x,z)+1+k,z,B.TERRA_W); } }
+  S.box(E.x-2,E.h+1,E.z-2,E.x+2,E.h+1,E.z+2,B.GOLD); S.set(E.x,E.h+2,E.z,B.CHEST); S.set(E.x+1,E.h+2,E.z,B.DIAMOND);
+}
+// ---------------- the deep: wrecks scattered on the sea floor where the Kraken sleeps ----------------
+function stampDeep(S){
+  const K=KRAKEN_SITE; if(!S.hit(K.x-50,K.z-50,K.x+50,K.z+50)) return;
+  for(const w of [[22,-14,0],[-28,18,1],[6,32,0]]){
+    const x0=K.x+w[0], z0=K.z+w[1], g=heightAt(x0,z0);
+    for(let u=-9;u<=9;u++){ const hw=Math.abs(u)>6?1:2; for(let v=-hw;v<=hw;v++){
+      const x=w[2]?x0+v:x0+u, z=w[2]?z0+u:z0+v, h=heightAt(x,z);
+      if(hash2(x*3,z*5)<.25) continue;
+      S.set(x,h+1,z,Math.abs(v)===hw?B.DARK_WOOD:B.PLANK); if(Math.abs(v)===hw&&hash2(x,z)<.6) S.set(x,h+2,z,B.DARK_WOOD); } }
+    S.set(x0,g+2,z0,B.CHEST);
+    for(let k=0;k<7;k++) S.set(w[2]?x0+k-3:x0+2,g+2,w[2]?z0+2:z0+k-3,B.LOG);
+  }
+}
 const LANDMARKS=[{name:'The Fire Mountain',kind:'volcano',x:VOLC.x,z:VOLC.z,r:140}];
-if(CASTLE) LANDMARKS.push({name:'Stormwatch Castle',kind:'castle',x:CASTLE.x,z:CASTLE.z,r:45});
+if(CASTLE) LANDMARKS.push({name:'Stormwatch Fortress',kind:'castle',x:CASTLE.x,z:CASTLE.z,r:75});
+if(KUROGANE) LANDMARKS.push({name:'Kurogane Castle',kind:'castle',x:KUROGANE.x,z:KUROGANE.z,r:75});
+LANDMARKS.push({name:'Ironside Air Base',kind:'base',x:AIRBASE.x,z:AIRBASE.z-30,r:120});
+LANDMARKS.push({name:'The Carrier Leviathan',kind:'ship',x:CARRIER.x,z:CARRIER.z,r:110});
+LANDMARKS.push({name:'The Lava Tube (secret)',kind:'secret',x:MAGMA_HALL.tube.x-4,z:MAGMA_HALL.tube.z,r:14});
+LANDMARKS.push({name:'The Magma Chamber (secret)',kind:'secret',x:VOLC.x,y:MAGMA_HALL.plat,z:VOLC.z,r:36});
+LANDMARKS.push({name:'Heart of the Mountain (vault)',kind:'secret',x:VOLC.x,y:MAGMA_HALL.plat,z:VOLC.z-54,r:9});
+LANDMARKS.push({name:'The Storm Eyrie',kind:'peak',x:EYRIE.x,z:EYRIE.z,r:40});
+LANDMARKS.push({name:'The Drowned Graveyard',kind:'deep',x:KRAKEN_SITE.x,z:KRAKEN_SITE.z,r:70});
 if(GIANT_TREE) LANDMARKS.push({name:'The Elder Oak',kind:'tree',x:GIANT_TREE.x,z:GIANT_TREE.z,r:40});
 LIGHTHOUSES.forEach(function(L){ const a=Math.atan2(L.x,-L.z), d=['North','Northeast','East','Southeast','South','Southwest','West','Northwest'][((Math.round(a/(Math.PI/4))%8)+8)%8];
   LANDMARKS.push({name:d+' Lighthouse',kind:'lighthouse',x:L.x,z:L.z,r:40}); });
@@ -1320,13 +1974,14 @@ LIGHTHOUSES.forEach(function(L){ const a=Math.atan2(L.x,-L.z), d=['North','North
 LANDMARKS.push({name:'The Dragon\'s Lair',kind:'lair',x:LAIR.x,z:LAIR.z,r:45});
 function stampStructures(cx,cz,data){
   const x0=cx*CH, z0=cz*CH;
-  let sAir=WH, eLo=WH, eHi=-1;
+  let sAir=WH, eLo=WH, eHi=-1, sTop=0;
   function setW(x,y,z,b,soft){
     const lx=x-x0, lz=z-z0;
     if(lx<0||lx>=CH||lz<0||lz>=CH||y<1||y>=WH) return;
     const i=idx(lx,y,lz);
     if(soft&&data[i]!==B.AIR&&data[i]!==B.WATER) return;
     data[i]=b;
+    if(OPAQUE[b]&&y>sTop) sTop=y;
     if(b===B.AIR&&y<sAir) sAir=y;              // tunnels and rooms dug into the rock
     if(EMIT[b]){ if(y<eLo) eLo=y; if(y>eHi) eHi=y; }
   }
@@ -1350,12 +2005,13 @@ function stampStructures(cx,cz,data){
   if(Math.abs(x0+CH/2-LAIR.x)<LAIR.R+22&&Math.abs(z0+CH/2-LAIR.z)<LAIR.R+22) stampLair(setW);
   const nearLm=function(p,r){ return p&&Math.abs(x0+CH/2-p.x)<r+CH/2&&Math.abs(z0+CH/2-p.z)<r+CH/2; };
   for(const L of LIGHTHOUSES) if(nearLm(L,6)) stampLighthouse(L,setW);
-  if(nearLm(CASTLE,22)) stampCastle(CASTLE,setW);
   if(nearLm(GIANT_TREE,18)) stampGiantTree(GIANT_TREE,setW);
   let skyTop=0, sprs=null;
   for(const S of SKY_ISLANDS) if(nearLm(S,S.R+4)){ sprs=sprs||[]; skyTop=Math.max(skyTop,stampSkyIsland(S,setW,sprs)); }
   for(let gx=Math.floor((x0-8)/140);gx<=Math.floor((x0+CH+8)/140);gx++)
   for(let gz=Math.floor((z0-8)/140);gz<=Math.floor((z0+CH+8)/140);gz++){ const R=ruinsAt(gx,gz); if(R&&nearLm(R,7)) stampRuins(R,setW); }
+  const SB=mkStamp(x0,z0,setW);
+  stampAirbase(SB); stampCarrier(SB); stampPier(SB); stampFortress(SB); stampKurogane(SB); stampVolcanoSecrets(SB); stampEyrie(SB); stampDeep(SB);
   // hollow out the coaster cavern - only the samples near this chunk
   const near=coasterSamplesNear(cx,cz);
   for(let k=0;k<near.length;k++){
@@ -1394,7 +2050,7 @@ function stampStructures(cx,cz,data){
     setW(ex,gTop+2,ez,B.AIR,false);
     setW(ex+2,heightAt(ex+2,ez)+2,ez,B.GOLD,false);          // marker beacon
   }
-  return {air:sAir, lo:eLo, hi:eHi, top:skyTop, springs:sprs};
+  return {air:sAir, lo:eLo, hi:eHi, top:Math.max(skyTop,sTop+1), springs:sprs, lavaSp:SB.lavaSp};
 }
 
 const chunks=new Map();   // "cx,cz" -> {data:Uint8Array, meshes:[], built:false}
@@ -1425,7 +2081,7 @@ function genChunk(cx,cz){
     else if(rocky){ top=(h>DEPTH+50&&hash2(wx*3,wz*5)<.25)?B.GRAVEL:B.STONE; sub=B.STONE; }
     else{ top=B.GRASS; sub=B.DIRT; if(h>DEPTH+50) subDepth=2; }
     if(h+1<minAir) minAir=h+1;                       // air begins above the surface
-    const caveTop=h, caveBot=Math.max(4,h-CAVEBAND);
+    const caveTop=inPlateau(wx,wz,8)?h-16:h, caveBot=Math.max(4,h-CAVEBAND);
     for(let y=0;y<=h&&y<WH;y++){
       let b;
       if(y<=2) b=B.BEDROCK;
@@ -1536,7 +2192,7 @@ function genChunk(cx,cz){
     data[idx(lx,y,lz)]=B.SPRING; springs=[[wx,y,wz]]; break;
   }
   if(st.springs&&st.springs.length) springs=(springs||[]).concat(st.springs.filter(function(p){ return p[0]>=cx*CH&&p[0]<cx*CH+CH&&p[2]>=cz*CH&&p[2]<cz*CH+CH; }));
-  let lavaSprings=null;
+  let lavaSprings=st.lavaSp?st.lavaSp.slice():null;
   for(let k=0;k<4;k++){
     const a=k*1.71+.4, wx=Math.round(VOLC.x+Math.cos(a)*(VOLC.CR+3)), wz=Math.round(VOLC.z+Math.sin(a)*(VOLC.CR+3)), lx=wx-cx*CH, lz=wz-cz*CH;
     if(lx<0||lx>=CH||lz<0||lz>=CH) continue;
@@ -2841,6 +3497,8 @@ function updateLod(px,pz){
     let r,g,bb;
     const bw=biomeW(wx,wz,_bwV), vd=Math.hypot(wx-VOLC.x,wz-VOLC.z);
     if(water){ r=g=bb=0; }
+    else if(Math.abs(wx-AIRBASE.x)<=152&&wz>=AIRBASE.z-64&&wz<=AIRBASE.z+12){ r=.27; g=.28; bb=.3; if(wz<AIRBASE.z-24){ r=.62; g=.61; bb=.58; } }
+    else if((CASTLE&&Math.abs(wx-CASTLE.x)<=54&&Math.abs(wz-CASTLE.z)<=54)||(KUROGANE&&Math.abs(wx-KUROGANE.x)<=52&&Math.abs(wz-KUROGANE.z)<=52)){ r=.52; g=.51; bb=.48; }
     else if(vd<VOLC.R*.92){ r=.2; g=.19; bb=.19; if(vd<VOLC.CR+12){ r=.55; g=.2; bb=.08; } }
     else if(h<=SEA+1){ r=.86; g=.81; bb=.6; }
     else if(bw.mesa>.5){ const k=Math.floor(h/2)%3; r=[.72,.58,.8][k]; g=[.4,.27,.68][k]; bb=[.22,.2,.6][k]; }
@@ -3336,6 +3994,8 @@ function inGap(u){
 /* ====== PARTICLES: fire, smoke, sparks, dust, debris ====== */
 const PCOLORS={1:0x6aa84f,2:0x8a5f3c,3:0x8a8a8a,4:0xd9cf94,6:0x6b4a2a,7:0x3e7a2a,8:0xb08850,9:0x7d7d7d,10:0xcfe9ff,11:0xa04a3c,12:0xf4fbff,13:0x383838,14:0x555555,15:0xc89e7a,16:0x5fe3e0,17:0xf0c93c,18:0xe0d6a8,19:0xc4352b,20:0x8d1f18,21:0x2f3338,
   22:0x5fa23a,23:0xd42a1e,24:0xf5d23a,25:0xf4f4ee,26:0xff8a20,27:0xff6a10,28:0xe2ddd0,29:0x80b048,30:0x3f2b18,31:0x284a2a,32:0x7d7873,33:0xffd36a};
+Object.assign(PCOLORS,{65:0x7c868f,66:0x40444a,67:0xe2b828,68:0x3a3b3e,69:0xecebe4,70:0xefebe1,71:0x4c5866,72:0x2b1f18,73:0xc5b779,
+  74:0xf0b0c4,75:0xc4301c,76:0x8d8b84,77:0x8b2c24,78:0xff9a30,79:0x3c4552,80:0x9c1b1b,81:0xb9b7b1});
 const PT={FIRE:0,SPARK:1,FLASH:2,SMOKE:3,DUST:4,STEAM:5,SPLASH:6,BUBBLE:7,GLOW:8};
 const PART_VS=`attribute vec3 iPos; attribute vec4 iCol; attribute vec4 iMisc;
 varying vec2 vUv; varying vec4 vCol; varying vec3 vW; varying vec2 vSE;
