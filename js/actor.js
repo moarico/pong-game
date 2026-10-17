@@ -628,8 +628,10 @@ export class Actor {
         } else m.setHeld(null);
       }
     } else m.setHeld(null);
+    const cy = Math.cos(this.yaw), sy = Math.sin(this.yaw);
     m.animate({
       dt, mode: this.mode, speed: Math.hypot(this.vel.x, this.vel.z), crouch: this.crouching,
+      vf: -this.vel.x * sy - this.vel.z * cy, vr: this.vel.x * cy - this.vel.z * sy,
       pitch: this.pitch, holding, aiming: this.aiming, emote: this.emote, sprinting: this.sprinting, onGround: this.onGround,
       reload: this.reloadT > 0 && this.reloadTotal > 0 ? 1 - this.reloadT / this.reloadTotal : -1, switching: this.switchT / SWITCH_TIME,
     });

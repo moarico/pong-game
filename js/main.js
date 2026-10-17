@@ -8,7 +8,8 @@ import { Environment } from './world/environment.js';
 import { CollisionWorld } from './physics.js';
 import { Actor } from './actor.js';
 import { BotBrain } from './bots.js';
-import { OUTFITS, outfitById } from './character.js';
+import { OUTFITS, outfitById, fabricMat } from './character.js';
+import { loadAssets } from './assets.js';
 import { BuildSystem } from './building.js';
 import { LootSystem } from './loot.js';
 import { Storm } from './storm.js';
@@ -23,7 +24,6 @@ import { Menus } from './menus.js';
 import { LobbyStage } from './lobby.js';
 import { AudioSystem } from './zh/sound.js';
 import { ViewModel } from './zh/viewmodel.js';
-import { fabricMat } from './zh/soldier.js';
 import { PostChain, hdrSupported } from './zh/post.js';
 import { DAY, ATM } from './zh/atmos.js';
 import { GrassField } from './world/grass.js';
@@ -33,7 +33,7 @@ import { TitleCinematic } from './cinematic.js';
 const SETTINGS_KEY = 'stormdrop-settings-v1';
 const DEFAULTS = {
   mouseSens: 1, padSens: 1, invertY: false, fov: 72, volume: 0.7, music: 0.5, quality: 'medium', players: 25,
-  difficulty: 1, stormSpeed: 1, showFps: false, name: 'You', outfit: 'recruit', shoulder: 1, view: 'first',
+  difficulty: 1, stormSpeed: 1, showFps: false, name: 'You', outfit: 'rookie', shoulder: 1, view: 'first',
 };
 const tick = () => new Promise((r) => setTimeout(r, 16));
 
@@ -589,4 +589,5 @@ class Game {
   }
 }
 
+await loadAssets(OUTFITS);
 new Game();
