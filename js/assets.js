@@ -70,14 +70,16 @@ function skinTexture(src) {
 }
 
 export async function loadAssets(outfits, onProgress = () => {}) {
+  // hosts that cannot serve .glb can ship the same models as self-contained glTF JSON
+  const EXT = window.STORMDROP_MODEL_EXT || '.glb';
   let done = 0;
   const MODEL_FILES = KIT_FILES; // read here, not at module load: kit.js and this module import each other
   const total = 1 + SKIN_FILES.length + MODEL_FILES.length;
   const tick = () => onProgress(++done / total);
   const [character, images] = await Promise.all([
-    loader.loadAsync('assets/characters/character.glb').then((g) => (tick(), g)),
+    loader.loadAsync('assets/characters/character' + EXT).then((g) => (tick(), g)),
     Promise.all(SKIN_FILES.map((n) => loadImage(`assets/characters/skins/${n}.png`).then((img) => (tick(), [n, img])))),
-    Promise.all(MODEL_FILES.map((n) => loader.loadAsync(`assets/models/${n}.glb`).then((g) => (tick(), (ASSETS.models[n] = g.scene))))),
+    Promise.all(MODEL_FILES.map((n) => loader.loadAsync(`assets/models/${n}${EXT}`).then((g) => (tick(), (ASSETS.models[n] = g.scene))))),
   ]);
   ASSETS.character = character;
   const byName = Object.fromEntries(images);
