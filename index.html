@@ -104,7 +104,8 @@
   #vnose::after { content:''; position:absolute; left:50%; top:50%; width:4px; height:4px; margin:-2px; background:#9f9; border-radius:50%; }
   body.inveh #tb-down { display:flex; }
   body.inveh .bar2, body.inveh .hearts2 { display:none !important; }
-  body.touch #vhud { bottom:auto; top:calc(34px + env(safe-area-inset-top)); left:calc(6px + env(safe-area-inset-left)); font-size:10.5px; padding:3px 7px; }
+  body.touch #vhud { bottom:auto; top:calc(30px + env(safe-area-inset-top)); left:calc(6px + env(safe-area-inset-left)); font-size:8.5px; line-height:1.35; padding:2px 6px; max-width:44vw; }
+  body.touch #vhud .vt { width:80px; height:5px; } body.touch #vhud .vk { font-size:7.5px; }
   #pad { position:absolute; top:8px; right:8px; color:#8f8; font-size:12px; text-shadow:1px 1px 0 #000; background:rgba(0,0,0,.4); padding:3px 8px; display:none; }
   .pslot.pksel { background:#a8a8ff; box-shadow:inset 0 0 0 3px #fff; }
   #journal { position:absolute; left:50%; top:50%; transform:translate(-50%,-50%); background:#d8c9a3; border:4px solid #5a4630;
@@ -253,6 +254,8 @@
       <b>Right thumb</b> &mdash; drag to look, <b>tap</b> to break / hit / shoot, <b>hold still</b> to keep breaking<br>
       <b>&#9650; JUMP</b> &mdash; hold to swim up, <b>double-tap</b> to fly &nbsp;&middot;&nbsp; <b>&#9992;</b> fly on / off &nbsp;&middot;&nbsp; <b>&#9660;</b> fly down<br>
       <b>&#9874; BREAK</b> and <b>&#9635; PLACE</b> &mdash; hold to keep going &nbsp;&middot;&nbsp; tap a hotbar slot to use it, double-tap it to swap what is in it<br>
+      <b>Jets &amp; warships:</b> walk up to one and tap <b>&#128682;</b> (it replaces the coaster button). Stick = throttle and steer, drag to aim, the buttons become BOOST / GUNS / MISSILE / BOMB / BRAKE.<br>
+      <b>Bosses:</b> six legendary beasts sleep around the island &mdash; tap to skip their cut-scenes; the &#128220; journal points the way.<br>
       Top buttons: <b>&#9638;</b> all blocks &amp; weapons &nbsp;<b>&#127906;</b> ride the coaster &nbsp;<b>&#9728;</b> time of day &nbsp;<b>&#9729;</b> weather &nbsp;<b>&#9881;</b> graphics &nbsp;<b>?</b> help &nbsp;<b>&#10074;&#10074;</b> pause<br>
       <i>Tap this box to close it.</i>
     </div>
@@ -4894,7 +4897,10 @@ function setTouchVeh(kind){
   ids.forEach(function(id,i){ const el=document.getElementById(id); if(!el) return; if(!(id in TB_DEFAULT)) TB_DEFAULT[id]=el.innerHTML;
     el.innerHTML=kind?VLABEL[kind][i]:TB_DEFAULT[id]; el.style.display=(kind&&!VLABEL[kind][i])?'none':''; });
   document.body.classList.toggle('inveh',!!kind);
+  const dn=document.getElementById('tb-down'); if(dn){ if(!('tb-down' in TB_DEFAULT)) TB_DEFAULT['tb-down']=dn.innerHTML; dn.innerHTML=kind?'&#9660;<small>BRAKE</small>':TB_DEFAULT['tb-down']; }
+  rideIcon(!!kind);
 }
+function rideIcon(door){ const el=document.getElementById('tb-ride'); if(el) el.innerHTML=door?'&#128682;':'&#127906;'; }
 function enterVeh(pl,v){
   if(cartOf(pl)) rideToggle(pl);
   v.rider=pl; pl.veh=v; pl.fly=false; pl.chute=false; pl.vel.set(0,0,0); pl.vcam=0;
@@ -5137,6 +5143,7 @@ function updateVehicles(dt){
   // a nudge when you walk up to something you can drive
   vehHintT-=dt;
   if(vehHintT<=0&&playing&&!vehOf(P)&&!P.dead){ vehHintT=1.2; const v=nearVeh(P);
+    rideIcon(!!v);
     if(v&&v!==VEH.lastHint){ VEH.lastHint=v; toast((TOUCH.on?'Tap \u{1F6AA} to ':'Press R to ')+(v.kind==='jet'?'fly ':'take the helm of ')+v.name); }
     if(!v) VEH.lastHint=null; }
 }
