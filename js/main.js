@@ -589,5 +589,14 @@ class Game {
   }
 }
 
-await loadAssets(OUTFITS);
-new Game();
+try {
+  await loadAssets(OUTFITS);
+  new Game();
+} catch (e) {
+  // never leave a silent blank page: say what failed
+  const el = document.getElementById('screen-title');
+  el.innerHTML = `<div style="margin:auto;max-width:640px;padding:24px;color:#fff;font:600 18px 'Barlow Condensed',sans-serif;text-align:center">
+    <h2 style="font-size:32px;margin:0 0 12px">Stormdrop couldn't load its art</h2><p>${String(e && e.message ? e.message : e).replace(/[<>&]/g, '')}</p><p>Try reloading the page.</p></div>`;
+  el.style.display = 'flex';
+  console.error(e);
+}

@@ -69,17 +69,38 @@ function skinTexture(src) {
   return t;
 }
 
+// A model is a .glb file, or (for hosts that cannot serve .glb) the same bytes base64-encoded in a
+// .json file as { "glb": "..." }. Both parse from memory, so nothing needs data: or blob: URLs.
+async function loadModel(base) {
+  const order = window.STORMDROP_MODEL_EXT === '.json' ? ['.json', '.glb'] : ['.glb', '.json'];
+  let err = null;
+  for (const ext of order) {
+    try {
+      const res = await window.fetch(base + ext);
+      if (!res.ok) throw new Error(`${res.status} loading ${base + ext}`);
+      let buf;
+      if (ext === '.json') {
+        const bin = window.atob((await res.json()).glb), u8 = new Uint8Array(bin.length);
+        for (let i = 0; i < bin.length; i++) u8[i] = bin.charCodeAt(i);
+        buf = u8.buffer;
+      } else buf = await res.arrayBuffer();
+      return await loader.parseAsync(buf, '');
+    } catch (e) {
+      err = e;
+    }
+  }
+  throw err;
+}
+
 export async function loadAssets(outfits, onProgress = () => {}) {
-  // hosts that cannot serve .glb can ship the same models as self-contained glTF JSON
-  const EXT = window.STORMDROP_MODEL_EXT || '.glb';
   let done = 0;
   const MODEL_FILES = KIT_FILES; // read here, not at module load: kit.js and this module import each other
   const total = 1 + SKIN_FILES.length + MODEL_FILES.length;
   const tick = () => onProgress(++done / total);
   const [character, images] = await Promise.all([
-    loader.loadAsync('assets/characters/character' + EXT).then((g) => (tick(), g)),
+    loadModel('assets/characters/character').then((g) => (tick(), g)),
     Promise.all(SKIN_FILES.map((n) => loadImage(`assets/characters/skins/${n}.png`).then((img) => (tick(), [n, img])))),
-    Promise.all(MODEL_FILES.map((n) => loader.loadAsync(`assets/models/${n}${EXT}`).then((g) => (tick(), (ASSETS.models[n] = g.scene))))),
+    Promise.all(MODEL_FILES.map((n) => loadModel(`assets/models/${n}`).then((g) => (tick(), (ASSETS.models[n] = g.scene))))),
   ]);
   ASSETS.character = character;
   const byName = Object.fromEntries(images);
