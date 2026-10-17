@@ -2,6 +2,7 @@
 // textures, and (as they are added) vehicles, nature and city props. Everything here is CC0; see CREDITS.md.
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { KIT_FILES } from './kit.js';
 
 const loader = new GLTFLoader();
 
@@ -12,7 +13,6 @@ export const ASSETS = {
 };
 
 const SKIN_FILES = ['male', 'skater-male', 'skater-female', 'survivor-male', 'survivor-female', 'zombie-1', 'zombie-2', 'cyborg-female'];
-const MODEL_FILES = [];
 
 function loadImage(url) {
   return new Promise((resolve, reject) => {
@@ -71,6 +71,7 @@ function skinTexture(src) {
 
 export async function loadAssets(outfits, onProgress = () => {}) {
   let done = 0;
+  const MODEL_FILES = KIT_FILES; // read here, not at module load: kit.js and this module import each other
   const total = 1 + SKIN_FILES.length + MODEL_FILES.length;
   const tick = () => onProgress(++done / total);
   const [character, images] = await Promise.all([

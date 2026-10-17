@@ -4,14 +4,12 @@ import { POIS, LAKE } from './island.js';
 import { makeRng } from '../util.js';
 import { treeParts, bushParts, boulderGeometry, foliageMaterials, cropGeometry, WIND } from './foliage.js';
 import { rockMaterial } from './terrainmat.js';
-import { sedanGeometry } from '../zh/models.js';
+import { bakeModel, kitMaterial, CARS } from '../kit.js';
 
 function metalGeometry(kind) {
   const gb = new GeoBuilder(makeRng(kind.length * 7));
   gb.jitter = 0.05;
-  if (kind === 'car') {
-    return sedanGeometry();
-  } else if (kind === 'barrels') {
+  if (kind === 'barrels') {
     for (const [x, z] of [[0, 0], [0.75, 0.2], [0.2, 0.8]]) {
       gb.cylinder(x, 0, z, 0.38, 0.38, 1.1, 8, '#ffffff');
       gb.cylinder(x, 0.5, z, 0.4, 0.4, 0.1, 8, '#555');
@@ -28,7 +26,6 @@ function metalGeometry(kind) {
 }
 
 const TREE_TYPES = ['oak', 'pine', 'snowpine', 'autumnA', 'autumnB', 'palm', 'cactus', 'swamp', 'dead'];
-const METAL_TYPES = ['car', 'barrels', 'tractor'];
 const METAL_COLORS = { car: ['#b8452f', '#3f6fa8', '#c9a23a', '#7d8a8f', '#8a5a9a'], barrels: ['#c44a2f', '#2f7ac4', '#c9a23a'], tractor: ['#3f8a3a', '#c9502f'] };
 
 const BIOME_TREES = {
@@ -274,7 +271,9 @@ export class Props {
       const side = rng.chance(0.5) ? 1 : -1;
       spots.push({ x: x + (px / len) * 6.5 * side, z: z + (pz / len) * 6.5 * side, kind: 'car' });
     }
-    const byKind = { car: [], barrels: [], tractor: [] };
+    // parked cars are Kenney's car kit, a model picked per spot; barrels and tractors are built here
+    const byKind = new Map();
+    const carW = CARS.map(([, w]) => w);
     for (const s of spots) {
       const h = this.T.heightAt(s.x, s.z);
       if (h < 0.8 || this.blocked(s.x, s.z, 1.5)) continue;
@@ -284,29 +283,38 @@ export class Props {
         return false;
       });
       if (clash) continue;
-      byKind[s.kind].push({ ...s, y: h, rot: rng.chance(0.5) ? 0 : Math.PI / 2, color: rng.pick(METAL_COLORS[s.kind]) });
+      const key = s.kind === 'car' ? 'car-' + CARS[rng.weighted(carW)][0] : s.kind;
+      if (!byKind.has(key)) byKind.set(key, []);
+      byKind.get(key).push({ ...s, y: h, rot: (rng.int(0, 3) * Math.PI) / 2, color: s.kind === 'car' ? '#ffffff' : rng.pick(METAL_COLORS[s.kind]) });
     }
-    for (const kind of METAL_TYPES) {
-      const list = byKind[kind];
-      if (!list.length) continue;
-      const mesh = new THREE.InstancedMesh(metalGeometry(kind), this.mat, list.length);
+    for (const [key, list] of byKind) {
+      const kind = key.startsWith('car-') ? 'car' : key;
+      const kit = kind === 'car';
+      const geo = kit ? bakeModel(key) : metalGeometry(kind);
+      const mesh = new THREE.InstancedMesh(geo, kit ? kitMaterial() : this.mat, list.length);
       mesh.castShadow = true;
       mesh.receiveShadow = true;
-      mesh.name = 'metal-' + kind;
+      mesh.name = 'metal-' + key;
+      const bb = geo.boundingBox || (geo.computeBoundingBox(), geo.boundingBox);
       list.forEach((s, i) => {
         mesh.setColorAt(i, new THREE.Color(s.color));
         const hp = kind === 'barrels' ? 150 : 300;
         const h = { kind: 'metal', type: kind, x: s.x, y: s.y - 0.05, z: s.z, s: 1, rot: s.rot, hp, maxHp: hp, resource: 'metal', mesh, index: i, alive: true, shake: 0 };
-        const ex = kind === 'barrels' ? 0.9 : s.rot === 0 ? 2.1 : 1.0;
-        const ez = kind === 'barrels' ? 0.9 : s.rot === 0 ? 1.0 : 2.1;
-        h.collider = this.W.box(s.x - ex, s.y - 0.5, s.z - ez, s.x + ex, s.y + (kind === 'tractor' ? 2.6 : kind === 'car' ? 1.8 : 1.1), s.z + ez, h);
+        let ex = kind === 'barrels' ? 0.9 : 2.1, ez = kind === 'barrels' ? 0.9 : 1.0, top = kind === 'tractor' ? 2.6 : 1.1;
+        if (kit) {
+          ex = (bb.max.x - bb.min.x) / 2;
+          ez = (bb.max.z - bb.min.z) / 2;
+          top = bb.max.y;
+        }
+        if (Math.round(s.rot / (Math.PI / 2)) % 2) [ex, ez] = [ez, ex];
+        h.collider = this.W.box(s.x - ex, s.y - 0.5, s.z - ez, s.x + ex, s.y + top, s.z + ez, h);
         this.setMatrix(h);
         this.harvestables.push(h);
       });
       mesh.instanceMatrix.needsUpdate = true;
       if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
       this.group.add(mesh);
-      this.meshes['metal-' + kind] = mesh;
+      this.meshes['metal-' + key] = mesh;
     }
   }
 

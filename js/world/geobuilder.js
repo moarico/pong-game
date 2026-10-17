@@ -5,7 +5,7 @@ import * as THREE from 'three';
 const tmpColor = new THREE.Color();
 
 // Surface tags: which detail texture a paint gets on buildings (see buildingmat.js). 0 = pick by orientation.
-export const SURF = { auto: 0, plaster: 1, planks: 2, shingles: 3, brick: 4, stone: 5, metal: 6, concrete: 7 };
+export const SURF = { auto: 0, plaster: 1, planks: 2, shingles: 3, brick: 4, stone: 5, metal: 6, concrete: 7, plain: 8 };
 const SURF_OF = new Map();
 export function tagSurface(colors, surf) {
   for (const c of colors) SURF_OF.set(String(c).toLowerCase(), surf);

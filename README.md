@@ -93,17 +93,17 @@ Open the page, click **Press to start**, then **Play**. Click the game once if t
   - **Low:** Harbor Point, Timberline Camp, Amberwood Hollow, Sunscorch Outpost and Pit Stop (gas stations), Coral Cove, Redrock Gulch and Gull Rock (on the north island).
 - Four rivers that rise from ponds, a lake, and roads with bridges between the areas.
 - Buildings have rooms: wide ones are split by an inner wall, and each room is furnished for what it is (living rooms, kitchens, bedrooms, bathrooms, studies, shops with aisles and coolers, offices with desk rows). Houses have glass windows with frames and sills, and many have porches, shutters and chimneys.
-- Power lines run along the roads; towns have street lamps, benches, hydrants and bins; houses have picket fences and mailboxes; camps, ruins, lookouts and old trailers dot the wilds.
-- Drivable open-top 4x4s are parked on the roads: you sit behind the wheel, the wheels roll and steer, and the body leans in turns.
+- Power lines run along the roads; town streets have KayKit's street lamps, benches, hydrants, dumpsters and boxes; houses have picket fences and mailboxes; camps, ruins, lookouts and old trailers dot the wilds. Parked cars are Kenney's car kit: sedans, SUVs, pickups, vans, taxis, police cars, delivery trucks and more, and you can pickaxe them for metal.
+- Drivable cars (a pickup, an SUV, a police car, a taxi, a hatchback and a sports car) wait on the roads: you sit behind the wheel where others can see you through the glass, the wheels roll and steer, and the body leans in turns.
 - Landmarks visible from far away: the city spire, the observatory on the snowy peak, the lighthouse and the windmill.
 
 **Bots.** Each bot chooses a drop area and times its jump. Once down, it grabs the nearest gun, loots through doors, round inner walls, through castle gates and up stairs, opens chests, and picks a weapon by range. It feels its way round walls and furniture. In fights it strafes, aims with skill-based error that starts shaky, builds a panic wall when shot and ramps toward enemies above it, backs off to reload, heals behind cover, gathers materials and rotates ahead of the storm, and sometimes emotes after a win. You can set the bot difficulty.
 
 **Menus.** Title screen with logo and art. Lobby with Play, Locker, Settings and Controls. The loading screen shows a progress bar, a random tip and key art. You pick your jump from the bus, and the end screen shows your placement (#1 is the victory screen), eliminations, damage and time survived, with Play Again.
 
-**Characters.** Players are Zero Hour's soldiers: printed camo fabric over rounded body parts, a plate carrier with pouches and a radio, knee pads, boots, and headgear (helmet, cap, beanie, balaclava or shemagh). Faces, beards, glasses and skin tones vary per player.
+**Characters.** Players and bots are artist-made skinned characters (Kenney's Animated Characters) moved by KayKit's professional animation set, retargeted onto their skeleton: idle, walk, run, strafe, backpedal, jump, rifle and pistol aim, reloads, pickaxe swings, item use, sitting and a cheer. Legs and upper body blend separately, so a player can strafe while aiming and reloading. Crouching, aiming up and down, the support hand on the foregrip, skydiving, the glider hang and the driving pose are procedural on top.
 
-**Skins.** Ten original outfits, each with its own camo print, gear colors, headgear, backpack and glider. The locker shows rarity borders, a rotating preview and a glider preview.
+**Skins.** Ten outfits from common to legendary (two legendaries are recolors made at load time), each with its own glider. The locker shows rendered portraits with rarity colors, a rotating preview and a glider preview.
 
 ## Code map
 
@@ -115,7 +115,10 @@ Open the page, click **Press to start**, then **Play**. Click the game once if t
 | `js/world/structures.js` | Buildings per area (doors, stairs, porches, loot spots, chests), landmarks, the gas station |
 | `js/world/interiors.js` | Rooms and furniture, and where loot and chests go inside |
 | `js/world/details.js` | Power lines, street furniture, yards, and the camps, ruins and lookouts in the wilds |
-| `js/world/props.js` | Instanced trees, rocks, wrecks (harvestable), bushes, crops |
+| `js/world/props.js` | Instanced trees, rocks, parked cars (harvestable), bushes, crops |
+| `js/assets.js` | Loads the artist-made models and outfit textures before the game starts |
+| `js/character.js` | Characters: outfits, the layered animation blend, procedural poses, held items |
+| `js/kit.js` | Bakes artist-made models into single meshes for instancing and town geometry |
 | `js/physics.js` | Spatial hash, capsule movement with steps and ramps, raycasts |
 | `js/actor.js` | Shared player/bot logic: movement modes, weapons, healing, inventory |
 | `js/building.js` | Grid building, edits, build-up HP, structural collapse |
@@ -126,6 +129,6 @@ Open the page, click **Press to start**, then **Play**. Click the game once if t
 | `js/bots.js` | Bot AI |
 | `js/controller.js`, `js/input.js` | Keyboard/mouse/gamepad input and the camera |
 | `js/hud.js`, `js/menus.js`, `js/lobby.js`, `js/art.js` | HUD, menus, locker stage, generated key art |
-| `js/zh/` | Ported from Zero Hour: part models (`parts.js`), guns (`guns.js`), soldiers (`soldier.js`), first-person hands and feel (`viewmodel.js`), synthesized sound (`sound.js`), sprite textures, icons and the sky environment map |
+| `js/zh/` | Ported from Zero Hour: part models (`parts.js`), guns (`guns.js`), first-person hands and feel (`viewmodel.js`), synthesized sound (`sound.js`), sprite textures, icons and the sky environment map |
 
-Three.js r186 is vendored in `vendor/` (MIT, see `vendor/THREE-LICENSE.txt`).
+Three.js r186 and its glTF/HDR loaders are vendored in `vendor/` (MIT, see `vendor/THREE-LICENSE.txt`). Characters, cars and street props in `assets/` are CC0; see [CREDITS.md](CREDITS.md).
